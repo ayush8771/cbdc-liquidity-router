@@ -1,0 +1,4 @@
+transaction_id,sender_country,receiver_country,amount_usd
+1,USA,IND,100000.0
+2,GBR,PHL,600000.0
+3,USA,MEX,1000.0

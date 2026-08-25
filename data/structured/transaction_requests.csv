@@ -1,0 +1,4 @@
+transaction_id,sender_country,receiver_country,amount_usd,simulation_date
+101,USA,IND,500.0,2015-06-15
+102,GBR,PHL,1200.0,2023-06-15
+103,ARE,MEX,300.0,2025-03-15

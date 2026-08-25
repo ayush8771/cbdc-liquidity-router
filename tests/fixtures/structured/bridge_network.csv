@@ -1,0 +1,5 @@
+source_node,target_node,liquidity_capacity,latency_fee_pct
+USA,IND,40000.0,0.005
+USA,IND,30000.0,0.008
+USA,IND,50000.0,0.003
+GBR,PHL,10000.0,0.02

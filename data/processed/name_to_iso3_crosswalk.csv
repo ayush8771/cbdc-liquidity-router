@@ -1,0 +1,175 @@
+cpi_country_name,iso3,match_type
+Afghanistan,AFG,exact
+Albania,ALB,exact
+United Arab Emirates,ARE,exact
+Armenia,ARM,exact
+Developing Asia,,unresolved
+Antigua and Barbuda,ATG,exact
+Austria,AUT,exact
+Azerbaijan,AZE,exact
+Burundi,BDI,exact
+Belgium,BEL,exact
+Benin,BEN,exact
+Burkina Faso,BFA,exact
+Bangladesh,BGD,exact
+Bulgaria,BGR,exact
+Bahrain,BHR,exact
+"Bahamas, The",BHS,exact
+Bosnia and Herzegovina,BIH,exact
+Belarus,BLR,exact
+Belize,BLZ,exact
+Bolivia,BOL,exact
+Brazil,BRA,exact
+Barbados,BRB,exact
+Bhutan,BTN,exact
+Botswana,BWA,exact
+Central African Republic,CAF,exact
+Canada,CAN,exact
+Switzerland,CHE,exact
+Chile,CHL,exact
+China,CHN,exact
+Cote d'Ivoire,CIV,manual
+"Congo, Dem. Rep.",ZAR,exact
+"Congo, Rep.",,unresolved
+Colombia,COL,exact
+Comoros,COM,exact
+Cabo Verde,CPV,exact
+Costa Rica,CRI,exact
+Cyprus,CYP,exact
+Czech Republic,CZE,manual
+Germany,DEU,exact
+Developing Countries,,unresolved
+Djibouti,DJI,exact
+Dominica,DMA,exact
+Denmark,DNK,exact
+Dominican Republic,DOM,exact
+Algeria,DZA,exact
+East Asia & Pacific developing,,unresolved
+Europe & Central Asia developing,,unresolved
+Ecuador,ECU,exact
+"Egypt, Arab Rep.",EGY,exact
+Spain,ESP,exact
+Estonia,EST,exact
+Finland,FIN,exact
+Fiji,FJI,exact
+France,FRA,exact
+Gabon,GAB,exact
+United Kingdom,GBR,exact
+Georgia,GEO,exact
+Guinea,GIN,exact
+"Gambia, The",GMB,exact
+Equatorial Guinea,GNQ,exact
+Greece,GRC,exact
+Grenada,GRD,exact
+Guatemala,GTM,exact
+Guyana,GUY,exact
+High Income Countries,,unresolved
+"Hong Kong SAR, China",HKG,exact
+Honduras,HND,exact
+Croatia,HRV,exact
+Haiti,HTI,exact
+Hungary,HUN,exact
+High income: OECD,,unresolved
+Indonesia,IDN,exact
+India,IND,exact
+Ireland,IRL,exact
+Iceland,ISL,exact
+Israel,ISR,exact
+Italy,ITA,exact
+Jamaica,JAM,exact
+Jordan,JOR,exact
+Japan,JPN,exact
+Kazakhstan,KAZ,exact
+Kenya,KEN,exact
+Kyrgyz Republic,KGZ,exact
+Cambodia,KHM,exact
+Kiribati,KIR,exact
+St. Kitts and Nevis,KNA,exact
+"Korea, Rep.",KOR,exact
+Latin America & Caribbean developing,,unresolved
+"Lao, PDR",LAO,manual
+Lebanon,LBN,exact
+Liberia,LBR,exact
+Libya,LBY,exact
+St. Lucia,LCA,exact
+Low-Income Countries (LIC),,unresolved
+Lesotho,LSO,exact
+Lithuania,LTU,exact
+Luxembourg,LUX,exact
+Latvia,LVA,exact
+Morocco,MAR,exact
+"Moldova, Rep.",MDA,manual
+Madagascar,MDG,exact
+Maldives,MDV,exact
+Mexico,MEX,exact
+Middle-Income Countries (MIC),,unresolved
+North Macedonia,MKD,exact
+Mali,MLI,exact
+Malta,MLT,exact
+Middle East & N. Africa developing,,unresolved
+Montenegro,MNE,exact
+Mozambique,MOZ,exact
+Mauritania,MRT,exact
+Mauritius,MUS,exact
+Malawi,MWI,exact
+Malaysia,MYS,exact
+Namibia,NAM,exact
+Niger,NER,exact
+Nigeria,NGA,exact
+Nicaragua,NIC,exact
+Netherlands,NLD,exact
+Norway,NOR,exact
+Nepal,NPL,exact
+High Income: Non-OECD,,unresolved
+Oman,OMN,exact
+Pakistan,PAK,exact
+Panama,PAN,exact
+Peru,PER,exact
+Philippines,PHL,exact
+Poland,POL,exact
+Portugal,PRT,exact
+Paraguay,PRY,exact
+West Bank and Gaza,PSE,exact
+Qatar,QAT,exact
+Romania,ROU,exact
+Russian Federation,RUS,exact
+Rwanda,RWA,exact
+South Asia developing,,unresolved
+Saudi Arabia,SAU,exact
+Senegal,SEN,exact
+Singapore,SGP,exact
+Solomon Islands,SLB,exact
+Sierra Leone,SLE,exact
+El Salvador,SLV,exact
+San Marino,SMR,exact
+Serbia,SRB,exact
+Sub-Saharan Africa developing,,unresolved
+Sao Tome and Principe,STP,manual
+Suriname,SUR,exact
+Slovakia,SVK,manual
+Slovenia,SVN,exact
+Sweden,SWE,exact
+Eswatini,SWZ,exact
+Seychelles,SYC,exact
+Chad,TCD,exact
+Togo,TGO,exact
+Thailand,THA,exact
+Tajikistan,TJK,exact
+Timor-Leste,TLS,exact
+Tonga,TON,exact
+Trinidad and Tobago,TTO,exact
+Tunisia,TUN,exact
+Turkey,TUR,manual
+"Taiwan, China",,unresolved
+Uganda,UGA,exact
+Uruguay,URY,exact
+United States,USA,exact
+St. Vincent and the Grenadines,VCT,exact
+"Venezuela, RB",VEN,exact
+Vietnam,VNM,exact
+World (WBG members),,unresolved
+Samoa,WSM,exact
+Kosovo,KSV,exact
+"Yemen, Rep.",YEM,exact
+South Africa,ZAF,exact
+Zambia,ZMB,exact

@@ -1,0 +1,126 @@
+{
+  "design": "one_at_a_time",
+  "seed": 42,
+  "n_runs": 13,
+  "status": "grid_defined_not_executed",
+  "note": "Execution requires PPO (Stage 1D), out of Stage 1B scope. Results columns (ppo_reward, baseline_reward, margin, split) are added by Stage 1D, not populated here.",
+  "runs": [
+    {
+      "run_id": "base",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "beta_friction_low",
+      "beta_friction": -0.1,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "beta_friction_high",
+      "beta_friction": -0.4,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "beta_risk_low",
+      "beta_friction": -0.2,
+      "beta_risk": 0.5,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "beta_risk_high",
+      "beta_friction": -0.2,
+      "beta_risk": 2.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "sigma_base_low",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.01,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "sigma_base_high",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.04,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "sigma_congestion_low",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.05,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "sigma_congestion_high",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.2,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "lambda_jump_low",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.02,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "lambda_jump_high",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.1,
+      "jump_size_mean_pct": 0.1
+    },
+    {
+      "run_id": "jump_size_mean_pct_low",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.05
+    },
+    {
+      "run_id": "jump_size_mean_pct_high",
+      "beta_friction": -0.2,
+      "beta_risk": 1.0,
+      "sigma_base": 0.02,
+      "sigma_congestion": 0.1,
+      "lambda_jump": 0.05,
+      "jump_size_mean_pct": 0.2
+    }
+  ]
+}

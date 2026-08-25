@@ -1,0 +1,14 @@
+{
+  "tier_used": "tier1_exact_destination_match",
+  "substitute_corridor": "USA->MEX",
+  "n_obs_total": 1658,
+  "n_corridor_quarters": 54,
+  "discrepancy_note": {
+    "specification_v3_figure": 1329,
+    "specification_v3_basis": "raw row count, 'Dataset (from Q2 2016)' sheet ONLY, no null-filtering",
+    "implementation_figure": 1658,
+    "implementation_basis": "sum of per-quarter counts of non-null 'cc2 total cost %', BOTH sheets combined (per approved both-sheets methodology)",
+    "post2016_sheet_raw_row_count_isolated": 1329,
+    "conclusion": "1,658 is correct and should be used going forward - it reflects the full approved RPW combination methodology (both sheets) with the same non-null-count basis as every other corridor's n_obs in rpw_corridor_quarterly.parquet. 1,329 was an incomplete single-sheet manual check in Specification v3, not a methodology the implementation deviated from."
+  }
+}

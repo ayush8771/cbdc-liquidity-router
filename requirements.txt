@@ -1,0 +1,8 @@
+gymnasium>=0.29.0
+torch>=2.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+scikit-learn>=1.2.0
+cognee>=0.1.0
+pyarrow>=14.0.0
