@@ -18,14 +18,14 @@ The research objective is to determine whether an RL agent can learn **liquidity
 
 ## Current Project Status
 
-| Stage Description Status  |                                  |                                                   |
-| ------------------------- | -------------------------------- | ------------------------------------------------- |
-| 1A                        | Environment & Network Foundation | ✅ Complete                                        |
-| 1B                        | Data Preprocessing & Simulation  | ✅ Complete                                        |
-| 1C                        | 1D CNN Feature Extraction        | ✅ Complete                                        |
-| 1D                        | PPO Training                     | 🚧 In progress (separate track, not yet complete) |
-| 1E                        | Cognee / Semantic Memory         | ⏳ Planned                                         |
-| 1F                        | Backtesting / Evaluation         | ⏳ Planned                                         |
+| Stage | Description | Status |
+|---|---|---|
+| 1A | Environment & Network Foundation | ✅ Complete |
+| 1B | Data Preprocessing & Simulation | ✅ Complete |
+| 1C | 1D CNN Feature Extraction | ✅ Complete |
+| 1D | PPO Training | 🚧 In progress (separate track, not yet complete) |
+| 1E | Cognee / Semantic Memory | ⏳ Planned |
+| 1F | Backtesting / Evaluation | ⏳ Planned |
 
 **56/56 tests passing** across Stages 1A–1C (see [Validation Status](https://claude.ai/chat/af1cc04d-b69f-458c-9d0a-ca998a787ca7#validation-status)).
 
@@ -95,12 +95,12 @@ A [Gymnasium](https://gymnasium.farama.org/) environment (`CBDCLiquidityEnv`) im
 
 Real datasets used:
 
-| Source What it provides Role                                       |                                                           |                                                                                |
-| ------------------------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **WDI** (World Bank)                                               | Annual official exchange rate                             | Macro-risk conditioning input                                                  |
-| **CPI** (not-seasonally-adjusted, self-computed matched-month YoY) | Monthly inflation signal                                  | Macro-risk conditioning input                                                  |
-| **RPW** (World Bank Remittance Prices Worldwide)                   | Quarterly corridor-level fee %, FX margin, transfer speed | Conditions the synthetic bridge simulation's baseline liquidity and congestion |
-| **FRED**                                                           | Daily FX rates                                            | Real daily FX volatility component of macro-risk, where available              |
+| Source | What it provides | Role |
+|---|---|---|
+| **WDI** (World Bank) | Annual official exchange rate | Macro-risk conditioning input |
+| **CPI** (not-seasonally-adjusted, self-computed matched-month YoY) | Monthly inflation signal | Macro-risk conditioning input |
+| **RPW** (World Bank Remittance Prices Worldwide) | Quarterly corridor-level fee %, FX margin, transfer speed | Conditions the synthetic bridge simulation's baseline liquidity and congestion |
+| **FRED** | Daily FX rates | Real daily FX volatility component of macro-risk, where available |
 
 Key pipeline properties:
 
@@ -113,23 +113,23 @@ Key pipeline properties:
 
 **Validated output counts** (local run):
 
-| Output Rows                  |        |
-| ---------------------------- | ------ |
-| WDI FX features              | 9,838  |
-| CPI features                 | 44,673 |
-| RPW corridor-quarterly       | 17,202 |
-| Macro-risk proxy             | 1,062  |
+| Output | Rows |
+|---|---:|
+| WDI FX features | 9,838 |
+| CPI features | 44,673 |
+| RPW corridor-quarterly | 17,202 |
+| Macro-risk proxy | 1,062 |
 | Synthetic daily bridge state | 16,161 |
 
 Date range: **2011-01-01 → 2025-09-30**.
 
 ## FRED Data
 
-| Currency Series Status  |           |                |
-| ----------------------- | --------- | -------------- |
-| INR                     | `DEXINUS` | Real, supplied |
-| GBP                     | `DEXUSUK` | Real, supplied |
-| MXN                     | `DEXMXUS` | Real, supplied |
+| Currency | Series | Status |
+|---|---|---|
+| INR | `DEXINUS` | Real, supplied |
+| GBP | `DEXUSUK` | Real, supplied |
+| MXN | `DEXMXUS` | Real, supplied |
 
 These are real daily FX datasets obtained from FRED. **Their locally supplied coverage begins around 2021-08, not at the start of the 2011–2025 simulation range.** For dates before that, the macro-risk signal for these currencies falls back to the WDI/CPI-derived component, or to an explicit `unconditioned_default` flag where no real signal exists at all. PHP and AED have no FRED series (no verified daily official source for PHP; AED has been pegged to USD since 1997, so a real series would carry no volatility signal regardless).
 
@@ -146,12 +146,12 @@ The Stage 1C wrapper is a **validated feature/observation construction path**. I
 
 ## Data Provenance
 
-| Category Examples  |                                                                                                                                                   |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **REAL**           | WDI exchange rate, CPI index levels, RPW fee/margin/speed observations, FRED daily FX rates                                                       |
-| **DERIVED**        | Macro-risk proxy, corridor friction, real cost baseline, YoY/volatility calculations                                                              |
-| **SYNTHETIC**      | Daily liquidity/congestion simulation output, ARE→MEX fallback values, `simulation_date` anchors                                                  |
-| **ASSUMPTIONS**    | Synthetic generator parameters (jump rates, baseline volatility, conditioning coefficients) — explicitly configurable, not empirically calibrated |
+| Category | Examples |
+|---|---|
+| **REAL** | WDI exchange rate, CPI index levels, RPW fee/margin/speed observations, FRED daily FX rates |
+| **DERIVED** | Macro-risk proxy, corridor friction, real cost baseline, YoY/volatility calculations |
+| **SYNTHETIC** | Daily liquidity/congestion simulation output, ARE→MEX fallback values, `simulation_date` anchors |
+| **ASSUMPTIONS** | Synthetic generator parameters (jump rates, baseline volatility, conditioning coefficients) — explicitly configurable, not empirically calibrated |
 
 ## Repository Structure
 
@@ -215,12 +215,12 @@ python tests/test_stage1c.py
 
 ## Validation Status
 
-| Suite Result  |                  |
-| ------------- | ---------------- |
-| Stage 1A      | 17/17 passed     |
-| Stage 1B      | 26/26 passed     |
-| Stage 1C      | 13/13 passed     |
-| **Total**     | **56/56 passed** |
+| Suite | Result |
+|---|---:|
+| Stage 1A | 17/17 passed |
+| Stage 1B | 26/26 passed |
+| Stage 1C | 13/13 passed |
+| **Total** | **56/56 passed** |
 
 These tests validate **implementation mechanics and regression safety** — correct data loading, no temporal leakage, correct tensor shapes, reproducibility under a fixed seed. They are **not** evidence of real-world CBDC routing behavior, since no such system exists to validate against.
 
