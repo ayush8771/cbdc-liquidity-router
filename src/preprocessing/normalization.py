@@ -90,6 +90,101 @@ def fit_macro_component_stats(components_df, corridor_isos, columns=("real_fx_vo
     return out
 
 
+def fit_fee_and_risk_proxy_stats(train_transactions_df, bridge_network_df, corridor_risk_proxy_fn):
+    """Stage 1D addition (correction pass). Fits train-only stats for:
+      - fee: GLOBAL across all bridge venues' static fee values (not
+        per-venue - each venue has exactly one fixed fee, so a per-venue
+        z-score would always normalize to 0 for every venue, destroying
+        the relative-fee signal the policy needs; a global fit over all
+        venues' fees preserves that signal).
+      - risk_proxy: PER-CORRIDOR (distinct from the existing `risk` key,
+        which is Stage 1B's destination-country risk used for the daily-
+        series GENERATOR's conditioning - a different quantity from the
+        Stage 1D corridor-risk-proxy used in reward/observation). Fit by
+        sampling corridor_risk_proxy_fn at each TRAIN transaction's
+        (corridor, simulation_date).
+
+    Returns {"fee": {...}, "risk_proxy": {corridor_key: {...}}}.
+    """
+    fees = bridge_network_df["latency_fee_pct"].astype(float)
+    fee_std = float(fees.std()) if len(fees) > 1 else 1.0
+    fee_stats = {
+        "mean": float(fees.mean()), "std": fee_std if fee_std and not pd.isna(fee_std) else 1.0,
+        "n": int(len(fees)), "train_start": str(TRAIN_START.date()), "train_end": str(TRAIN_END.date()),
+    }
+
+    risk_samples = {}
+    for _, row in train_transactions_df.iterrows():
+        corridor_key = f"{row['sender_country']}->{row['receiver_country']}"
+        try:
+            r = corridor_risk_proxy_fn(row["sender_country"], row["receiver_country"], row["simulation_date"])
+        except KeyError:
+            continue
+        if r is None or (isinstance(r, float) and r != r):
+            continue
+        risk_samples.setdefault(corridor_key, []).append(r)
+
+    risk_proxy_stats = {}
+    for corridor_key, samples in risk_samples.items():
+        arr = pd.Series(samples, dtype=float)
+        std = float(arr.std()) if len(arr) > 1 else 1.0
+        risk_proxy_stats[corridor_key] = {
+            "mean": float(arr.mean()), "std": std if std and not pd.isna(std) else 1.0,
+            "n": int(len(arr)), "train_start": str(TRAIN_START.date()), "train_end": str(TRAIN_END.date()),
+        }
+
+    return {"fee": fee_stats, "risk_proxy": risk_proxy_stats}
+
+
+def fit_raw_ppo_feature_stats(train_transactions_df, corridor_venue_uids_fn, get_dynamic_state_fn):
+    """Stage 1D addition. Fits train-only mean/std for the continuous raw
+    PPO observation features:
+      - amount (global, one value regardless of corridor)
+      - fee (per-bridge-uid, static - but stats fit here for consistency)
+      - capacity/liquidity (per-bridge-uid, DYNAMIC - sampled at each
+        train transaction's simulation_date, not a single static number)
+      - congestion, risk are already covered by Stage 1C's existing
+        liquidity_level/congestion_level and the risk proxy respectively;
+        NOT refit here to avoid duplicate/conflicting stats for the same
+        underlying quantity.
+
+    `train_transactions_df` must be ONLY train-split rows (caller's
+    responsibility - this function does not filter by split itself, to
+    keep it a pure function over whatever frame it's given).
+
+    The mask bit is NEVER normalized (stays a hardcoded 0/1) - not
+    handled here since it isn't fit from data at all.
+
+    Returns a dict: {"amount": {...}, "capacity": {bridge_uid: {...}}}
+    (fee omitted from per-bridge fitting here since fee is a fixed
+    constant per bridge_uid, not a distribution - see note in caller).
+    """
+    amounts = train_transactions_df["amount_usd"].astype(float)
+    amount_stats = {
+        "mean": float(amounts.mean()), "std": float(amounts.std()) if len(amounts) > 1 else 1.0,
+        "n": int(len(amounts)), "train_start": str(TRAIN_START.date()), "train_end": str(TRAIN_END.date()),
+    }
+    amount_stats["std"] = amount_stats["std"] if amount_stats["std"] and not pd.isna(amount_stats["std"]) else 1.0
+
+    capacity_samples = {}
+    for _, row in train_transactions_df.iterrows():
+        corridor = (row["sender_country"], row["receiver_country"])
+        for uid in corridor_venue_uids_fn(corridor):
+            liq, _cong = get_dynamic_state_fn(uid, row["simulation_date"])
+            capacity_samples.setdefault(uid, []).append(liq)
+
+    capacity_stats = {}
+    for uid, samples in capacity_samples.items():
+        arr = pd.Series(samples, dtype=float)
+        std = float(arr.std()) if len(arr) > 1 else 1.0
+        capacity_stats[uid] = {
+            "mean": float(arr.mean()), "std": std if std and not pd.isna(std) else 1.0,
+            "n": int(len(arr)), "train_start": str(TRAIN_START.date()), "train_end": str(TRAIN_END.date()),
+        }
+
+    return {"amount": amount_stats, "capacity": capacity_stats}
+
+
 def fit_daily_series_stats(daily_df, bridge_id, column):
     """Stage 1C addition. Returns (mean, std, n, train_start, train_end) for
     one bridge's daily series column (liquidity_level or congestion_level),

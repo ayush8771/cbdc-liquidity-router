@@ -94,8 +94,19 @@ class BridgeNetwork:
                                 "not found in countries.csv."
                             )
 
+                # Stage 1D: prefer an explicit bridge_uid column if present
+                # (added by synthetic_bridge_expansion.py) so bridge
+                # identity is never CSV-row-order-dependent. Falls back to
+                # the original idx-derived id for CSVs without this column
+                # (e.g. Stage 1A test fixtures), so no existing behavior
+                # changes for those.
+                bridge_uid = row.get("bridge_uid")
+                bridge_id = str(bridge_uid) if pd.notna(bridge_uid) else f"{src}->{tgt}#{idx}"
+                data_source_tag = row.get("data_source_tag")
+                data_source_tag = str(data_source_tag) if pd.notna(data_source_tag) else None
+
                 bridge = {
-                    "bridge_id": f"{src}->{tgt}#{idx}",
+                    "bridge_id": bridge_id,
                     "source": src,
                     "target": tgt,
                     "capacity": cap,
@@ -103,6 +114,7 @@ class BridgeNetwork:
                     "congestion": congestion,
                     "risk": risk,
                     "row_index": idx,
+                    "data_source_tag": data_source_tag,
                 }
                 self._corridor_index[(src, tgt)].append(bridge)
 

@@ -18,6 +18,7 @@ from src.preprocessing.split import assign_split, in_gap_buffer, lagged_quarter,
 
 RAW = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 STRUCTURED = os.path.join(os.path.dirname(__file__), "..", "data", "structured")
+STAGE1A_ORIGINAL_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "stage1a_original")
 
 
 def test_wdi_no_aggregates():
@@ -277,14 +278,24 @@ def test_real_fred_files_produce_real_daily_fx_flag():
 
 
 def test_six_slot_three_populated_compatibility():
-    """Confirms Stage 1B generates exactly 3 bridge entities (matching the
-    3 real corridors), consistent with Stage 1A's MAX_BRIDGES=6 being a
-    capacity, not a target count. No bridges invented to reach 6."""
+    """Confirms Stage 1B's original bridge network (1 bridge per corridor,
+    3 corridors total) is compatible with Stage 1A's MAX_BRIDGES=6
+    capacity, with no bridges invented to reach 6.
+
+    Uses STAGE1A_ORIGINAL_DIR (isolated fixture), not production
+    data/structured/, because Stage 1D (approved) intentionally expanded
+    production bridge_network.csv to 9 rows (3 venues/corridor). This
+    test's original intent - exactly 3 bridges, one per corridor -
+    is preserved unweakened against the isolated fixture, matching the
+    same pattern already used in tests/test_stage1a.py for the same
+    reason. Stage 1D's 9-bridge production topology is validated
+    separately in tests/test_stage1d.py.
+    """
     import sys as _sys
     _sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from src.envs.bridge_network import MAX_BRIDGES
 
-    bridge_network = pd.read_csv(os.path.join(STRUCTURED, "bridge_network.csv"))
+    bridge_network = pd.read_csv(os.path.join(STAGE1A_ORIGINAL_DIR, "bridge_network.csv"))
     assert len(bridge_network) == 3
     assert len(bridge_network) <= MAX_BRIDGES, "populated bridges must not exceed the Stage 1A capacity"
     assert MAX_BRIDGES == 6  # confirms the Stage 1A constant this document assumes hasn't silently changed

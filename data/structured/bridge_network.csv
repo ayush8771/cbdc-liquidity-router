@@ -1,4 +1,10 @@
-source_node,target_node,liquidity_capacity,latency_fee_pct
-USA,IND,1000000.0,0.015
-GBR,PHL,500000.0,0.02
-ARE,MEX,750000.0,0.012
+source_node,target_node,liquidity_capacity,latency_fee_pct,bridge_uid,data_source_tag
+USA,IND,1000000.0,0.015,USA->IND#0,real_static_bridge
+GBR,PHL,500000.0,0.02,GBR->PHL#0,real_static_bridge
+ARE,MEX,750000.0,0.012,ARE->MEX#0,synthetic_no_real_anchor
+USA,IND,320000.0,0.0105,USA->IND#1,synthetic_bridge_expansion
+USA,IND,180000.0,0.0225,USA->IND#2,synthetic_bridge_expansion
+GBR,PHL,160000.0,0.014,GBR->PHL#1,synthetic_bridge_expansion
+GBR,PHL,90000.0,0.03,GBR->PHL#2,synthetic_bridge_expansion
+ARE,MEX,240000.0,0.0084,ARE->MEX#1,synthetic_bridge_expansion
+ARE,MEX,135000.0,0.018,ARE->MEX#2,synthetic_bridge_expansion

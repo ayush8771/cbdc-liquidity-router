@@ -1,18 +1,35 @@
 """Stage 1A deterministic tests: Environment & Network Foundation.
 
-Uses two data sets:
-  - The real (synthetic-fixture) structured data at data/structured/
-    (unchanged Phase 1 data: 3 corridors, 1 bridge each, small amounts) -
-    used for basic loading/masking/observation tests.
-  - Dedicated test fixtures at tests/fixtures/structured/ - explicitly
-    constructed for this test suite (NOT presented as real or as the
-    approved Stage 1B synthetic generator's output) so that capacity
-    clipping, unrouted amounts, and multi-bridge-per-corridor behavior can
-    be tested deterministically. The USA->IND fixture corridor mirrors the
-    three-bridge numerical example ($100,000 / bridges of 40k, 30k, 50k
-    capacity at 0.5%/0.8%/0.3% fee) from the approved Action/Execution
-    Semantics clarification, so its expected reward components can be
-    checked against that worked example by hand.
+Uses three data sets:
+  - STAGE1A_ORIGINAL_DIR (tests/fixtures/stage1a_original/) - an ISOLATED
+    fixture preserving the exact original Stage 1A/1B production topology
+    (3 corridors, 1 bridge each, real column values: USA->IND 1000000.0/
+    0.015, GBR->PHL 500000.0/0.02, ARE->MEX 750000.0/0.012) and the
+    original 3-row transaction_requests.csv with NO simulation_date
+    column. Stage 1D (approved) expanded the PRODUCTION
+    data/structured/bridge_network.csv to 9 bridges (3 venues/corridor)
+    and added simulation_date to production transaction_requests.csv -
+    both intentional, approved changes to Stage 1D's own scope. Tests
+    that specifically validate Stage 1A-era mechanics (real-column
+    reading, static-state fallback behavior with no simulation_date) use
+    THIS isolated fixture so they keep testing what they were written to
+    test, rather than assuming production data never changes shape.
+    Stage 1D's own topology/dynamic-state behavior is validated
+    separately and exclusively in tests/test_stage1d.py against the real
+    production data - this file does not re-assert anything about the
+    9-bridge topology.
+  - The real production structured data at data/structured/ - used only
+    for tests that don't depend on bridge-count assumptions (e.g. loading
+    doesn't crash, countries validate correctly).
+  - Dedicated multi-bridge test fixtures at tests/fixtures/structured/ -
+    explicitly constructed for this test suite (NOT presented as real or
+    as the approved Stage 1B synthetic generator's output) so that
+    capacity clipping, unrouted amounts, and multi-bridge-per-corridor
+    behavior can be tested deterministically. The USA->IND fixture
+    corridor mirrors the three-bridge numerical example ($100,000 /
+    bridges of 40k, 30k, 50k capacity at 0.5%/0.8%/0.3% fee) from the
+    approved Action/Execution Semantics clarification, so its expected
+    reward components can be checked against that worked example by hand.
 
 Run with: python3 -m pytest tests/test_stage1a.py -v
        or: python3 tests/test_stage1a.py   (falls back to plain asserts)
@@ -29,6 +46,7 @@ from src.envs.reward import compute_reward_components
 
 REAL_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "structured")
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "structured")
+STAGE1A_ORIGINAL_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "stage1a_original")
 
 
 # ---------------------------------------------------------------------------
@@ -37,10 +55,18 @@ FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "structured")
 
 def test_bridge_loading_real_columns():
     """Confirms the Stage 1A column-name fix: liquidity_capacity/
-    latency_fee_pct are read correctly, not silently defaulted."""
+    latency_fee_pct are read correctly, not silently defaulted.
+
+    Uses STAGE1A_ORIGINAL_DIR (isolated fixture), not production
+    data/structured/, because Stage 1D (approved) expanded production to
+    3 venues/corridor - this test's original intent (exactly 1 bridge for
+    this corridor, real column values read correctly) is preserved
+    unweakened against the isolated fixture. Stage 1D's 9-bridge topology
+    is validated separately in tests/test_stage1d.py.
+    """
     bn = BridgeNetwork(
-        bridge_csv=os.path.join(REAL_DIR, "bridge_network.csv"),
-        countries_csv=os.path.join(REAL_DIR, "countries.csv"),
+        bridge_csv=os.path.join(STAGE1A_ORIGINAL_DIR, "bridge_network.csv"),
+        countries_csv=os.path.join(STAGE1A_ORIGINAL_DIR, "countries.csv"),
     )
     bridges = bn.get_bridges_for_corridor("USA", "IND")
     assert len(bridges) == 1
@@ -255,9 +281,23 @@ def test_full_episode_runs_and_terminates():
 
 
 def test_env_still_runs_on_original_phase1_data():
-    """Regression check against the original (unmodified) Phase 1 structured
-    data - confirms Stage 1A didn't break loading of the real repo data."""
-    env = CBDCLiquidityEnv(structured_dir=REAL_DIR)
+    """Regression check against the ORIGINAL (isolated) Phase 1 structured
+    data - confirms Stage 1A's static-state execution/reward path still
+    works exactly as originally specified.
+
+    Uses STAGE1A_ORIGINAL_DIR, not production data/structured/, because
+    Stage 1D (approved) added a simulation_date column to production
+    transaction_requests.csv, which activates the NEW dynamic-state path
+    (see cbdc_env.py::_resolve_dynamic_state) instead of the original
+    static-placeholder path this test was written to check. The isolated
+    fixture's transaction_requests.csv has NO simulation_date column, so
+    simulation_date is None and the env takes the exact same static-
+    fallback branch it always did - the original fixed-reward assertion
+    is restored unweakened. Stage 1D's dynamic-state behavior (the case
+    where simulation_date IS present) is validated separately by
+    test_stage1d.py's dynamic-causality test.
+    """
+    env = CBDCLiquidityEnv(structured_dir=STAGE1A_ORIGINAL_DIR)
     obs, info = env.reset()
     action = np.zeros(MAX_BRIDGES, dtype=np.float32)
     action[0] = 1.0
