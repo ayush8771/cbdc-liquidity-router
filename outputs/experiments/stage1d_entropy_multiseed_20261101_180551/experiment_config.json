@@ -1,0 +1,59 @@
+{
+  "experiment": "stage1d_paired_entropy_multiseed",
+  "conditions": [
+    {
+      "name": "entropy000",
+      "entropy_coef": 0.0
+    },
+    {
+      "name": "entropy005",
+      "entropy_coef": 0.005
+    }
+  ],
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "epochs": 20,
+  "batch_size": 32,
+  "learning_rate": 0.0003,
+  "ppo_clip_eps": 0.2,
+  "ppo_epochs_per_update": 4,
+  "gamma": 0.0,
+  "module_default_entropy_coef": 0.0,
+  "checkpoint_selection": "best validation mean reward (deterministic), per ppo_train.train",
+  "comparison_split": "validation",
+  "test_split_used": false,
+  "evaluation_mode": "deterministic PPO actions (normalized Dirichlet concentration)",
+  "train_csv": "data\\processed\\stage1d_transactions_train.csv",
+  "validation_csv": "data\\processed\\stage1d_transactions_validation.csv",
+  "split_sizes": {
+    "train": 500,
+    "validation": 100
+  },
+  "validation_regime_counts": {
+    "splitting_needed": 56,
+    "near_boundary": 22,
+    "below_cheapest": 22
+  },
+  "environment": {
+    "git_head": "160b57cfad8b6214087809f2f6593f86c8caabd5",
+    "git_branch": "main",
+    "git_dirty": true,
+    "git_dirty_files": [
+      "M src/training/ppo_train.py",
+      " M tests/test_stage1d.py",
+      "?? docs/FAILED_SPLITTING_INVESTIGATION_PLAN.md",
+      "?? run_entropy_multiseed.py"
+    ],
+    "python": "3.10.11",
+    "torch": "2.13.0+cu130",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "device": "cuda",
+    "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "cudnn_deterministic": false
+  },
+  "started_at": "20261101_180551"
+}
