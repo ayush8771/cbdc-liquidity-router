@@ -42,3 +42,6 @@ data/raw/rpw_dataset_2011_2025_q3.xlsx
 
 # Raw-data caches
 data/raw/.cache/
+
+# Cognee local storage (Stage 1E; databases, data, manifests)
+.cognee/
