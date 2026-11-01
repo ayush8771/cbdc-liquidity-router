@@ -2,7 +2,7 @@
 
 **Document type:** Long-term product and architecture roadmap  
 **Status:** Planning reference; not an implementation specification  
-**Current development focus:** Major Phase 1 — Offline AI/RL Foundation. Stage 1D is finalized; Stage 1E is complete as an infrastructure milestone (real knowledge population deferred); Stage 1F is the next planned milestone and has not been started.
+**Current development focus:** Major Phase 1 — Offline AI/RL Foundation. Stage 1D is finalized; Stage 1E is complete as an infrastructure milestone (real knowledge population deferred); Stage 1F is complete (see `docs/STAGE1F_RESULTS.md`). The remaining Major Phase 1 work is the open research items below.
 
 > **Source-of-truth and scope rule:** This document describes the intended destination of the project. It does not override the live repository, root `CLAUDE.md`, or `docs/PROJECT_HANDOVER.md`. For current implementation details, completed work, approved constraints, and immediate tasks, inspect those sources and the code. Do not implement future-phase components merely because they appear in this roadmap. Each phase and major architectural decision must be planned and approved before implementation.
 
@@ -44,7 +44,7 @@ The project has **three major product phases**. Major Phase 1 contains internal 
 | **1C** | 1D CNN temporal feature foundation | Completed and regression-tested. Provides the historical-window encoder used by the Stage 1D policy. |
 | **1D** | Dynamic state and PPO policy optimization | Implemented and experimentally evaluated (finalized 1 November 2026; see `docs/STAGE1D_RESULTS.md`). Includes dynamic bridge liquidity/congestion, capacity-aware execution, risk/cost inputs, masked Dirichlet PPO, baselines, metrics, regime-based evaluation, and an inference-time capacity projection. |
 | **1E** | Cognee / semantic memory integration | Complete as an **infrastructure milestone** (2 November 2026; see `docs/STAGE1E_MEMORY.md`). A deterministic, provenance-tagged knowledge base with `StaticMemoryProvider` is the only authority for feasibility. Cognee is used for retrieval, explanations and audit only, and knowledge is never a PPO input. **Deferred:** populating real, cited regulatory information, corridor context, holidays and operational events; measuring retrieval quality; and any approved environment change letting dated or corridor-scoped facts affect feasibility. |
-| **1F** | Comprehensive backtesting and evaluation | Planned as the comprehensive evaluation milestone. Expand beyond implementation tests and initial Stage 1D comparisons to robust, reproducible evaluation across seeds, regimes, corridors, and simulation conditions. |
+| **1F** | Comprehensive backtesting and evaluation | **Complete** (2 November 2026; see `docs/STAGE1F_RESULTS.md`). Multi-seed (6 checkpoints), multi-scenario (6 stress scenarios) paired evaluation of PPO, projected PPO and two baselines on 1,460 holdout transactions, with clustered bootstrap CIs, Holm correction, leakage guards and reward-weight sensitivity. **Findings:** the projection, not the trained policy, provides capacity awareness; PPO barely responds to liquidity; reward superiority over the waterfall is inconclusive; the environment's unrouted accounting inflates rewards under liquidity shortage. |
 
 The exact completion status must be checked in the live repository. Basic evaluation code already exists in Stage 1D; Stage 1F means a more comprehensive evaluation and research-validation effort, not the first time metrics are introduced.
 
@@ -58,12 +58,15 @@ Stage 1D is finalized. The full results and output folders are in `docs/STAGE1D_
 - **Reward against the waterfall is inconclusive.** It changes sign across holdouts.
 - **No independent out-of-time holdout was possible.** All data ends at 2025-09-30, the same date as the end of the test window.
 
-Open items for Stage 1F:
-- an independent out-of-time holdout, which requires extending the data;
-- calibration of the reward weights, and sensitivity analysis;
-- confidence intervals for the PPO-vs-waterfall comparison;
-- better coverage of `exceeds_combined`;
-- deciding whether capacity awareness should be learned rather than projected.
+Stage 1F then addressed the confidence intervals, `exceeds_combined` coverage (through stress) and evaluation-time weight sensitivity. It found that PPO barely responds to liquidity and relies on the projection for capacity awareness; see `docs/STAGE1F_RESULTS.md`.
+
+Open research items before Major Phase 1 can be considered final (none started; several need approval):
+- **independent out-of-time data:** extend the data past 2025-09-30 (needs new or regenerated data and approval);
+- **reward accounting:** the environment counts unrouted as requested − executed, which hides never-requested amounts. Fixing this changes the reward and needs an approved change;
+- **reward weights:** calibrate them (all λ are still 1.0 placeholders);
+- **learned capacity awareness:** make PPO itself respond to liquidity, through training changes (needs approval), or formally adopt the projection as part of the policy;
+- **realistic stress:** calibrated, historically grounded stress scenarios;
+- **Stage 1E knowledge content:** populate it with real, cited facts.
 
 ### Core Phase 1 architecture
 
@@ -76,7 +79,7 @@ Open items for Stage 1F:
 - Cheapest-feasible and liquidity-aware waterfall baselines.
 - Training, checkpointing, evaluation, and reproducibility tooling.
 - Semantic memory milestone (Stage 1E; infrastructure complete, knowledge population deferred).
-- Comprehensive offline backtesting (Stage 1F).
+- Comprehensive offline backtesting (Stage 1F; complete).
 
 ### Optional advanced execution mechanics: AMM-style slippage
 
@@ -334,4 +337,4 @@ Do not treat it as a command to implement future features. For an implementation
 4. Confirm the relevant design decisions and acceptance criteria with the developer.
 5. Implement only the explicitly approved scope.
 
-**Current intended focus remains Major Phase 1. Stages 1D and 1E (infrastructure) are complete; the next step, Stage 1F or the deferred Stage 1E knowledge population, is chosen by the developer.**
+**Current intended focus remains Major Phase 1. Stages 1D, 1E (infrastructure) and 1F are complete; the developer chooses which open research item comes next, before Major Phase 2.**

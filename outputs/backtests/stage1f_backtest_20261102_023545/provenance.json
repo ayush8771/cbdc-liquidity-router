@@ -1,0 +1,99 @@
+{
+  "started_at": "20261102_023545",
+  "analysis_plan_sha256": "17d41133e8135e5940a9fa071f0fa737f9b377884046633e63b414dd58a545ba",
+  "git_head": "59e6d9af01199de09d96a37b905f3e28265b5611",
+  "git_dirty": true,
+  "git_dirty_files": [
+    "?? outputs/backtests/",
+    "?? run_stage1f_backtest.py",
+    "?? src/backtesting/",
+    "?? tests/test_stage1f.py"
+  ],
+  "code_sha256": {
+    "run_stage1f_backtest.py": "688a8655254c6f8a51c1b476095bb649e15f171a683ebc45afa46a788083b9b4",
+    "src/backtesting/scenarios.py": "a42b833871cb86bdeeb119dfabc1e5bc411b7f92c87775f903ec2a904ba15bbd",
+    "src/backtesting/evaluation.py": "7c4ef8b351e8647bb8ebf982c7ac691ffcc419c2a3eba8460cc1e153428bf891",
+    "src/backtesting/analysis.py": "79e05023f1d8817eb575dcc79dd4ad81daa7cac8e153a7338e76ad53f6967d46",
+    "src/backtesting/statistics.py": "f2d2e6aeffbb7a1006036e8a75b29658de15be7db9b3c56120f50ab425a8e7a2",
+    "src/backtesting/leakage.py": "d0c6aa75312feb9081f1ff95328e39c7e95d7b72c9c142faa491af2281ddca83",
+    "src/training/capacity_projection.py": "aac2848cd994956db7ee372358e9337359cbfc36d713cf8451f47ba387b2386f",
+    "src/envs/cbdc_env.py": "f8e51976e0178223a0741ca10ed2f9b2ac1509c83d7ad23426f5fcb1349513b4",
+    "src/envs/reward.py": "aa08f2abdc818e1f32d079d805ae879245279306bb4287270ac9b1c05974d10f",
+    "src/models/ppo_actor_critic.py": "f8b5d5d67703035566baa924280ccb4eb450fdd94b76c17a537d9536bb7754c1",
+    "src/training/baselines.py": "7486a6cf652b8d9c92815d6555135bbcf0ddb4f0d793ab24fc62d5b7cad0f044"
+  },
+  "code_git_blob": {
+    "run_stage1f_backtest.py": "17c2f2386172f88c4acd716a73f7042a6e8d4076",
+    "src/backtesting/scenarios.py": "d0e497e26d8bf9822d1a152b16225feca4cc6131",
+    "src/backtesting/evaluation.py": "2c2d60ff2b3da693bf2a45234ee9c110c3423edf",
+    "src/backtesting/analysis.py": "0be7b95b79f0e75f96890d0c7821da5f69454641",
+    "src/backtesting/statistics.py": "14d9aa57584cf7a7c69b7e264a5cbc2b1086e740",
+    "src/backtesting/leakage.py": "0f4c90a03362ef720b3a51fa567d013ec32161ed",
+    "src/training/capacity_projection.py": "5f18e3cbb33eaaf826c02d263b2968004210b598",
+    "src/envs/cbdc_env.py": "512f08787727de1fa24c3fd9117307204c9db2ff",
+    "src/envs/reward.py": "7b4e3add693a18efaef42733dbdca6f4c31e7c69",
+    "src/models/ppo_actor_critic.py": "dee0e097947945ac21cf3cb8ffced1526ea06073",
+    "src/training/baselines.py": "63cb7afd73c5930c51d2d774107769f916e47365"
+  },
+  "data_sha256": {
+    "data/processed/synthetic_liquidity_congestion_daily.parquet": "440a934337c9d08119f001db4b3c4ec4c325e0d1a0225bed1c3dd984c6784c9b",
+    "data/processed/normalization_stats.json": "96241f0abd2769edf59aa65eecff9263f0f029de4283edd7fc522aaa6fef5f46",
+    "data/processed/stage1d_transactions_holdout_seed20261102.csv": "a170761c45c2f2108df396ed4b31a95e954da98342b2b47db0580917ff38ef0e",
+    "data/processed/stage1d_transactions_holdout_datedisjoint_seed20261103.csv": "5d3febb8fc6207b282f76fceaca3ef56e00aa334875e65690b1a62a1f437cc30",
+    "data/processed/stage1d_transactions_holdout_datedisjoint_v2_seed20261104.csv": "c5015ca77cd10e4973ef3e87f959bf0d21aa516f7f2bc4bcdf20bdec0ef05568",
+    "data/processed/stage1d_transactions_train.csv": "bd9cb6707d61de7d2f1e02b424ecd2b86e16261db609b07bcbb5b757b67b63c4",
+    "data/processed/stage1d_transactions_validation.csv": "8c960ae0435bf0b98988e4508bb73855dc6ed462210dc93932936e81731c1335",
+    "data/processed/stage1d_transactions_test.csv": "ab974c09a50a64d9ffaa76eed0ac6b79e20f1a5639c305e3ba95c24eabdcf1f1",
+    "data/structured/bridge_network.csv": "abe1855995e4a183b876cd175b0e68f47f4286f693be27326a80d2beb77b0d9f"
+  },
+  "data_verified_unchanged": true,
+  "checkpoints": [
+    {
+      "label": "seed42_entropy000",
+      "path": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "3502639c1884e15d54dd115fba370d81234776b884433baf6fa8f60b8e07c48f"
+    },
+    {
+      "label": "seed42_entropy005",
+      "path": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "6e813f763e662028bd37352759fe2b77041b06370fcf2b6950ac2dc7897598bf"
+    },
+    {
+      "label": "seed123_entropy000",
+      "path": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "9a57f635b8d048de4af9857deae1ceb26fff4e2816381fb1f50af95cf6d406b5"
+    },
+    {
+      "label": "seed123_entropy005",
+      "path": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "228761c97c21715f6afb84c14cfd71ce3111a5fc339bc0b13208d3dc41b25196"
+    },
+    {
+      "label": "seed2026_entropy000",
+      "path": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "10a38dc26e6bb954cc020786e835a7d4be28586bcb722e19e9717fa30b28a423"
+    },
+    {
+      "label": "seed2026_entropy005",
+      "path": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "65c6a739405d8281f4457977c13b3a323081d73f9d96a89a08008b6686644875"
+    }
+  ],
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "python": "3.10.11",
+  "torch": "2.13.0+cu130",
+  "pandas": "2.3.3",
+  "scenario_seconds": {
+    "baseline": 642.3,
+    "liquidity_minus30": 608.6,
+    "liquidity_minus50": 761.8,
+    "cheapest_venue_outage": 604.2,
+    "congestion_x2": 593.2,
+    "combined_stress": 602.9
+  },
+  "rows": 122640,
+  "training_performed": false,
+  "tuning_performed": false,
+  "numeric_note": "PPO inference is batched; vs per-transaction Stage 1D inference rewards differ by <=~1e-6."
+}

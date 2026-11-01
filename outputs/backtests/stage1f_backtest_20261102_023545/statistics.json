@@ -1,0 +1,1792 @@
+{
+  "families": {
+    "baseline": {
+      "H1": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "reward",
+        "estimate": 0.0017431407403321474,
+        "ci95": [
+          -0.013114431643873447,
+          0.016205494298908125
+        ],
+        "p_bootstrap": 0.8146,
+        "n_boot": 10000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.0015179104531339719,
+          "seed123_entropy005": 0.0015456337102282708,
+          "seed2026_entropy000": 0.0013222610574164676,
+          "seed2026_entropy005": -0.0015850604825510524,
+          "seed42_entropy000": 0.005842378160113231,
+          "seed42_entropy005": 0.004851542449919938
+        },
+        "checkpoints_positive": 4,
+        "checkpoints_negative": 2,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 752,
+          "negative": 708,
+          "zero": 0,
+          "wilcoxon_p": 0.1588433870523297,
+          "wilcoxon_stat": 510563.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "H2": {
+        "comparison": "ppo_projected - ppo_original",
+        "metric": "completed",
+        "estimate": 0.045662100456621,
+        "ci95": [
+          0.025060941945895445,
+          0.06913901397305455
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 10000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.036301369863013695,
+          "seed123_entropy005": 0.0273972602739726,
+          "seed2026_entropy000": 0.019178082191780823,
+          "seed2026_entropy005": 0.028767123287671233,
+          "seed42_entropy000": 0.08493150684931507,
+          "seed42_entropy005": 0.0773972602739726
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 134,
+          "negative": 0,
+          "zero": 1326,
+          "wilcoxon_p": 4.111292265362148e-24,
+          "wilcoxon_stat": 0.0
+        },
+        "equivalence": "positive",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      },
+      "H3": {
+        "comparison": "ppo_original - liquidity_waterfall",
+        "metric": "reward",
+        "estimate": -0.0018889468972492804,
+        "ci95": [
+          -0.016319421169908446,
+          0.01230936321975004
+        ],
+        "p_bootstrap": 0.799,
+        "n_boot": 10000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.0027341731006885286,
+          "seed123_entropy005": -0.00021353248194844204,
+          "seed2026_entropy000": -0.00075973892588397,
+          "seed2026_entropy005": -0.005614562387695097,
+          "seed42_entropy000": -0.0003649900139289863,
+          "seed42_entropy005": -0.0016466844733506569
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 6,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 718,
+          "negative": 742,
+          "zero": 0,
+          "wilcoxon_p": 0.6929995135868685,
+          "wilcoxon_stat": 526904.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "H4": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "completed",
+        "estimate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "p_bootstrap": 1.0,
+        "n_boot": 10000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.0,
+          "seed123_entropy005": 0.0,
+          "seed2026_entropy000": 0.0,
+          "seed2026_entropy005": 0.0,
+          "seed42_entropy000": 0.0,
+          "seed42_entropy005": 0.0
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 0,
+          "negative": 0,
+          "zero": 1460,
+          "wilcoxon_p": 1.0,
+          "wilcoxon_stat": null
+        },
+        "equivalence": "practically_negligible",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      }
+    },
+    "baseline__stress_family": {
+      "projected_vs_waterfall_reward_amount": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": 0.001743141538376719,
+        "ci95": [
+          -0.013222496149779238,
+          0.016033068032798976
+        ],
+        "p_bootstrap": 0.808,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.001517909655089401,
+          "seed123_entropy005": 0.0015456345082728432,
+          "seed2026_entropy000": 0.001322261855461039,
+          "seed2026_entropy005": -0.0015850596845064832,
+          "seed42_entropy000": 0.005842378958157806,
+          "seed42_entropy005": 0.004851543247964512
+        },
+        "checkpoints_positive": 4,
+        "checkpoints_negative": 2,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 752,
+          "negative": 708,
+          "zero": 0,
+          "wilcoxon_p": 0.1588433870523297,
+          "wilcoxon_stat": 510563.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_waterfall_completion": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "completed",
+        "estimate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "p_bootstrap": 1.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.0,
+          "seed123_entropy005": 0.0,
+          "seed2026_entropy000": 0.0,
+          "seed2026_entropy005": 0.0,
+          "seed42_entropy000": 0.0,
+          "seed42_entropy005": 0.0
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 0,
+          "negative": 0,
+          "zero": 1460,
+          "wilcoxon_p": 1.0,
+          "wilcoxon_stat": null
+        },
+        "equivalence": "practically_negligible",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_original_completion": {
+        "comparison": "ppo_projected - ppo_original",
+        "metric": "completed",
+        "estimate": 0.045662100456621,
+        "ci95": [
+          0.024481338813569172,
+          0.06833718708199377
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.036301369863013695,
+          "seed123_entropy005": 0.0273972602739726,
+          "seed2026_entropy000": 0.019178082191780823,
+          "seed2026_entropy005": 0.028767123287671233,
+          "seed42_entropy000": 0.08493150684931507,
+          "seed42_entropy005": 0.0773972602739726
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 134,
+          "negative": 0,
+          "zero": 1326,
+          "wilcoxon_p": 4.111292265362148e-24,
+          "wilcoxon_stat": 0.0
+        },
+        "equivalence": "positive",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      },
+      "original_vs_waterfall_reward_amount": {
+        "comparison": "ppo_original - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": -0.0017398870702137158,
+        "ci95": [
+          -0.01623151064349864,
+          0.012583990365053295
+        ],
+        "p_bootstrap": 0.824,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.0025851142545716553,
+          "seed123_entropy005": -6.447281008014867e-05,
+          "seed2026_entropy000": -0.0006106797413652999,
+          "seed2026_entropy005": -0.005465501660753145,
+          "seed42_entropy000": -0.00021593044667500926,
+          "seed42_entropy005": -0.0014976235078370342
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 6,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 718,
+          "negative": 742,
+          "zero": 0,
+          "wilcoxon_p": 0.6867345147766304,
+          "wilcoxon_stat": 526767.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      }
+    },
+    "liquidity_minus30__stress_family": {
+      "projected_vs_waterfall_reward_amount": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": 0.00012022533029766008,
+        "ci95": [
+          -0.012116037017926693,
+          0.011566992594269505
+        ],
+        "p_bootstrap": 0.987,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.003599296554787816,
+          "seed123_entropy005": -0.000751485745900159,
+          "seed2026_entropy000": -0.001096374116090978,
+          "seed2026_entropy005": -0.0013771005142911288,
+          "seed42_entropy000": 0.004068438453578935,
+          "seed42_entropy005": 0.0034771704592771097
+        },
+        "checkpoints_positive": 2,
+        "checkpoints_negative": 4,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 740,
+          "negative": 710,
+          "zero": 10,
+          "wilcoxon_p": 0.32760672154553827,
+          "wilcoxon_stat": 510376.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_waterfall_completion": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "completed",
+        "estimate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "p_bootstrap": 1.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.0,
+          "seed123_entropy005": 0.0,
+          "seed2026_entropy000": 0.0,
+          "seed2026_entropy005": 0.0,
+          "seed42_entropy000": 0.0,
+          "seed42_entropy005": 0.0
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 0,
+          "negative": 0,
+          "zero": 1460,
+          "wilcoxon_p": 1.0,
+          "wilcoxon_stat": null
+        },
+        "equivalence": "practically_negligible",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_original_completion": {
+        "comparison": "ppo_projected - ppo_original",
+        "metric": "completed",
+        "estimate": 0.04657534246575343,
+        "ci95": [
+          0.03249704136451299,
+          0.06190746572510098
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.049315068493150684,
+          "seed123_entropy005": 0.03356164383561644,
+          "seed2026_entropy000": 0.03356164383561644,
+          "seed2026_entropy005": 0.03561643835616438,
+          "seed42_entropy000": 0.0636986301369863,
+          "seed42_entropy005": 0.0636986301369863
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 105,
+          "negative": 0,
+          "zero": 1355,
+          "wilcoxon_p": 2.23943105881821e-19,
+          "wilcoxon_stat": 0.0
+        },
+        "equivalence": "positive",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      },
+      "original_vs_waterfall_reward_amount": {
+        "comparison": "ppo_original - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": -0.008451329053479435,
+        "ci95": [
+          -0.02129439879615086,
+          0.003336775041928599
+        ],
+        "p_bootstrap": 0.185,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.017389223338217838,
+          "seed123_entropy005": -0.008773280589772116,
+          "seed2026_entropy000": -0.009878889750008028,
+          "seed2026_entropy005": -0.011123574775205784,
+          "seed42_entropy000": -0.0014011789402467968,
+          "seed42_entropy005": -0.0021418269274260434
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 6,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 704,
+          "negative": 756,
+          "zero": 0,
+          "wilcoxon_p": 0.24550460379406902,
+          "wilcoxon_stat": 514553.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 0.5549999999999999,
+        "reject_holm_0.05": false
+      }
+    },
+    "liquidity_minus50__stress_family": {
+      "projected_vs_waterfall_reward_amount": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": 0.0006542151900671636,
+        "ci95": [
+          -0.008412048178862387,
+          0.009556946959048665
+        ],
+        "p_bootstrap": 0.877,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.001208821774314398,
+          "seed123_entropy005": -0.0003149042986977375,
+          "seed2026_entropy000": -0.0004057311669855098,
+          "seed2026_entropy005": -0.0007941357549732383,
+          "seed42_entropy000": 0.0034905559470293805,
+          "seed42_entropy005": 0.003158328188344486
+        },
+        "checkpoints_positive": 2,
+        "checkpoints_negative": 4,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 763,
+          "negative": 674,
+          "zero": 23,
+          "wilcoxon_p": 0.13736747498515384,
+          "wilcoxon_stat": 493227.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_waterfall_completion": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "completed",
+        "estimate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "p_bootstrap": 1.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.0,
+          "seed123_entropy005": 0.0,
+          "seed2026_entropy000": 0.0,
+          "seed2026_entropy005": 0.0,
+          "seed42_entropy000": 0.0,
+          "seed42_entropy005": 0.0
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 0,
+          "negative": 0,
+          "zero": 1460,
+          "wilcoxon_p": 1.0,
+          "wilcoxon_stat": null
+        },
+        "equivalence": "practically_negligible",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_original_completion": {
+        "comparison": "ppo_projected - ppo_original",
+        "metric": "completed",
+        "estimate": 0.10445205479452055,
+        "ci95": [
+          0.07274811406626018,
+          0.13561433825554098
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.1267123287671233,
+          "seed123_entropy005": 0.08493150684931507,
+          "seed2026_entropy000": 0.06438356164383562,
+          "seed2026_entropy005": 0.06301369863013699,
+          "seed42_entropy000": 0.1404109589041096,
+          "seed42_entropy005": 0.14726027397260275
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 251,
+          "negative": 0,
+          "zero": 1209,
+          "wilcoxon_p": 1.744099855391011e-43,
+          "wilcoxon_stat": 0.0
+        },
+        "equivalence": "positive",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      },
+      "original_vs_waterfall_reward_amount": {
+        "comparison": "ppo_original - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": -0.023583400759832937,
+        "ci95": [
+          -0.039557918030263324,
+          -0.011216216101883251
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.049927726672335,
+          "seed123_entropy005": -0.02388556924441651,
+          "seed2026_entropy000": -0.02141194661281073,
+          "seed2026_entropy005": -0.02076785892606203,
+          "seed42_entropy000": -0.0121693634360196,
+          "seed42_entropy005": -0.013337939667353754
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 6,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 640,
+          "negative": 820,
+          "zero": 0,
+          "wilcoxon_p": 1.031618268602063e-08,
+          "wilcoxon_stat": 441014.0
+        },
+        "equivalence": "negative",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      }
+    },
+    "cheapest_venue_outage__stress_family": {
+      "projected_vs_waterfall_reward_amount": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": 0.004584414134937557,
+        "ci95": [
+          0.0005360170788762894,
+          0.009171304242314738
+        ],
+        "p_bootstrap": 0.021,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.00039441821917906824,
+          "seed123_entropy005": 0.0029290515017878047,
+          "seed2026_entropy000": 0.0030535501963810953,
+          "seed2026_entropy005": 0.002222475780169524,
+          "seed42_entropy000": 0.00977612980183691,
+          "seed42_entropy005": 0.009130859310270939
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 786,
+          "negative": 666,
+          "zero": 8,
+          "wilcoxon_p": 5.049674709641413e-05,
+          "wilcoxon_stat": 462666.0
+        },
+        "equivalence": "positive",
+        "p_holm": 0.042,
+        "reject_holm_0.05": true
+      },
+      "projected_vs_waterfall_completion": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "completed",
+        "estimate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "p_bootstrap": 1.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.0,
+          "seed123_entropy005": 0.0,
+          "seed2026_entropy000": 0.0,
+          "seed2026_entropy005": 0.0,
+          "seed42_entropy000": 0.0,
+          "seed42_entropy005": 0.0
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 0,
+          "negative": 0,
+          "zero": 1460,
+          "wilcoxon_p": 1.0,
+          "wilcoxon_stat": null
+        },
+        "equivalence": "practically_negligible",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_original_completion": {
+        "comparison": "ppo_projected - ppo_original",
+        "metric": "completed",
+        "estimate": 0.8095890410958904,
+        "ci95": [
+          0.6951919445417943,
+          0.8845466286512026
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.5534246575342465,
+          "seed123_entropy005": 0.8239726027397261,
+          "seed2026_entropy000": 0.8383561643835616,
+          "seed2026_entropy005": 0.8342465753424657,
+          "seed42_entropy000": 0.9041095890410958,
+          "seed42_entropy005": 0.9034246575342466
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 1320,
+          "negative": 0,
+          "zero": 140,
+          "wilcoxon_p": 7.413495993037116e-232,
+          "wilcoxon_stat": 0.0
+        },
+        "equivalence": "positive",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      },
+      "original_vs_waterfall_reward_amount": {
+        "comparison": "ppo_original - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": -0.23583446973814595,
+        "ci95": [
+          -0.341684009491056,
+          -0.13701049917137098
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.08361405594084546,
+          "seed123_entropy005": -0.16986870436086954,
+          "seed2026_entropy000": -0.16718178804120637,
+          "seed2026_entropy005": -0.17085507062608285,
+          "seed42_entropy000": -0.40994363578647064,
+          "seed42_entropy005": -0.41354356367340067
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 6,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 264,
+          "negative": 1196,
+          "zero": 0,
+          "wilcoxon_p": 6.6066062197221776e-167,
+          "wilcoxon_stat": 89601.0
+        },
+        "equivalence": "negative",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      }
+    },
+    "congestion_x2__stress_family": {
+      "projected_vs_waterfall_reward_amount": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": 0.002251949178648837,
+        "ci95": [
+          -0.029619493418874415,
+          0.03307067882288363
+        ],
+        "p_bootstrap": 0.87,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.008990954513400314,
+          "seed123_entropy005": -0.0024936589582894232,
+          "seed2026_entropy000": 0.00031425680549269046,
+          "seed2026_entropy005": -0.0013711753960368319,
+          "seed42_entropy000": 0.013295227895169561,
+          "seed42_entropy005": 0.012757999238957343
+        },
+        "checkpoints_positive": 3,
+        "checkpoints_negative": 3,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 752,
+          "negative": 708,
+          "zero": 0,
+          "wilcoxon_p": 0.1589351700058036,
+          "wilcoxon_stat": 510568.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_waterfall_completion": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "completed",
+        "estimate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "p_bootstrap": 1.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.0,
+          "seed123_entropy005": 0.0,
+          "seed2026_entropy000": 0.0,
+          "seed2026_entropy005": 0.0,
+          "seed42_entropy000": 0.0,
+          "seed42_entropy005": 0.0
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 0,
+          "negative": 0,
+          "zero": 1460,
+          "wilcoxon_p": 1.0,
+          "wilcoxon_stat": null
+        },
+        "equivalence": "practically_negligible",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_original_completion": {
+        "comparison": "ppo_projected - ppo_original",
+        "metric": "completed",
+        "estimate": 0.052968036529680365,
+        "ci95": [
+          0.0318997014989016,
+          0.0740481355647512
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.06301369863013699,
+          "seed123_entropy005": 0.043835616438356165,
+          "seed2026_entropy000": 0.017123287671232876,
+          "seed2026_entropy005": 0.030136986301369864,
+          "seed42_entropy000": 0.08698630136986302,
+          "seed42_entropy005": 0.07671232876712329
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 141,
+          "negative": 0,
+          "zero": 1319,
+          "wilcoxon_p": 3.1570309721903055e-25,
+          "wilcoxon_stat": 0.0
+        },
+        "equivalence": "positive",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      },
+      "original_vs_waterfall_reward_amount": {
+        "comparison": "ppo_original - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": 0.0071493278668353834,
+        "ci95": [
+          -0.02419443868856631,
+          0.038083827304585254
+        ],
+        "p_bootstrap": 0.646,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.01004564376206514,
+          "seed123_entropy005": 0.005161128347146669,
+          "seed2026_entropy000": 0.0010904803498031526,
+          "seed2026_entropy005": -0.0016726398372995368,
+          "seed42_entropy000": 0.01563586599378176,
+          "seed42_entropy005": 0.012635488585515128
+        },
+        "checkpoints_positive": 5,
+        "checkpoints_negative": 1,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 741,
+          "negative": 719,
+          "zero": 0,
+          "wilcoxon_p": 0.057814222780237186,
+          "wilcoxon_stat": 502698.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      }
+    },
+    "combined_stress__stress_family": {
+      "projected_vs_waterfall_reward_amount": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": 0.0009840366297461439,
+        "ci95": [
+          -0.017747969642256837,
+          0.018271262373892712
+        ],
+        "p_bootstrap": 0.924,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": -0.005160159017012681,
+          "seed123_entropy005": -0.0012396119161178292,
+          "seed2026_entropy000": -0.00037643366167274667,
+          "seed2026_entropy005": -0.0010070368292739865,
+          "seed42_entropy000": 0.007271196535203694,
+          "seed42_entropy005": 0.0064162646673504185
+        },
+        "checkpoints_positive": 2,
+        "checkpoints_negative": 4,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 739,
+          "negative": 711,
+          "zero": 10,
+          "wilcoxon_p": 0.2648152169439193,
+          "wilcoxon_stat": 508205.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_waterfall_completion": {
+        "comparison": "ppo_projected - liquidity_waterfall",
+        "metric": "completed",
+        "estimate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "p_bootstrap": 1.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.0,
+          "seed123_entropy005": 0.0,
+          "seed2026_entropy000": 0.0,
+          "seed2026_entropy005": 0.0,
+          "seed42_entropy000": 0.0,
+          "seed42_entropy005": 0.0
+        },
+        "checkpoints_positive": 0,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 0,
+          "negative": 0,
+          "zero": 1460,
+          "wilcoxon_p": 1.0,
+          "wilcoxon_stat": null
+        },
+        "equivalence": "practically_negligible",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      },
+      "projected_vs_original_completion": {
+        "comparison": "ppo_projected - ppo_original",
+        "metric": "completed",
+        "estimate": 0.04805936073059361,
+        "ci95": [
+          0.034276454562657224,
+          0.06309370378048984
+        ],
+        "p_bootstrap": 0.0,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.052054794520547946,
+          "seed123_entropy005": 0.03767123287671233,
+          "seed2026_entropy000": 0.03424657534246575,
+          "seed2026_entropy005": 0.036301369863013695,
+          "seed42_entropy000": 0.06438356164383562,
+          "seed42_entropy005": 0.0636986301369863
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 107,
+          "negative": 0,
+          "zero": 1353,
+          "wilcoxon_p": 1.0126829621023137e-19,
+          "wilcoxon_stat": 0.0
+        },
+        "equivalence": "positive",
+        "p_holm": 0.0,
+        "reject_holm_0.05": true
+      },
+      "original_vs_waterfall_reward_amount": {
+        "comparison": "ppo_original - liquidity_waterfall",
+        "metric": "reward_amount",
+        "estimate": 0.0056252225940829235,
+        "ci95": [
+          -0.012251999646468352,
+          0.02369045165803709
+        ],
+        "p_bootstrap": 0.523,
+        "n_boot": 2000,
+        "n_transactions": 1460,
+        "n_clusters": 511,
+        "n_checkpoints": 6,
+        "per_checkpoint_mean": {
+          "seed123_entropy000": 0.008495134535054242,
+          "seed123_entropy005": 0.008873220517631638,
+          "seed2026_entropy000": 0.0010892401156941368,
+          "seed2026_entropy005": 0.0005429307118197895,
+          "seed42_entropy000": 0.008245327139607989,
+          "seed42_entropy005": 0.00650548254468975
+        },
+        "checkpoints_positive": 6,
+        "checkpoints_negative": 0,
+        "seed_averaged": {
+          "n": 1460,
+          "positive": 726,
+          "negative": 734,
+          "zero": 0,
+          "wilcoxon_p": 0.16891266968612373,
+          "wilcoxon_stat": 511099.0
+        },
+        "equivalence": "inconclusive",
+        "p_holm": 1.0,
+        "reject_holm_0.05": false
+      }
+    }
+  },
+  "regime_projected_vs_waterfall_reward_amount": {
+    "baseline|below_cheapest": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.0007124337572787732,
+      "ci95": [
+        -0.030813585884479074,
+        0.029289323023747874
+      ],
+      "p_bootstrap": 0.989,
+      "n_boot": 2000,
+      "n_transactions": 318,
+      "n_clusters": 227,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.00471247307490141,
+        "seed123_entropy005": -0.0005774513361650637,
+        "seed2026_entropy000": -0.0011250080306035553,
+        "seed2026_entropy005": -0.0041989869008315734,
+        "seed42_entropy000": 0.003756201219979036,
+        "seed42_entropy005": 0.002583115578849931
+      },
+      "checkpoints_positive": 2,
+      "checkpoints_negative": 4,
+      "seed_averaged": {
+        "n": 318,
+        "positive": 154,
+        "negative": 164,
+        "zero": 0,
+        "wilcoxon_p": 0.8076420472341634,
+        "wilcoxon_stat": 24961.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "baseline|exceeds_combined": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 3.1045687354236406e-08,
+      "ci95": [
+        2.136342183156614e-08,
+        4.195211604218754e-08
+      ],
+      "p_bootstrap": 0.0,
+      "n_boot": 2000,
+      "n_transactions": 5,
+      "n_clusters": 5,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": 3.1045687354236406e-08,
+        "seed123_entropy005": 3.1045687354236406e-08,
+        "seed2026_entropy000": 3.1045687354236406e-08,
+        "seed2026_entropy005": 3.1045687354236406e-08,
+        "seed42_entropy000": 3.1045687354236406e-08,
+        "seed42_entropy005": 3.1045687354236406e-08
+      },
+      "checkpoints_positive": 6,
+      "checkpoints_negative": 0,
+      "seed_averaged": {
+        "n": 5,
+        "positive": 5,
+        "negative": 0,
+        "zero": 0,
+        "wilcoxon_p": 0.0625,
+        "wilcoxon_stat": 0.0
+      },
+      "equivalence": "practically_negligible"
+    },
+    "baseline|near_boundary": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 0.00013272757682969912,
+      "ci95": [
+        -0.028670965425057295,
+        0.027930174954792792
+      ],
+      "p_bootstrap": 0.978,
+      "n_boot": 2000,
+      "n_transactions": 489,
+      "n_clusters": 315,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.0011980928708206823,
+        "seed123_entropy005": 0.0012664085856111532,
+        "seed2026_entropy000": -0.001023038750410858,
+        "seed2026_entropy005": -0.0030695519379271073,
+        "seed42_entropy000": 0.0029075138201032306,
+        "seed42_entropy005": 0.001913126614422448
+      },
+      "checkpoints_positive": 3,
+      "checkpoints_negative": 3,
+      "seed_averaged": {
+        "n": 489,
+        "positive": 249,
+        "negative": 240,
+        "zero": 0,
+        "wilcoxon_p": 0.5125217263433366,
+        "wilcoxon_stat": 57855.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "baseline|splitting_needed": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 0.004176908395905094,
+      "ci95": [
+        -0.005967737187495264,
+        0.01438287919578047
+      ],
+      "p_bootstrap": 0.398,
+      "n_boot": 2000,
+      "n_transactions": 648,
+      "n_clusters": 378,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.00020326296297685104,
+        "seed123_entropy005": 0.002810157335473071,
+        "seed2026_entropy000": 0.004303272617943706,
+        "seed2026_entropy005": 0.0008057120949118695,
+        "seed42_entropy000": 0.009125967403855163,
+        "seed42_entropy005": 0.008219603886223604
+      },
+      "checkpoints_positive": 5,
+      "checkpoints_negative": 1,
+      "seed_averaged": {
+        "n": 648,
+        "positive": 344,
+        "negative": 304,
+        "zero": 0,
+        "wilcoxon_p": 0.06826599493273929,
+        "wilcoxon_stat": 96446.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "liquidity_minus30|below_cheapest": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.0030878586011782332,
+      "ci95": [
+        -0.04234866967364936,
+        0.036756626155814716
+      ],
+      "p_bootstrap": 0.884,
+      "n_boot": 2000,
+      "n_transactions": 210,
+      "n_clusters": 162,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.008765222082336691,
+        "seed123_entropy005": -0.004760547990205277,
+        "seed2026_entropy000": -0.004725235008847638,
+        "seed2026_entropy005": -0.006127428590792085,
+        "seed42_entropy000": 0.0034828072583727976,
+        "seed42_entropy005": 0.0023684748067394935
+      },
+      "checkpoints_positive": 2,
+      "checkpoints_negative": 4,
+      "seed_averaged": {
+        "n": 210,
+        "positive": 100,
+        "negative": 110,
+        "zero": 0,
+        "wilcoxon_p": 0.9633599499804226,
+        "wilcoxon_stat": 11037.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "liquidity_minus30|exceeds_combined": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 9.527342561023757e-09,
+      "ci95": [
+        4.854936190795184e-09,
+        1.4204259443471434e-08
+      ],
+      "p_bootstrap": 0.0,
+      "n_boot": 2000,
+      "n_transactions": 111,
+      "n_clusters": 102,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": 9.527342561023757e-09,
+        "seed123_entropy005": 9.527342561023757e-09,
+        "seed2026_entropy000": 9.527342561023757e-09,
+        "seed2026_entropy005": 9.527342561023757e-09,
+        "seed42_entropy000": 9.527342561023757e-09,
+        "seed42_entropy005": 9.527342561023757e-09
+      },
+      "checkpoints_positive": 6,
+      "checkpoints_negative": 0,
+      "seed_averaged": {
+        "n": 111,
+        "positive": 59,
+        "negative": 42,
+        "zero": 10,
+        "wilcoxon_p": 0.0011386237853934715,
+        "wilcoxon_stat": 1615.0
+      },
+      "equivalence": "practically_negligible"
+    },
+    "liquidity_minus30|near_boundary": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.013129869801045984,
+      "ci95": [
+        -0.0705338753711425,
+        0.04173160807948907
+      ],
+      "p_bootstrap": 0.64,
+      "n_boot": 2000,
+      "n_transactions": 84,
+      "n_clusters": 77,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.01949960018695517,
+        "seed123_entropy005": -0.015072905219120917,
+        "seed2026_entropy000": -0.01555928450891971,
+        "seed2026_entropy005": -0.015919119336084038,
+        "seed42_entropy000": -0.005954459467889512,
+        "seed42_entropy005": -0.006773850087306556
+      },
+      "checkpoints_positive": 0,
+      "checkpoints_negative": 6,
+      "seed_averaged": {
+        "n": 84,
+        "positive": 40,
+        "negative": 44,
+        "zero": 0,
+        "wilcoxon_p": 0.8166091490410837,
+        "wilcoxon_stat": 1733.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "liquidity_minus30|splitting_needed": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 0.0018264334542510434,
+      "ci95": [
+        -0.009217456130227075,
+        0.012789434283233293
+      ],
+      "p_bootstrap": 0.752,
+      "n_boot": 2000,
+      "n_transactions": 1055,
+      "n_clusters": 473,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.001683707084862839,
+        "seed123_entropy005": 0.0011077430045497714,
+        "seed2026_entropy000": 0.0006621535389378249,
+        "seed2026_entropy005": 0.0005814201136467539,
+        "seed42_entropy000": 0.005411093986478342,
+        "seed42_entropy005": 0.004879897166756411
+      },
+      "checkpoints_positive": 5,
+      "checkpoints_negative": 1,
+      "seed_averaged": {
+        "n": 1055,
+        "positive": 541,
+        "negative": 514,
+        "zero": 0,
+        "wilcoxon_p": 0.1452285400723186,
+        "wilcoxon_stat": 264101.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "liquidity_minus50|below_cheapest": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.002919327873117103,
+      "ci95": [
+        -0.05247441834706202,
+        0.04080397775114045
+      ],
+      "p_bootstrap": 0.932,
+      "n_boot": 2000,
+      "n_transactions": 147,
+      "n_clusters": 126,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.008419728822859057,
+        "seed123_entropy005": -0.00525365920893526,
+        "seed2026_entropy000": -0.004581174170161239,
+        "seed2026_entropy005": -0.005628618778312426,
+        "seed42_entropy000": 0.003573122575772503,
+        "seed42_entropy005": 0.0027940911657928546
+      },
+      "checkpoints_positive": 2,
+      "checkpoints_negative": 4,
+      "seed_averaged": {
+        "n": 147,
+        "positive": 71,
+        "negative": 76,
+        "zero": 0,
+        "wilcoxon_p": 0.9521979205152438,
+        "wilcoxon_stat": 5408.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "liquidity_minus50|exceeds_combined": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 7.725897842139012e-09,
+      "ci95": [
+        4.9776623652441445e-09,
+        1.0597106118750976e-08
+      ],
+      "p_bootstrap": 0.0,
+      "n_boot": 2000,
+      "n_transactions": 174,
+      "n_clusters": 157,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": 7.725897842139012e-09,
+        "seed123_entropy005": 7.725897842139012e-09,
+        "seed2026_entropy000": 7.725897842139012e-09,
+        "seed2026_entropy005": 7.725897842139012e-09,
+        "seed42_entropy000": 7.725897842139012e-09,
+        "seed42_entropy005": 7.725897842139012e-09
+      },
+      "checkpoints_positive": 6,
+      "checkpoints_negative": 0,
+      "seed_averaged": {
+        "n": 174,
+        "positive": 98,
+        "negative": 53,
+        "zero": 23,
+        "wilcoxon_p": 1.0700252815571362e-06,
+        "wilcoxon_stat": 3112.0
+      },
+      "equivalence": "practically_negligible"
+    },
+    "liquidity_minus50|near_boundary": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.01357652985168541,
+      "ci95": [
+        -0.08210284182561754,
+        0.05662942980432976
+      ],
+      "p_bootstrap": 0.725,
+      "n_boot": 2000,
+      "n_transactions": 58,
+      "n_clusters": 56,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.019922964874140282,
+        "seed123_entropy005": -0.016561083988638953,
+        "seed2026_entropy000": -0.01663115556692263,
+        "seed2026_entropy005": -0.016966246203854823,
+        "seed42_entropy000": -0.005268878808001463,
+        "seed42_entropy005": -0.006108849668554317
+      },
+      "checkpoints_positive": 0,
+      "checkpoints_negative": 6,
+      "seed_averaged": {
+        "n": 58,
+        "positive": 27,
+        "negative": 31,
+        "zero": 0,
+        "wilcoxon_p": 0.5905127169301796,
+        "wilcoxon_stat": 786.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "liquidity_minus50|splitting_needed": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 0.0020090034800534715,
+      "ci95": [
+        -0.005308280342002491,
+        0.00896827745678605
+      ],
+      "p_bootstrap": 0.538,
+      "n_boot": 2000,
+      "n_transactions": 1081,
+      "n_clusters": 482,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": 0.0005812682376088539,
+        "seed123_entropy005": 0.0011776772938479375,
+        "seed2026_entropy000": 0.0009673180183072585,
+        "seed2026_entropy005": 0.0006031542032084682,
+        "seed42_entropy000": 0.004511152905256427,
+        "seed42_entropy005": 0.004213450222091884
+      },
+      "checkpoints_positive": 6,
+      "checkpoints_negative": 0,
+      "seed_averaged": {
+        "n": 1081,
+        "positive": 567,
+        "negative": 514,
+        "zero": 0,
+        "wilcoxon_p": 0.058412026263588726,
+        "wilcoxon_stat": 272979.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "cheapest_venue_outage|below_cheapest": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.019859171436437242,
+      "ci95": [
+        -0.17766691346396868,
+        0.1329537015162519
+      ],
+      "p_bootstrap": 0.766,
+      "n_boot": 2000,
+      "n_transactions": 11,
+      "n_clusters": 11,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.025160906831785786,
+        "seed123_entropy005": -0.022994422566685876,
+        "seed2026_entropy000": -0.017940623509857662,
+        "seed2026_entropy005": -0.015005024835805235,
+        "seed42_entropy000": -0.019413937078622042,
+        "seed42_entropy005": -0.018640113795866834
+      },
+      "checkpoints_positive": 0,
+      "checkpoints_negative": 6,
+      "seed_averaged": {
+        "n": 11,
+        "positive": 5,
+        "negative": 6,
+        "zero": 0,
+        "wilcoxon_p": 0.8310546875,
+        "wilcoxon_stat": 30.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "cheapest_venue_outage|exceeds_combined": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 1.2203645764953884e-08,
+      "ci95": [
+        5.649192957640406e-09,
+        1.908611192993903e-08
+      ],
+      "p_bootstrap": 0.0,
+      "n_boot": 2000,
+      "n_transactions": 51,
+      "n_clusters": 50,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": 1.2203645764953884e-08,
+        "seed123_entropy005": 1.2203645764953884e-08,
+        "seed2026_entropy000": 1.2203645764953884e-08,
+        "seed2026_entropy005": 1.2203645764953884e-08,
+        "seed42_entropy000": 1.2203645764953884e-08,
+        "seed42_entropy005": 1.2203645764953884e-08
+      },
+      "checkpoints_positive": 6,
+      "checkpoints_negative": 0,
+      "seed_averaged": {
+        "n": 51,
+        "positive": 30,
+        "negative": 13,
+        "zero": 8,
+        "wilcoxon_p": 0.0008372231079647463,
+        "wilcoxon_stat": 204.0
+      },
+      "equivalence": "practically_negligible"
+    },
+    "cheapest_venue_outage|near_boundary": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.07011642194809146,
+      "ci95": [
+        -0.24589849580265477,
+        0.08854779456659528
+      ],
+      "p_bootstrap": 0.437,
+      "n_boot": 2000,
+      "n_transactions": 14,
+      "n_clusters": 14,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.09468344577156214,
+        "seed123_entropy005": -0.08036380119031505,
+        "seed2026_entropy000": -0.07102647685561415,
+        "seed2026_entropy005": -0.07905330234613603,
+        "seed42_entropy000": -0.04597420446628288,
+        "seed42_entropy005": -0.049597301058638577
+      },
+      "checkpoints_positive": 0,
+      "checkpoints_negative": 6,
+      "seed_averaged": {
+        "n": 14,
+        "positive": 7,
+        "negative": 7,
+        "zero": 0,
+        "wilcoxon_p": 0.6697998046875,
+        "wilcoxon_stat": 45.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "cheapest_venue_outage|splitting_needed": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 0.005703269369723258,
+      "ci95": [
+        0.002059176539930128,
+        0.010066046525317028
+      ],
+      "p_bootstrap": 0.0,
+      "n_boot": 2000,
+      "n_transactions": 1384,
+      "n_clusters": 509,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": 0.0015738353999761698,
+        "seed123_entropy005": 0.004085582684336861,
+        "seed2026_entropy000": 0.004082297831587787,
+        "seed2026_entropy005": 0.003263450522183044,
+        "seed42_entropy000": 0.0109323273545439,
+        "seed42_entropy005": 0.010282122425711786
+      },
+      "checkpoints_positive": 6,
+      "checkpoints_negative": 0,
+      "seed_averaged": {
+        "n": 1384,
+        "positive": 744,
+        "negative": 640,
+        "zero": 0,
+        "wilcoxon_p": 2.074440820835082e-05,
+        "wilcoxon_stat": 415907.0
+      },
+      "equivalence": "positive"
+    },
+    "congestion_x2|below_cheapest": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.0018501394818864032,
+      "ci95": [
+        -0.06566614098616376,
+        0.061390580033033805
+      ],
+      "p_bootstrap": 0.982,
+      "n_boot": 2000,
+      "n_transactions": 318,
+      "n_clusters": 227,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.01335490308538932,
+        "seed123_entropy005": -0.006739191415160861,
+        "seed2026_entropy000": -0.004243219359658271,
+        "seed2026_entropy005": -0.005712435639024458,
+        "seed42_entropy000": 0.009675422024632662,
+        "seed42_entropy005": 0.009273490583281844
+      },
+      "checkpoints_positive": 2,
+      "checkpoints_negative": 4,
+      "seed_averaged": {
+        "n": 318,
+        "positive": 156,
+        "negative": 162,
+        "zero": 0,
+        "wilcoxon_p": 0.7510837820348175,
+        "wilcoxon_stat": 24840.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "congestion_x2|exceeds_combined": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 2.2569152624551946e-08,
+      "ci95": [
+        1.3002266363582039e-08,
+        3.5189383507105984e-08
+      ],
+      "p_bootstrap": 0.0,
+      "n_boot": 2000,
+      "n_transactions": 5,
+      "n_clusters": 5,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": 2.2569152624551946e-08,
+        "seed123_entropy005": 2.2569152624551946e-08,
+        "seed2026_entropy000": 2.2569152624551946e-08,
+        "seed2026_entropy005": 2.2569152624551946e-08,
+        "seed42_entropy000": 2.2569152624551946e-08,
+        "seed42_entropy005": 2.2569152624551946e-08
+      },
+      "checkpoints_positive": 6,
+      "checkpoints_negative": 0,
+      "seed_averaged": {
+        "n": 5,
+        "positive": 5,
+        "negative": 0,
+        "zero": 0,
+        "wilcoxon_p": 0.0625,
+        "wilcoxon_stat": 0.0
+      },
+      "equivalence": "practically_negligible"
+    },
+    "congestion_x2|near_boundary": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 0.0005340527190504638,
+      "ci95": [
+        -0.06066561704291945,
+        0.05921850311479903
+      ],
+      "p_bootstrap": 0.991,
+      "n_boot": 2000,
+      "n_transactions": 489,
+      "n_clusters": 315,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.0070352447191670345,
+        "seed123_entropy005": -0.00120507988806982,
+        "seed2026_entropy000": -0.0013563482512525616,
+        "seed2026_entropy005": -0.0031674765919336586,
+        "seed42_entropy000": 0.008261127032965925,
+        "seed42_entropy005": 0.007707338731759942
+      },
+      "checkpoints_positive": 2,
+      "checkpoints_negative": 4,
+      "seed_averaged": {
+        "n": 489,
+        "positive": 251,
+        "negative": 238,
+        "zero": 0,
+        "wilcoxon_p": 0.4318327240603186,
+        "wilcoxon_stat": 57445.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "congestion_x2|splitting_needed": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 0.005578762752477993,
+      "ci95": [
+        -0.019108803038099427,
+        0.02853330140500709
+      ],
+      "p_bootstrap": 0.594,
+      "n_boot": 2000,
+      "n_transactions": 648,
+      "n_clusters": 378,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.00839459853948107,
+        "seed123_entropy005": -0.0014018445318843052,
+        "seed2026_entropy000": 0.0038139087568015402,
+        "seed2026_entropy005": 0.002104219746305258,
+        "seed42_entropy000": 0.018973082239426346,
+        "seed42_entropy005": 0.018377808843700192
+      },
+      "checkpoints_positive": 4,
+      "checkpoints_negative": 2,
+      "seed_averaged": {
+        "n": 648,
+        "positive": 340,
+        "negative": 308,
+        "zero": 0,
+        "wilcoxon_p": 0.1336675828396209,
+        "wilcoxon_stat": 97988.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "combined_stress|below_cheapest": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.003307642689772272,
+      "ci95": [
+        -0.06302802372393762,
+        0.05717238639626736
+      ],
+      "p_bootstrap": 0.924,
+      "n_boot": 2000,
+      "n_transactions": 210,
+      "n_clusters": 162,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.012520993944766459,
+        "seed123_entropy005": -0.007399206216227414,
+        "seed2026_entropy000": -0.0054629741605011885,
+        "seed2026_entropy005": -0.007320316027020163,
+        "seed42_entropy000": 0.007150618007609817,
+        "seed42_entropy005": 0.005707016202271761
+      },
+      "checkpoints_positive": 2,
+      "checkpoints_negative": 4,
+      "seed_averaged": {
+        "n": 210,
+        "positive": 102,
+        "negative": 108,
+        "zero": 0,
+        "wilcoxon_p": 0.9995474946268703,
+        "wilcoxon_stat": 11077.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "combined_stress|exceeds_combined": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -4.768738475923894e-10,
+      "ci95": [
+        -7.189377076817863e-09,
+        6.0098139710173375e-09
+      ],
+      "p_bootstrap": 0.877,
+      "n_boot": 2000,
+      "n_transactions": 111,
+      "n_clusters": 102,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -4.768738475923894e-10,
+        "seed123_entropy005": -4.768738475923894e-10,
+        "seed2026_entropy000": -4.768738475923894e-10,
+        "seed2026_entropy005": -4.768738475923894e-10,
+        "seed42_entropy000": -4.768738475923894e-10,
+        "seed42_entropy005": -4.768738475923894e-10
+      },
+      "checkpoints_positive": 0,
+      "checkpoints_negative": 6,
+      "seed_averaged": {
+        "n": 111,
+        "positive": 54,
+        "negative": 47,
+        "zero": 10,
+        "wilcoxon_p": 0.7694987818351904,
+        "wilcoxon_stat": 2489.0
+      },
+      "equivalence": "practically_negligible"
+    },
+    "combined_stress|near_boundary": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": -0.01819845286153025,
+      "ci95": [
+        -0.10523869126486979,
+        0.06450371115604005
+      ],
+      "p_bootstrap": 0.672,
+      "n_boot": 2000,
+      "n_transactions": 84,
+      "n_clusters": 77,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.027715608321775716,
+        "seed123_entropy005": -0.022492199488768894,
+        "seed2026_entropy000": -0.021646098471068704,
+        "seed2026_entropy005": -0.022051199345107603,
+        "seed42_entropy000": -0.007233934458562437,
+        "seed42_entropy005": -0.008051677083898133
+      },
+      "checkpoints_positive": 0,
+      "checkpoints_negative": 6,
+      "seed_averaged": {
+        "n": 84,
+        "positive": 41,
+        "negative": 43,
+        "zero": 0,
+        "wilcoxon_p": 0.8689347287164155,
+        "wilcoxon_stat": 1748.0
+      },
+      "equivalence": "inconclusive"
+    },
+    "combined_stress|splitting_needed": {
+      "comparison": "ppo_projected - liquidity_waterfall",
+      "metric": "reward_amount",
+      "estimate": 0.003469164490600082,
+      "ci95": [
+        -0.013504521659631097,
+        0.020166624829311357
+      ],
+      "p_bootstrap": 0.701,
+      "n_boot": 2000,
+      "n_transactions": 1055,
+      "n_clusters": 473,
+      "n_checkpoints": 6,
+      "per_checkpoint_mean": {
+        "seed123_entropy000": -0.002442002165379526,
+        "seed123_entropy005": 0.0015481940453699599,
+        "seed2026_entropy000": 0.0022899561631903394,
+        "seed2026_entropy005": 0.0018192354434656386,
+        "seed42_entropy000": 0.009215135267537032,
+        "seed42_entropy005": 0.008384468189417045
+      },
+      "checkpoints_positive": 5,
+      "checkpoints_negative": 1,
+      "seed_averaged": {
+        "n": 1055,
+        "positive": 542,
+        "negative": 513,
+        "zero": 0,
+        "wilcoxon_p": 0.10366999963840026,
+        "wilcoxon_stat": 262411.0
+      },
+      "equivalence": "inconclusive"
+    }
+  }
+}

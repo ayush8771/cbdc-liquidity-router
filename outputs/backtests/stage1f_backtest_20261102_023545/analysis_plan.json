@@ -1,0 +1,108 @@
+{
+  "stage": "1F",
+  "purpose": "evaluation only; no training, no tuning, no model/environment/reward change",
+  "evaluation_set": "union of the three Stage 1D synthetic holdouts (never used for training or selection); exact duplicates of examined test-split rows excluded; exact duplicate rows within or across holdouts kept once",
+  "checkpoints": "six multi-seed checkpoints (seeds 42/123/2026 x ENTROPY_COEF 0.0/0.005), selected on validation",
+  "policies": [
+    "ppo_original",
+    "ppo_projected",
+    "liquidity_waterfall",
+    "cheapest_feasible"
+  ],
+  "scenarios": {
+    "baseline": {
+      "name": "baseline",
+      "description": "Unmodified synthetic bridge state.",
+      "liquidity_multiplier": 1.0,
+      "congestion_multiplier": 1.0,
+      "cheapest_venue_liquidity_multiplier": 1.0
+    },
+    "liquidity_minus30": {
+      "name": "liquidity_minus30",
+      "description": "All venues' liquidity scaled by 0.7.",
+      "liquidity_multiplier": 0.7,
+      "congestion_multiplier": 1.0,
+      "cheapest_venue_liquidity_multiplier": 1.0
+    },
+    "liquidity_minus50": {
+      "name": "liquidity_minus50",
+      "description": "All venues' liquidity scaled by 0.5.",
+      "liquidity_multiplier": 0.5,
+      "congestion_multiplier": 1.0,
+      "cheapest_venue_liquidity_multiplier": 1.0
+    },
+    "cheapest_venue_outage": {
+      "name": "cheapest_venue_outage",
+      "description": "Fee-cheapest venue of each corridor at 10% liquidity.",
+      "liquidity_multiplier": 1.0,
+      "congestion_multiplier": 1.0,
+      "cheapest_venue_liquidity_multiplier": 0.1
+    },
+    "congestion_x2": {
+      "name": "congestion_x2",
+      "description": "All venues' congestion doubled.",
+      "liquidity_multiplier": 1.0,
+      "congestion_multiplier": 2.0,
+      "cheapest_venue_liquidity_multiplier": 1.0
+    },
+    "combined_stress": {
+      "name": "combined_stress",
+      "description": "Liquidity x0.7 and congestion x1.5 on all venues.",
+      "liquidity_multiplier": 0.7,
+      "congestion_multiplier": 1.5,
+      "cheapest_venue_liquidity_multiplier": 1.0
+    }
+  },
+  "metrics": [
+    "amount_completion_rate",
+    "env_completion_rate",
+    "total_amount_unrouted",
+    "unrouted_share",
+    "mean_reward_env",
+    "mean_reward_amount (cost - latency - risk - amount_unrouted/amount)",
+    "mean_cost_term",
+    "mean_latency_term",
+    "liquidity_utilization",
+    "mean_bridges_used",
+    "mean_decision_ms"
+  ],
+  "primary_hypotheses_baseline_scenario": {
+    "H1": "ppo_projected - liquidity_waterfall, mean_reward_env",
+    "H2": "ppo_projected - ppo_original, amount completion",
+    "H3": "ppo_original - liquidity_waterfall, mean_reward_env",
+    "H4": "ppo_projected - liquidity_waterfall, amount completion"
+  },
+  "inference": "two-level cluster bootstrap (checkpoints x simulation-date clusters), percentile 95% CI, two-sided bootstrap p; Holm-Bonferroni within each family (primary = H1-H4 on baseline; each stress scenario = its own family); Wilcoxon/sign on seed-averaged diffs as secondary",
+  "n_boot": 10000,
+  "n_boot_secondary": 2000,
+  "bootstrap_seed": 1,
+  "equivalence_margins": {
+    "reward_env": 0.005,
+    "reward_amount": 0.005,
+    "completed": 0.01
+  },
+  "equivalence_margin_disclosure": "Margins were chosen after Stage 1D holdout results were seen (observed projected-minus-waterfall spread -0.0033..+0.0051); they are fixed here before any Stage 1F evaluation.",
+  "stress_primary_metric": "reward_amount (amount-based unrouted term), because the environment's unrouted accounting omits never-requested amounts, which matters when liquidity is short",
+  "reward_weight_grid": {
+    "lambda_latency": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "lambda_unrouted": [
+      1.0,
+      5.0,
+      10.0
+    ],
+    "lambda_risk": 1.0
+  },
+  "scenarios_run": [
+    "baseline",
+    "liquidity_minus30",
+    "liquidity_minus50",
+    "cheapest_venue_outage",
+    "congestion_x2",
+    "combined_stress"
+  ],
+  "limit": null
+}

@@ -25,15 +25,15 @@ The research objective is to determine whether an RL agent can learn **liquidity
 | 1C | 1D CNN Feature Extraction | ✅ Complete |
 | 1D | Dynamic State & PPO Policy Optimization | ✅ Implemented and experimentally evaluated (see [Stage 1D](#stage-1d--dynamic-state--ppo-policy-optimization)) |
 | 1E | Cognee / Semantic Memory | ✅ Complete as an infrastructure milestone; real knowledge population deferred (see [Stage 1E](#stage-1e--cognee--semantic-memory)) |
-| 1F | Comprehensive Backtesting / Evaluation | ⏳ Planned |
+| 1F | Comprehensive Backtesting / Evaluation | ✅ Complete (see [Stage 1F](#stage-1f--comprehensive-backtesting--evaluation)) |
 
-**177/177 tests passing** across Stages 1A–1E and the capacity projection (see [Validation Status](#validation-status)).
+**193/193 tests passing** across Stages 1A–1F and the capacity projection (see [Validation Status](#validation-status)).
 
 ## Architecture
 
 The project is organized into three **Major Phases**, distinct from the internal **Stage 1A–1F** numbering below — these are two separate schemes and should not be conflated:
 
-- **Major Phase 1 — Offline AI/RL Foundation**: Stages 1A–1F make up the offline AI/RL foundation. Stages 1A–1D are implemented and validated; Stage 1E is complete as an infrastructure milestone; Stage 1F is planned.
+- **Major Phase 1 — Offline AI/RL Foundation**: Stages 1A–1F make up the offline AI/RL foundation. Stages 1A–1D and 1F are implemented and validated; Stage 1E is complete as an infrastructure milestone, with its knowledge population deferred.
 - **Major Phase 2 — Full-Stack Web Orchestration**: a future FastAPI/React application layer. Not started.
 - **Major Phase 3 — Real-Time Streaming & Production**: future live data feeds and production inference. Not started.
 
@@ -181,6 +181,22 @@ Status: **complete as an infrastructure milestone.** Populating the knowledge ba
 - **Verified live** with local Ollama (`llama3.1:8b`, `nomic-embed-text`): the smoke test passed 7 of 7 checks. The audit covered 1,522 transactions: 3 of 3 corridors grounded, and 1,500 of 1,500 decisions consistent with the recorded Stage 1D outcomes.
 - **Current content:** the knowledge base contains only the assumed $500K cap, so the live results validate the workflow, not retrieval quality.
 
+## Stage 1F — Comprehensive Backtesting & Evaluation
+
+Evaluation only: no training or tuning, and PPO, the CNN, the environment and the reward are unchanged. The run is in `outputs/backtests/stage1f_backtest_20261102_023545/`; full results are in [`docs/STAGE1F_RESULTS.md`](docs/STAGE1F_RESULTS.md).
+
+- **What was evaluated:** 1,460 holdout transactions × 6 multi-seed checkpoints × 4 policies (original PPO, projected PPO, liquidity waterfall, cheapest-feasible) × 6 stress scenarios (baseline, −30% and −50% liquidity, cheapest-venue outage, congestion ×2, combined).
+- **How:** paired statistics with a two-level cluster bootstrap (checkpoints × dates) and Holm correction; a pre-registered analysis plan; four data-leakage guards (all passed); and evaluation-time reward-weight sensitivity.
+
+**Findings**
+- **The projection is what makes PPO capacity-aware.** It raises PPO's completion to the waterfall's level in every scenario: +4.6 points at baseline [+2.5, +6.9], and up to +81 points under a cheapest-venue outage. All gains are significant (Holm p < 0.001, 6 of 6 checkpoints).
+- **The trained PPO policy barely responds to liquidity.** In a diagnostic on one checkpoint and 100 transactions, its share to the fee-cheapest venue stayed at 0.32–0.35 while that venue's liquidity fell tenfold (mean change 0.006). The share exceeded the venue's capacity in 94% of outage transactions, against 13% at baseline. Without the projection, PPO completes on average only **15.6%** of transactions in the outage (range 6.1–41.2% across the 6 checkpoints), against 96.5% with it.
+- **PPO is not shown to be better than the waterfall on reward.** Projected PPO minus the waterfall is +0.0017 [−0.013, +0.016] at baseline, inconclusive, and inconclusive in five of six scenarios. The one significant gain, under the outage, is +0.0046 [+0.0005, +0.0092] (Holm p 0.042). It's small and disappears when latency is weighted at 0.5. Original PPO is significantly *worse* than the waterfall at −50% liquidity (−0.024) and under the outage (−0.236).
+- **The environment's reward accounting is flawed under liquidity shortage.** It doesn't count never-requested amounts as unrouted, which inflates the waterfall's and projected PPO's reward by up to 0.036 at −50% liquidity. That's larger than most of the policy differences. Stage 1F uses amount-based reward for stress comparisons.
+- **Rankings depend on the placeholder reward weights.** At λ_latency = 2, even cheapest-feasible scores highest under congestion stress.
+
+**Limitations:** No genuinely independent out-of-time data exists: all data ends 2025-09-30. The holdouts share the test period, with overlapping 30-day history windows. Data, liquidity and congestion are synthetic. Stress scenarios are uniform multipliers, not calibrated shocks. Reward weights are placeholders. The equivalence margins were chosen after Stage 1D results were seen (disclosed). The insensitivity diagnostic covers one checkpoint.
+
 ## Data Provenance
 
 | Category | Examples |
@@ -205,10 +221,12 @@ cbdc-liquidity-router/
 ├── run_holdout_disjoint_v2.py         # Stage 1D: holdout excluding test + earlier holdout dates
 ├── run_cognee_smoke_test.py          # Stage 1E: manual live Cognee smoke test (--yes)
 ├── run_stage1e_explanation_audit.py  # Stage 1E: read-only explanation & audit of Stage 1D results
+├── run_stage1f_backtest.py           # Stage 1F: multi-seed, multi-scenario backtest (evaluation only)
 ├── analyze_training_boundaries.py, policy_gradient_capacity_diagnostic.py,
 │   splitting_reward_analysis.py       # earlier Stage 1D analysis scripts
 ├── docs/                    # PROJECT_HANDOVER.md, FUTURE_PHASES_ROADMAP.md, STAGE1D_RESULTS.md,
-│                            # FAILED_SPLITTING_INVESTIGATION_PLAN.md, STAGE1E_MEMORY.md
+│                            # FAILED_SPLITTING_INVESTIGATION_PLAN.md, STAGE1E_MEMORY.md,
+│                            # STAGE1F_RESULTS.md
 ├── data/
 │   ├── structured/          # bridge_network.csv (9 venues), transaction_requests.csv, countries.csv
 │   ├── raw/                 # WDI, CPI, RPW, FRED source files (see Dataset Requirements)
@@ -218,6 +236,8 @@ cbdc-liquidity-router/
 │   └── diagnostics/         # failure-diagnosis runs
 ├── src/
 │   ├── backtest.py
+│   ├── backtesting/         # Stage 1F: scenarios.py, evaluation.py, statistics.py, analysis.py,
+│   │                        # leakage.py
 │   ├── generate_mock_data.py
 │   ├── envs/                # cbdc_env.py, bridge_network.py, reward.py, dynamic_bridge_state.py,
 │   │                        # stage1c_obs_wrapper.py, stage1d_raw_obs_wrapper.py
@@ -241,7 +261,8 @@ cbdc-liquidity-router/
     ├── test_capacity_projection.py
     ├── test_stage1e.py
     ├── test_stage1e_cognee.py
-    └── test_stage1e_audit.py
+    ├── test_stage1e_audit.py
+    └── test_stage1f.py
 ```
 
 ## Dataset Requirements
@@ -280,6 +301,9 @@ python run_holdout_evaluation.py               # evaluation only, synthetic hold
 python run_stage1e_explanation_audit.py --static-only   # no LLM/provider needed
 python run_stage1e_explanation_audit.py --yes           # with Cognee retrieval
 python run_cognee_smoke_test.py --yes                   # live Cognee smoke test
+
+# Stage 1F backtest (evaluation only; about 1 hour on an RTX 3050)
+python run_stage1f_backtest.py
 ```
 
 The holdout and projection scripts load existing checkpoints and do not train.
@@ -296,7 +320,8 @@ The holdout and projection scripts load existing checkpoints and do not train.
 | Stage 1E memory | 18/18 passed |
 | Stage 1E Cognee adapter (mocked) | 33/33 passed |
 | Stage 1E audit (mocked) | 15/15 passed |
-| **Total** | **177/177 passed** |
+| Stage 1F backtesting | 16/16 passed |
+| **Total** | **193/193 passed** |
 
 The command is `python -m pytest tests/`. The 9 known warnings are pandas `pct_change` FutureWarnings from `macro_risk.py`.
 
@@ -313,21 +338,23 @@ These tests validate **implementation mechanics and regression safety** — corr
 - **Too few `exceeds_combined` examples:** they are rare (0–3 per 500-row holdout) because of the $500K regulatory cap.
 - The macro-risk proxy is a coarse, assumption-laden signal, not a validated volatility forecast.
 - **Small scale:** 3 corridors and 6 checkpoints from 3 seeds; observed PPO failures concentrate in one corridor (GBR→PHL).
+- **Stage 1F:** the trained PPO policy barely responds to liquidity, and its capacity awareness comes from the inference-time projection. PPO's reward advantage over the waterfall is inconclusive. The environment's unrouted accounting inflates the reward of policies that request less than the full amount when liquidity is short. See `docs/STAGE1F_RESULTS.md`.
 - **The Stage 1E knowledge base has no real content yet.** It holds only the assumed $500K cap (`project_assumption`, unverified), so Cognee retrieval quality is unmeasured. Populating it with real, cited regulatory knowledge is deferred (see `docs/STAGE1E_MEMORY.md`).
 
 ## Future Roadmap
 
 - **Stage 1E — deferred knowledge work**: populate the knowledge base with real, cited regulatory and operational facts (transfer caps, restricted corridors, payment-system holidays, operational events), measure retrieval quality, and decide through an approved environment change whether dated or corridor-scoped facts may affect feasibility.
-- **Stage 1F — Comprehensive Backtesting / Evaluation**: robust, reproducible evaluation across seeds, regimes, corridors and simulation conditions. Open items carried over from Stage 1D:
-  - a genuinely independent out-of-time holdout, which requires extending the data past 2025-09-30;
-  - calibration of the reward weights, and sensitivity analysis;
-  - confidence intervals for the PPO-vs-waterfall comparison;
-  - better coverage of `exceeds_combined`;
-  - deciding whether capacity awareness should be learned rather than projected.
+- **Open research items after Stage 1F** (none started; several need approval):
+  - **independent out-of-time data:** extend the data past 2025-09-30 (needs new or regenerated data and approval);
+  - **reward accounting:** the environment counts unrouted as requested − executed, which hides never-requested amounts. Fixing this changes the reward and needs an approved change;
+  - **reward weights:** calibrate them (all λ are still 1.0 placeholders);
+  - **learned capacity awareness:** make PPO itself respond to liquidity, through training changes (needs approval), or formally adopt the projection as part of the policy;
+  - **realistic stress:** calibrated, historically grounded stress scenarios;
+  - **Stage 1E knowledge content:** populate it with real, cited facts.
 - **Major Phase 2 — Full-Stack Web Orchestration**: FastAPI backend, React dashboard.
 - **Major Phase 3 — Real-Time Streaming & Production**: live data feeds, production inference.
 
-Stage 1F and Major Phases 2–3 are not implemented yet; Stage 1E's knowledge population is deferred. See `docs/FUTURE_PHASES_ROADMAP.md`.
+Major Phases 2–3 are not implemented yet, and Stage 1E's knowledge population is deferred. See `docs/FUTURE_PHASES_ROADMAP.md`.
 
 ## Reproducibility
 

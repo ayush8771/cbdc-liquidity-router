@@ -2,9 +2,11 @@
 
 **Handover prepared:** 31 October 2026  
 **Repository folder previously used:** `cbdc-liquidity-router`  
-**Current milestone:** Stage 1D finalized (1 November 2026); Stage 1E complete as an infrastructure milestone (2 November 2026, knowledge population deferred); Stage 1F planned, not started\
+**Current milestone:** Stage 1D finalized (1 November 2026); Stage 1E complete as an infrastructure milestone (2 November 2026, knowledge population deferred); Stage 1F complete (2 November 2026)\
 **Primary handover target:** Claude (web) + Claude Code working directly in the repository
 
+> **Status update (2 November 2026): Stage 1F complete** — see [section 8C](#8c-stage-1f-comprehensive-backtesting--evaluation-2-november-2026) and `docs/STAGE1F_RESULTS.md`.
+>
 > **Status update (2 November 2026): Stage 1E complete as an infrastructure milestone** — see [section 8B](#8b-stage-1e-cognee--semantic-memory-2-november-2026) and `docs/STAGE1E_MEMORY.md`.
 >
 > **Status update (1 November 2026): Stage 1D finalized.** Sections 1–8 below are the original handover and are kept as a historical record. The finalized Stage 1D results are in [section 8A](#8a-stage-1d-finalized-results-1-november-2026) and in `docs/STAGE1D_RESULTS.md`, which is authoritative for all numbers. Sections 6, 9 and 14 have been updated to the current state.
@@ -160,7 +162,9 @@ Previous inspection found that the environment calls `lagged_real_cost_baseline_
 
 ## 6. Test status and known warning
 
-**Current (2 November 2026):** `python -m pytest tests/` → **177 passed, 9 warnings**. The breakdown is 1A 17, 1B 26, 1C 13, 1D 35, capacity projection 20, Stage 1E 18, Stage 1E Cognee adapter 33 (mocked) and Stage 1E audit 15 (mocked).
+**Current (2 November 2026, after Stage 1F):** `python -m pytest tests/` → **193 passed, 9 warnings** (adds 16 Stage 1F tests).
+
+After Stage 1E (2 November 2026): `python -m pytest tests/` → **177 passed, 9 warnings**. The breakdown is 1A 17, 1B 26, 1C 13, 1D 35, capacity projection 20, Stage 1E 18, Stage 1E Cognee adapter 33 (mocked) and Stage 1E audit 15 (mocked).
 
 Previous (1 November 2026): `python -m pytest tests/` → **111 passed, 9 warnings**. The breakdown is Stage 1A 17, Stage 1B 26, Stage 1C 13, Stage 1D 35, and capacity projection 20 (`tests/test_capacity_projection.py`). In the Stage 1D file, the entropy test now asserts `ENTROPY_COEF == 0.0` and `EXPERIMENTAL_ENTROPY_COEF == 0.005`, and the file still has 35 tests. The 9 warnings are unchanged (pandas `pct_change`).
 
@@ -377,6 +381,24 @@ Complete as an **infrastructure milestone**. `docs/STAGE1E_MEMORY.md` is authori
 
 ---
 
+## 8C. Stage 1F comprehensive backtesting & evaluation (2 November 2026)
+
+Evaluation only. `docs/STAGE1F_RESULTS.md` and `outputs/backtests/stage1f_backtest_20261102_023545/` are authoritative.
+
+- **Setup:** 1,460 holdout transactions (2 test-split duplicates and 38 exact duplicates removed) × 6 multi-seed checkpoints × 4 policies × 6 stress scenarios, giving 122,640 rows.
+- **Statistics:** two-level cluster bootstrap (checkpoints × dates) and Holm correction, with the analysis plan hashed before evaluation.
+- **Leakage:** all four guards passed, and the input data was verified unchanged.
+
+- **The projection is what makes PPO capacity-aware.** It raises PPO's completion to the waterfall's level in every scenario: +4.6 points at baseline [+2.5, +6.9], and up to +81 points under a cheapest-venue outage. All gains are significant (Holm p < 0.001, 6 of 6 checkpoints).
+- **The trained PPO policy barely responds to liquidity.** In a diagnostic on one checkpoint and 100 transactions, its share to the fee-cheapest venue stayed at 0.32–0.35 while that venue's liquidity fell tenfold (mean change 0.006). The share exceeded the venue's capacity in 94% of outage transactions, against 13% at baseline. Without the projection, PPO completes on average only **15.6%** of transactions in the outage (range 6.1–41.2% across the 6 checkpoints), against 96.5% with it.
+- **PPO is not shown to be better than the waterfall on reward.** Projected PPO minus the waterfall is +0.0017 [−0.013, +0.016] at baseline, inconclusive, and inconclusive in five of six scenarios. The one significant gain, under the outage, is +0.0046 [+0.0005, +0.0092] (Holm p 0.042). It's small and disappears when latency is weighted at 0.5. Original PPO is significantly *worse* than the waterfall at −50% liquidity (−0.024) and under the outage (−0.236).
+- **The environment's reward accounting is flawed under liquidity shortage.** It doesn't count never-requested amounts as unrouted, which inflates the waterfall's and projected PPO's reward by up to 0.036 at −50% liquidity. That's larger than most of the policy differences. Stage 1F uses amount-based reward for stress comparisons.
+- **Rankings depend on the placeholder reward weights.** At λ_latency = 2, even cheapest-feasible scores highest under congestion stress.
+
+**Limitations:** No genuinely independent out-of-time data exists: all data ends 2025-09-30. The holdouts share the test period, with overlapping 30-day history windows. Data, liquidity and congestion are synthetic. Stress scenarios are uniform multipliers, not calibrated shocks. Reward weights are placeholders. The equivalence margins were chosen after Stage 1D results were seen (disclosed). The insensitivity diagnostic covers one checkpoint.
+
+---
+
 ## 9. Next work: recommended order
 
 > **Status (1 November 2026):** Priorities 0–3 and 5 below are **done** (see section 8A).
@@ -388,14 +410,17 @@ Complete as an **infrastructure milestone**. `docs/STAGE1E_MEMORY.md` is authori
 >
 > Priority 4, a sweep of the entropy coefficient, was not pursued, because multi-seed validation found no benefit from 0.005.
 >
-> Remaining work moves to **Stage 1F**:
-> - an independent out-of-time holdout, which requires extending the data past 2025-09-30;
-> - calibration of the reward weights (all λ are 1.0 placeholders), and sensitivity analysis;
-> - confidence intervals for the PPO-vs-waterfall comparison;
-> - better coverage of `exceeds_combined`;
-> - deciding whether capacity awareness should be learned rather than projected.
+> **Stage 1F (section 8C) addressed:** confidence intervals for the PPO-vs-waterfall comparison, coverage of `exceeds_combined` (through stress scenarios), and evaluation-time reward-weight sensitivity.
 >
-> Stage 1E (Cognee) is complete as an infrastructure milestone (section 8B); its knowledge population is deferred. None of the Stage 1F work has been started without approval. The priorities below are kept as the historical plan.
+> **Open research items** (none started; several need approval):
+> - **independent out-of-time data:** extend the data past 2025-09-30 (needs new or regenerated data and approval);
+> - **reward accounting:** the environment counts unrouted as requested − executed, which hides never-requested amounts. Fixing this changes the reward and needs an approved change;
+> - **reward weights:** calibrate them (all λ are still 1.0 placeholders);
+> - **learned capacity awareness:** make PPO itself respond to liquidity, through training changes (needs approval), or formally adopt the projection as part of the policy;
+> - **realistic stress:** calibrated, historically grounded stress scenarios;
+> - **Stage 1E knowledge content:** populate it with real, cited facts.
+>
+> Stage 1E (Cognee) is complete as an infrastructure milestone (section 8B); its knowledge population is deferred. The priorities below are kept as the historical plan.
 
 ### Priority 0 — Establish the actual repo state (first task for Claude Code)
 Before modifying anything:
@@ -570,7 +595,7 @@ The first audit should provide evidence-backed answers to:
 
 ## 14. Current status in one paragraph
 
-**Current (2 November 2026):** Stage 1D is finalized, and Stage 1E is complete as an infrastructure milestone.
+**Current (2 November 2026):** Stage 1D is finalized, Stage 1E is complete as an infrastructure milestone, and Stage 1F is complete.
 
 - **Components:** dynamic bridge state, a masked Dirichlet PPO policy, two baselines, regime-based evaluation, and an inference-time capacity projection. The test suite passes 177 tests (17/26/13/35/20, plus 18/33/15 for Stage 1E).
 - **Entropy:** the paired multi-seed validation (seeds 42, 123 and 2026) found no consistent benefit from 0.005, so the default is `ENTROPY_COEF = 0.0`.
@@ -578,6 +603,7 @@ The first audit should provide evidence-backed answers to:
 - **Capacity projection:** inference-time projection brings PPO's completion up to the waterfall's on validation and on every holdout. PPO's reward advantage over the waterfall is **inconclusive**: it ranges from −0.0033 to +0.0051 depending on the holdout.
 - **Holdout limitation:** no independent out-of-time holdout was possible, because the data ends at 2025-09-30 and the holdouts share the test period.
 - **Stage 1E (2 November 2026):** complete as an infrastructure milestone. It adds a deterministic knowledge base and `StaticMemoryProvider` (the feasibility authority), plus a Cognee adapter and audit for explanations only, verified live with Ollama. The test suite now passes 177 tests. Real knowledge population is deferred.
-- **Next:** Stage 1F (comprehensive evaluation, including the items in section 9). It has not been started.
+- **Stage 1F (2 November 2026):** complete. The projection is what makes PPO capacity-aware, and the trained policy barely responds to liquidity. Reward superiority over the waterfall is inconclusive. The environment's unrouted accounting inflates rewards under liquidity shortage. The test suite now passes 193 tests.
+- **Next:** the open research items in section 9. None has been started.
 
 *Historical (31 October 2026):* Stage 1D had a previously passing 91-test repository suite (17/26/13/35 across Stages 1A–1D), dynamic bridge state and reward wiring, a masked Dirichlet PPO policy, two hand-crafted baselines, and regime-based evaluation. The first paired entropy experiment on seed 42 compared coefficients 0.0 and 0.005 on a 500/100/100 train/validation/test split. Entropy 0.005 raised test completion from 86% to 94%, lowered total unrouted value from about $451.7K to $92.6K, and raised `splitting_needed` completion from 70.83% to 87.5%. It still trailed the waterfall policy, had a slightly lower best validation reward, and was only one seed.

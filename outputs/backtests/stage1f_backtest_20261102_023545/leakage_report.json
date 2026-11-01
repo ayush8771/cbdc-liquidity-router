@@ -1,0 +1,33 @@
+{
+  "holdouts": [
+    "data/processed/stage1d_transactions_holdout_seed20261102.csv",
+    "data/processed/stage1d_transactions_holdout_datedisjoint_seed20261103.csv",
+    "data/processed/stage1d_transactions_holdout_datedisjoint_v2_seed20261104.csv"
+  ],
+  "rows_loaded": 1500,
+  "rows_excluded_duplicate_of_examined_test_split": 2,
+  "rows_removed_exact_duplicates_within_or_across_holdouts": 38,
+  "rows_evaluated": 1460,
+  "rows_by_source": {
+    "stage1d_transactions_holdout_seed20261102": 492,
+    "stage1d_transactions_holdout_datedisjoint_seed20261103": 488,
+    "stage1d_transactions_holdout_datedisjoint_v2_seed20261104": 480
+  },
+  "date_range": [
+    "2024-02-01",
+    "2025-08-30"
+  ],
+  "all_dates_in_out_of_time_test_window": true,
+  "rows_duplicating_train": 0,
+  "rows_duplicating_validation": 0,
+  "remaining_overlap": {
+    "rows_on_a_date_used_by_examined_test_split": 76,
+    "note": "Holdouts share the test period with the examined test split; 30-day history windows overlap. Not removable: all data ends 2025-09-30."
+  },
+  "checkpoint_selection": {
+    "config": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\experiment_config.json",
+    "checkpoint_selection": "best validation mean reward (deterministic), per ppo_train.train",
+    "comparison_split": "validation",
+    "test_split_used": false
+  }
+}
