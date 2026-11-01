@@ -8,35 +8,24 @@ import torch
 from ..envs.cbdc_env import CBDCLiquidityEnv
 from ..envs.stage1d_raw_obs_wrapper import Stage1DRawObservationWrapper
 from .baselines import cheapest_feasible_action, liquidity_aware_waterfall_action
+from .metrics import compute_metrics
 
 
 def _make_eval_env(transactions_csv, structured_dir="data/structured", raw_dir="data/raw"):
+    """Returns (env, regimes). `regimes` is the CSV's `regime` column
+    (list, one per row, in the same order as env.requests_df) if present,
+    else None - kept SEPARATE from env.requests_df (the env itself only
+    needs the columns it actually consumes; regime is a diagnostic label,
+    not environment state, so it is never fed into env.step()/reward)."""
     env = CBDCLiquidityEnv(structured_dir=structured_dir, raw_dir=raw_dir)
     tx_df = pd.read_csv(transactions_csv)
     env.requests_df = tx_df[["transaction_id", "sender_country", "receiver_country", "amount_usd", "simulation_date"]].reset_index(drop=True)
     env.max_steps = len(env.requests_df)
-    return env
+    regimes = tx_df["regime"].tolist() if "regime" in tx_df.columns else None
+    return env, regimes
 
 
-def _metrics_from_run(records):
-    df = pd.DataFrame(records)
-    total_amount = df["amount"].sum()
-    return {
-        "n_transactions": len(df),
-        "mean_reward": float(df["reward"].mean()),
-        "total_executed": float(df["executed_total"].sum()),
-        "total_unrouted": float(df["unrouted"].sum()),
-        "completion_rate": float((df["unrouted"] < 1e-6).mean()),
-        "liquidity_utilization": float(df["executed_total"].sum() / total_amount) if total_amount > 0 else 0.0,
-        "mean_bridges_used": float(df["bridges_used"].mean()),
-        "mean_split_ratio": float(df["bridges_used"].apply(lambda n: 1.0 if n >= 2 else 0.0).mean()),
-        "mean_latency_cost": float(df["latency_term"].mean()),
-        "mean_risk_cost": float(df["risk_term"].mean()),
-        "mean_cost_term": float(df["cost_term"].mean()),
-    }
-
-
-def run_baseline(env, name):
+def run_baseline(env, name, regimes=None):
     records = []
     for i in range(env.max_steps):
         env.current_step = i
@@ -54,18 +43,21 @@ def run_baseline(env, name):
 
         env.current_step = i
         obs, reward, term, trunc, info = env.step(action)
-        records.append({
+        record = {
             "amount": amount, "reward": reward,
             "executed_total": info["executed_total"], "unrouted": info["unrouted"],
-            "bridges_used": int(sum(1 for a in action if a > 1e-6)),
+            "action": list(action),
             "latency_term": info["reward_components"]["latency_term"],
             "risk_term": info["reward_components"]["risk_term"],
             "cost_term": info["reward_components"]["cost_term"],
-        })
-    return _metrics_from_run(records)
+        }
+        if regimes is not None:
+            record["regime"] = regimes[i]
+        records.append(record)
+    return compute_metrics(records)
 
 
-def run_ppo(wrapped_env, net, device="cpu"):
+def run_ppo(wrapped_env, net, device="cpu", regimes=None):
     base_env = wrapped_env.env.unwrapped
     device = torch.device(device)
     records = []
@@ -84,25 +76,28 @@ def run_ppo(wrapped_env, net, device="cpu"):
             action_np = action.squeeze(0).cpu().numpy()
             base_env.current_step = i
             obs2, reward, term, trunc, info = base_env.step(action_np)
-            records.append({
+            record = {
                 "amount": amount, "reward": reward,
                 "executed_total": info["executed_total"], "unrouted": info["unrouted"],
-                "bridges_used": int(sum(1 for a in action_np if a > 1e-6)),
+                "action": list(action_np),
                 "latency_term": info["reward_components"]["latency_term"],
                 "risk_term": info["reward_components"]["risk_term"],
                 "cost_term": info["reward_components"]["cost_term"],
-            })
-    return _metrics_from_run(records)
+            }
+            if regimes is not None:
+                record["regime"] = regimes[i]
+            records.append(record)
+    return compute_metrics(records)
 
 
 def evaluate_all(test_csv, net, device="cpu"):
-    cheapest_env = _make_eval_env(test_csv)
-    waterfall_env = _make_eval_env(test_csv)
-    ppo_env = _make_eval_env(test_csv)
+    cheapest_env, cheapest_regimes = _make_eval_env(test_csv)
+    waterfall_env, waterfall_regimes = _make_eval_env(test_csv)
+    ppo_env, ppo_regimes = _make_eval_env(test_csv)
     ppo_wrapped = Stage1DRawObservationWrapper(ppo_env)
 
     return {
-        "cheapest_feasible": run_baseline(cheapest_env, "cheapest_feasible"),
-        "liquidity_waterfall": run_baseline(waterfall_env, "liquidity_waterfall"),
-        "ppo": run_ppo(ppo_wrapped, net, device=device),
+        "cheapest_feasible": run_baseline(cheapest_env, "cheapest_feasible", regimes=cheapest_regimes),
+        "liquidity_waterfall": run_baseline(waterfall_env, "liquidity_waterfall", regimes=waterfall_regimes),
+        "ppo": run_ppo(ppo_wrapped, net, device=device, regimes=ppo_regimes),
     }

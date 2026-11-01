@@ -1,0 +1,119 @@
+{
+  "cheapest_feasible": {
+    "n_transactions": 100,
+    "mean_reward": 0.520057664297623,
+    "total_executed": 20585522.275756635,
+    "total_unrouted": 10033370.484243365,
+    "completion_rate": 0.34,
+    "completion_rate_tolerance": "unrouted <= 1e-04 * amount (relative, not absolute USD)",
+    "liquidity_utilization": 0.6723143921993552,
+    "mean_bridges_used": 1.0,
+    "multi_bridge_rate": 0.0,
+    "mean_largest_allocation": 1.0,
+    "mean_allocation_entropy": 0.0,
+    "mean_latency_cost": 0.7533582463205291,
+    "mean_risk_cost": 0.0,
+    "mean_cost_term": 1.504132841960784,
+    "by_regime": {
+      "below_cheapest": {
+        "n_transactions": 19,
+        "mean_reward": 0.8849080840268966,
+        "completion_rate": 1.0,
+        "multi_bridge_rate": 0.0,
+        "mean_bridges_used": 1.0
+      },
+      "near_boundary": {
+        "n_transactions": 33,
+        "mean_reward": 1.005622315012453,
+        "completion_rate": 0.45454545454545453,
+        "multi_bridge_rate": 0.0,
+        "mean_bridges_used": 1.0
+      },
+      "splitting_needed": {
+        "n_transactions": 48,
+        "mean_reward": 0.04181200912167316,
+        "completion_rate": 0.0,
+        "multi_bridge_rate": 0.0,
+        "mean_bridges_used": 1.0
+      }
+    }
+  },
+  "liquidity_waterfall": {
+    "n_transactions": 100,
+    "mean_reward": 0.9197090480792187,
+    "total_executed": 30618892.66766493,
+    "total_unrouted": 0.16790677106473595,
+    "completion_rate": 1.0,
+    "completion_rate_tolerance": "unrouted <= 1e-04 * amount (relative, not absolute USD)",
+    "liquidity_utilization": 0.999999996984376,
+    "mean_bridges_used": 1.68,
+    "multi_bridge_rate": 0.66,
+    "mean_largest_allocation": 0.8340452414751053,
+    "mean_allocation_entropy": 0.4853222658079838,
+    "mean_latency_cost": 1.0522551692932975,
+    "mean_risk_cost": 0.0,
+    "mean_cost_term": 1.971964221859038,
+    "by_regime": {
+      "below_cheapest": {
+        "n_transactions": 19,
+        "mean_reward": 0.8849080840268966,
+        "completion_rate": 1.0,
+        "multi_bridge_rate": 0.0,
+        "mean_bridges_used": 1.0
+      },
+      "near_boundary": {
+        "n_transactions": 33,
+        "mean_reward": 1.0923101017172805,
+        "completion_rate": 1.0,
+        "multi_bridge_rate": 0.5454545454545454,
+        "mean_bridges_used": 1.5454545454545454
+      },
+      "splitting_needed": {
+        "n_transactions": 48,
+        "mean_reward": 0.8148212053070951,
+        "completion_rate": 1.0,
+        "multi_bridge_rate": 1.0,
+        "mean_bridges_used": 2.0416666666666665
+      }
+    }
+  },
+  "ppo": {
+    "n_transactions": 100,
+    "mean_reward": 0.8886150619767318,
+    "total_executed": 30167164.025925122,
+    "total_unrouted": 451728.9191056986,
+    "completion_rate": 0.86,
+    "completion_rate_tolerance": "unrouted <= 1e-04 * amount (relative, not absolute USD)",
+    "liquidity_utilization": 0.9852467318914613,
+    "mean_bridges_used": 3.0,
+    "multi_bridge_rate": 1.0,
+    "mean_largest_allocation": 0.5044407430291176,
+    "mean_allocation_entropy": 1.4309585410992238,
+    "mean_latency_cost": 1.053456677244193,
+    "mean_risk_cost": 0.0,
+    "mean_cost_term": 1.951285808794242,
+    "by_regime": {
+      "below_cheapest": {
+        "n_transactions": 19,
+        "mean_reward": 0.8101469047443701,
+        "completion_rate": 1.0,
+        "multi_bridge_rate": 1.0,
+        "mean_bridges_used": 3.0
+      },
+      "near_boundary": {
+        "n_transactions": 33,
+        "mean_reward": 1.109233208831785,
+        "completion_rate": 1.0,
+        "multi_bridge_rate": 1.0,
+        "mean_bridges_used": 3.0
+      },
+      "splitting_needed": {
+        "n_transactions": 48,
+        "mean_reward": 0.7680003982516924,
+        "completion_rate": 0.7083333333333334,
+        "multi_bridge_rate": 1.0,
+        "mean_bridges_used": 3.0
+      }
+    }
+  }
+}

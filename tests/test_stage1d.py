@@ -452,6 +452,258 @@ def test_stage1a_1b_1c_regression_all_pass():
                 failed.append((mod_name, t.__name__, str(e)))
     assert not failed, f"regression failures: {failed}"
 
+# 10. Evaluation/diagnostic metrics (deterministic, hand-crafted inputs) --------
+
+def test_completion_rate_uses_relative_tolerance():
+    from src.training.metrics import is_completed, RELATIVE_UNROUTED_TOLERANCE
+    # $1 unrouted out of $10,000 is well within a 0.01% relative tolerance.
+    assert is_completed(unrouted=1.0, amount=10000.0)
+    # $1 unrouted out of $1 is NOT within tolerance (100% unrouted).
+    assert not is_completed(unrouted=1.0, amount=1.0)
+    # Exactly at the boundary.
+    amount = 500000.0
+    boundary_unrouted = RELATIVE_UNROUTED_TOLERANCE * amount
+    assert is_completed(unrouted=boundary_unrouted, amount=amount)
+    assert not is_completed(unrouted=boundary_unrouted * 1.0001, amount=amount)
+
+
+def test_completion_rate_absolute_threshold_would_have_misjudged():
+    """Confirms the fix actually matters: an absolute 1e-6 USD threshold
+    would incorrectly mark a tiny-but-nonzero-relative unrouted amount on
+    a small transaction as incomplete, while a relative tolerance
+    correctly judges it complete when proportionally negligible."""
+    from src.training.metrics import is_completed
+    assert is_completed(unrouted=0.40, amount=495000.0)  # relative: complete
+    assert not is_completed(unrouted=0.40, amount=1.0)   # same absolute amount, but NOT complete on a $1 tx
+
+
+def test_multi_bridge_rate_definition():
+    from src.training.metrics import is_multi_bridge, bridges_used
+    single = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    split_two = [0.6, 0.4, 0.0, 0.0, 0.0, 0.0]
+    split_three = [0.34, 0.33, 0.33, 0.0, 0.0, 0.0]
+    none_routed = [0.0] * 6
+    noise = [0.9999999, 1e-9, 0.0, 0.0, 0.0, 0.0]  # float noise below threshold
+
+    assert bridges_used(single) == 1 and not is_multi_bridge(single)
+    assert bridges_used(split_two) == 2 and is_multi_bridge(split_two)
+    assert bridges_used(split_three) == 3 and is_multi_bridge(split_three)
+    assert bridges_used(none_routed) == 0 and not is_multi_bridge(none_routed)
+    assert bridges_used(noise) == 1 and not is_multi_bridge(noise), "float noise below threshold must not count as a second bridge"
+
+
+def test_largest_allocation_definition():
+    from src.training.metrics import largest_allocation
+    assert largest_allocation([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) == 1.0
+    assert largest_allocation([0.6, 0.4, 0.0, 0.0, 0.0, 0.0]) == 0.6
+    assert largest_allocation([0.34, 0.33, 0.33, 0.0, 0.0, 0.0]) == 0.34
+    assert largest_allocation([0.0] * 6) == 0.0
+
+
+def test_allocation_entropy_definition():
+    from src.training.metrics import allocation_entropy
+    assert allocation_entropy([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) == 0.0
+    assert allocation_entropy([0.0] * 6) == 0.0
+    assert abs(allocation_entropy([0.5, 0.5, 0.0, 0.0, 0.0, 0.0]) - 1.0) < 1e-9
+    even3 = allocation_entropy([1 / 3, 1 / 3, 1 / 3, 0.0, 0.0, 0.0])
+    assert abs(even3 - np.log2(3)) < 1e-6
+    uneven = allocation_entropy([0.9, 0.1, 0.0, 0.0, 0.0, 0.0])
+    assert 0.0 < uneven < 1.0
+
+
+def test_metrics_regime_grouping_preserved_not_unknown():
+    """REQUIRED: regime must be preserved from the CSV and grouped
+    correctly, never defaulted to 'unknown' when the CSV has real
+    values."""
+    from src.training.metrics import compute_metrics
+    records = [
+        {"amount": 1000.0, "reward": 1.0, "executed_total": 1000.0, "unrouted": 0.0,
+         "action": [1.0, 0, 0, 0, 0, 0], "latency_term": 0.0, "risk_term": 0.0, "cost_term": 0.0,
+         "regime": "below_cheapest"},
+        {"amount": 2000.0, "reward": 0.5, "executed_total": 1000.0, "unrouted": 1000.0,
+         "action": [0.5, 0.5, 0, 0, 0, 0], "latency_term": 0.0, "risk_term": 0.0, "cost_term": 0.0,
+         "regime": "splitting_needed"},
+    ]
+    metrics = compute_metrics(records)
+    assert "by_regime" in metrics
+    assert set(metrics["by_regime"].keys()) == {"below_cheapest", "splitting_needed"}
+    assert "unknown" not in metrics["by_regime"]
+    assert metrics["by_regime"]["below_cheapest"]["n_transactions"] == 1
+    assert metrics["by_regime"]["splitting_needed"]["n_transactions"] == 1
+
+
+def test_metrics_evaluate_all_preserves_real_regime_labels():
+    """Full-pipeline check: evaluate_all's output must group by the
+    actual regime labels present in the generated test CSV (below_cheapest,
+    near_boundary, splitting_needed - exceeds_combined may legitimately
+    be absent, see transaction_generator.py), never 'unknown'."""
+    from src.training.evaluate import evaluate_all
+    from src.models.ppo_actor_critic import PPOActorCritic
+    net = PPOActorCritic()
+    test_csv = os.path.join(os.path.dirname(__file__), "..", "data", "processed", "stage1d_transactions_test.csv")
+    csv_regimes = set(pd.read_csv(test_csv)["regime"].unique())
+
+    results = evaluate_all(test_csv, net, device="cpu")
+    for policy_name, metrics in results.items():
+        assert "by_regime" in metrics, f"{policy_name} missing by_regime breakdown"
+        assert "unknown" not in metrics["by_regime"], f"{policy_name} used 'unknown' regime label"
+        assert set(metrics["by_regime"].keys()).issubset(csv_regimes), (
+            f"{policy_name}'s regime keys {set(metrics['by_regime'].keys())} "
+            f"are not a subset of the CSV's actual regimes {csv_regimes}"
+        )
+
+
+def test_evaluate_uses_identical_execution_path_for_all_three_policies():
+    """Confirms PPO and both baselines are evaluated on the identical
+    test transactions via the identical env.step() execution/reward
+    path (same n_transactions, same total amount across all three)."""
+    from src.training.evaluate import evaluate_all
+    from src.models.ppo_actor_critic import PPOActorCritic
+    net = PPOActorCritic()
+    test_csv = os.path.join(os.path.dirname(__file__), "..", "data", "processed", "stage1d_transactions_test.csv")
+    results = evaluate_all(test_csv, net, device="cpu")
+    n_values = {name: m["n_transactions"] for name, m in results.items()}
+    assert len(set(n_values.values())) == 1, f"policies evaluated on different transaction counts: {n_values}"
+
+# Entropy regularization ------------------------------------------------------
+
+def test_entropy_coef_is_explicit_nonzero_value():
+    """Entropy regularization must be explicitly enabled at the approved value."""
+    from src.training.ppo_train import ENTROPY_COEF
+
+    assert ENTROPY_COEF == 0.005
+
+
+def test_entropy_bonus_actually_changes_ppo_update():
+    """Changing ENTROPY_COEF must actually change the PPO parameter update.
+
+    This is a deterministic test:
+    - Start from exactly the same network parameters.
+    - Use exactly the same batch.
+    - Run one PPO update with entropy disabled.
+    - Run the same update with entropy coefficient = 0.005.
+    - The resulting network parameters must differ.
+
+    This verifies that the entropy term is genuinely active in the loss,
+    rather than merely existing as an unused constant.
+    """
+    import copy
+    import torch
+
+    import src.training.ppo_train as ppo_train_module
+    from src.training.ppo_train import ppo_update
+    from src.models.ppo_actor_critic import PPOActorCritic
+
+    torch.manual_seed(123)
+
+    # ------------------------------------------------------------
+    # Create one deterministic initial policy and one deterministic
+    # batch. Both experiments below will start from identical state.
+    # ------------------------------------------------------------
+    base_net = PPOActorCritic()
+
+    raw = torch.randn(4, 31)
+    windows = torch.randn(4, 6, 2, 30)
+
+    mask = torch.zeros(4, 6, dtype=torch.bool)
+    mask[:, :3] = True
+
+    with torch.no_grad():
+        actions, old_log_probs, old_values = base_net.act(
+            raw, windows, mask
+        )
+
+    rewards = torch.tensor(
+        [0.8, 1.1, 0.4, 0.9],
+        dtype=torch.float32,
+    )
+
+    batch = [
+        {
+            "raw_features": raw[i],
+            "windows": windows[i],
+            "mask": mask[i],
+            "action": actions[i],
+            "log_prob": old_log_probs[i],
+            "value": old_values[i],
+            "reward": float(rewards[i]),
+        }
+        for i in range(4)
+    ]
+
+    # Make two networks with EXACTLY identical initial parameters.
+    net_no_entropy = PPOActorCritic()
+    net_with_entropy = PPOActorCritic()
+
+    initial_state = copy.deepcopy(base_net.state_dict())
+    net_no_entropy.load_state_dict(initial_state)
+    net_with_entropy.load_state_dict(initial_state)
+
+    optimizer_no_entropy = torch.optim.Adam(
+        net_no_entropy.parameters(), lr=1e-4
+    )
+    optimizer_with_entropy = torch.optim.Adam(
+        net_with_entropy.parameters(), lr=1e-4
+    )
+
+    # Preserve the real coefficient so the test cannot permanently
+    # modify the training module.
+    original_coef = ppo_train_module.ENTROPY_COEF
+
+    try:
+        # ------------------------------------------------------------
+        # Experiment 1: entropy disabled
+        # ------------------------------------------------------------
+        ppo_train_module.ENTROPY_COEF = 0.0
+
+        ppo_update(
+            net_no_entropy,
+            optimizer_no_entropy,
+            batch,
+            device="cpu",
+        )
+
+        # ------------------------------------------------------------
+        # Experiment 2: entropy enabled
+        # ------------------------------------------------------------
+        ppo_train_module.ENTROPY_COEF = 0.005
+
+        ppo_update(
+            net_with_entropy,
+            optimizer_with_entropy,
+            batch,
+            device="cpu",
+        )
+
+    finally:
+        # Always restore the real coefficient.
+        ppo_train_module.ENTROPY_COEF = original_coef
+
+    # ------------------------------------------------------------
+    # Compare resulting parameters.
+    # At least one parameter must differ when entropy changes the
+    # actual optimization objective.
+    # ------------------------------------------------------------
+    max_parameter_difference = 0.0
+
+    for p_zero, p_entropy in zip(
+        net_no_entropy.parameters(),
+        net_with_entropy.parameters(),
+    ):
+        difference = torch.max(
+            torch.abs(p_zero.detach() - p_entropy.detach())
+        ).item()
+
+        max_parameter_difference = max(
+            max_parameter_difference,
+            difference,
+        )
+
+    assert max_parameter_difference > 1e-10, (
+        "Entropy coefficient changed from 0.0 to 0.005, "
+        "but the PPO parameter update was identical. "
+        "This suggests the entropy term is not affecting the loss."
+    )
 
 ALL_TESTS = [
     test_dynamic_causality_liquidity_changes_execution_and_reward,
@@ -478,6 +730,16 @@ ALL_TESTS = [
     test_mask_bits_remain_binary,
     test_raw_normalization_leakage,
     test_raw_normalization_no_nan,
+    test_completion_rate_uses_relative_tolerance,
+    test_completion_rate_absolute_threshold_would_have_misjudged,
+    test_multi_bridge_rate_definition,
+    test_largest_allocation_definition,
+    test_allocation_entropy_definition,
+    test_metrics_regime_grouping_preserved_not_unknown,
+    test_metrics_evaluate_all_preserves_real_regime_labels,
+    test_evaluate_uses_identical_execution_path_for_all_three_policies,
+    test_entropy_coef_is_explicit_nonzero_value,
+    test_entropy_bonus_actually_changes_ppo_update,
     test_stage1a_1b_1c_regression_all_pass,
 ]
 

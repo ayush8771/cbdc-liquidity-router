@@ -20,7 +20,13 @@ from ..models.ppo_actor_critic import PPOActorCritic
 PPO_CLIP_EPS = 0.2
 PPO_EPOCHS_PER_UPDATE = 4
 GAMMA = 0.0  # single-step episodes (Decision 3) - no discounted future return within an episode
-ENTROPY_COEF = 0.0  # per audit: Dirichlet entropy is numerically degenerate near mask boundaries, disabled
+ENTROPY_COEF = 0.005  # was 0.0 (disabled). Evidence: deterministic actions over-concentrated on
+# Bridge 0 despite the stochastic Dirichlet policy containing higher-reward capacity-aware actions -
+# a small entropy bonus counteracts premature concentration without destabilizing training. This
+# value is deliberately small: net.evaluate_actions()'s entropy can still be large-magnitude near
+# mask boundaries in edge cases (see ppo_actor_critic.py's docstring on the 1-feasible-slot and
+# 0-feasible-slot cases, where entropy is defined as exactly 0.0, not degenerate) - 0.005 was chosen
+# as a conventional small-but-nonzero PPO entropy coefficient, not tuned/swept for this environment.
 
 
 def _make_env_for_transactions(transactions_csv, structured_dir="data/structured", raw_dir="data/raw"):
@@ -88,7 +94,8 @@ def ppo_update(net, optimizer, batch, device):
         surr2 = torch.clamp(ratio, 1 - PPO_CLIP_EPS, 1 + PPO_CLIP_EPS) * advantages
         policy_loss = -torch.min(surr1, surr2).mean()
         value_loss = torch.nn.functional.mse_loss(new_values, returns)
-        loss = policy_loss + 0.5 * value_loss  # entropy bonus disabled, see module docstring
+        entropy_bonus = entropy.mean()
+        loss = policy_loss + 0.5 * value_loss - ENTROPY_COEF * entropy_bonus
 
         optimizer.zero_grad()
         loss.backward()

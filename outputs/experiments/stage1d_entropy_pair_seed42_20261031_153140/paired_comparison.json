@@ -1,0 +1,383 @@
+{
+  "cheapest_feasible": {
+    "overall": {
+      "mean_reward": {
+        "entropy_0.0": 0.520057664297623,
+        "entropy_0.005": 0.520057664297623,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "completion_rate": {
+        "entropy_0.0": 0.34,
+        "entropy_0.005": 0.34,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "total_unrouted": {
+        "entropy_0.0": 10033370.484243365,
+        "entropy_0.005": 10033370.484243365,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "liquidity_utilization": {
+        "entropy_0.0": 0.6723143921993552,
+        "entropy_0.005": 0.6723143921993552,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_bridges_used": {
+        "entropy_0.0": 1.0,
+        "entropy_0.005": 1.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "multi_bridge_rate": {
+        "entropy_0.0": 0.0,
+        "entropy_0.005": 0.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_largest_allocation": {
+        "entropy_0.0": 1.0,
+        "entropy_0.005": 1.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_allocation_entropy": {
+        "entropy_0.0": 0.0,
+        "entropy_0.005": 0.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_latency_cost": {
+        "entropy_0.0": 0.7533582463205291,
+        "entropy_0.005": 0.7533582463205291,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_risk_cost": {
+        "entropy_0.0": 0.0,
+        "entropy_0.005": 0.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_cost_term": {
+        "entropy_0.0": 1.504132841960784,
+        "entropy_0.005": 1.504132841960784,
+        "delta_entropy_minus_baseline": 0.0
+      }
+    },
+    "by_regime": {
+      "below_cheapest": {
+        "mean_reward": {
+          "entropy_0.0": 0.8849080840268966,
+          "entropy_0.005": 0.8849080840268966,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "completion_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 0.0,
+          "entropy_0.005": 0.0,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      },
+      "near_boundary": {
+        "mean_reward": {
+          "entropy_0.0": 1.005622315012453,
+          "entropy_0.005": 1.005622315012453,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "completion_rate": {
+          "entropy_0.0": 0.45454545454545453,
+          "entropy_0.005": 0.45454545454545453,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 0.0,
+          "entropy_0.005": 0.0,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      },
+      "splitting_needed": {
+        "mean_reward": {
+          "entropy_0.0": 0.04181200912167316,
+          "entropy_0.005": 0.04181200912167316,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "completion_rate": {
+          "entropy_0.0": 0.0,
+          "entropy_0.005": 0.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 0.0,
+          "entropy_0.005": 0.0,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      }
+    }
+  },
+  "liquidity_waterfall": {
+    "overall": {
+      "mean_reward": {
+        "entropy_0.0": 0.9197090480792187,
+        "entropy_0.005": 0.9197090480792187,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "completion_rate": {
+        "entropy_0.0": 1.0,
+        "entropy_0.005": 1.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "total_unrouted": {
+        "entropy_0.0": 0.16790677106473595,
+        "entropy_0.005": 0.16790677106473595,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "liquidity_utilization": {
+        "entropy_0.0": 0.999999996984376,
+        "entropy_0.005": 0.999999996984376,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_bridges_used": {
+        "entropy_0.0": 1.68,
+        "entropy_0.005": 1.68,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "multi_bridge_rate": {
+        "entropy_0.0": 0.66,
+        "entropy_0.005": 0.66,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_largest_allocation": {
+        "entropy_0.0": 0.8340452414751053,
+        "entropy_0.005": 0.8340452414751053,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_allocation_entropy": {
+        "entropy_0.0": 0.4853222658079838,
+        "entropy_0.005": 0.4853222658079838,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_latency_cost": {
+        "entropy_0.0": 1.0522551692932975,
+        "entropy_0.005": 1.0522551692932975,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_risk_cost": {
+        "entropy_0.0": 0.0,
+        "entropy_0.005": 0.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_cost_term": {
+        "entropy_0.0": 1.971964221859038,
+        "entropy_0.005": 1.971964221859038,
+        "delta_entropy_minus_baseline": 0.0
+      }
+    },
+    "by_regime": {
+      "below_cheapest": {
+        "mean_reward": {
+          "entropy_0.0": 0.8849080840268966,
+          "entropy_0.005": 0.8849080840268966,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "completion_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 0.0,
+          "entropy_0.005": 0.0,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      },
+      "near_boundary": {
+        "mean_reward": {
+          "entropy_0.0": 1.0923101017172805,
+          "entropy_0.005": 1.0923101017172805,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "completion_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 1.5454545454545454,
+          "entropy_0.005": 1.5454545454545454,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 0.5454545454545454,
+          "entropy_0.005": 0.5454545454545454,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      },
+      "splitting_needed": {
+        "mean_reward": {
+          "entropy_0.0": 0.8148212053070951,
+          "entropy_0.005": 0.8148212053070951,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "completion_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 2.0416666666666665,
+          "entropy_0.005": 2.0416666666666665,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      }
+    }
+  },
+  "ppo": {
+    "overall": {
+      "mean_reward": {
+        "entropy_0.0": 0.8886150619767318,
+        "entropy_0.005": 0.8996421316421152,
+        "delta_entropy_minus_baseline": 0.01102706966538336
+      },
+      "completion_rate": {
+        "entropy_0.0": 0.86,
+        "entropy_0.005": 0.94,
+        "delta_entropy_minus_baseline": 0.07999999999999996
+      },
+      "total_unrouted": {
+        "entropy_0.0": 451728.9191056986,
+        "entropy_0.005": 92600.9815037566,
+        "delta_entropy_minus_baseline": -359127.937601942
+      },
+      "liquidity_utilization": {
+        "entropy_0.0": 0.9852467318914613,
+        "entropy_0.005": 0.9969756856819457,
+        "delta_entropy_minus_baseline": 0.011728953790484442
+      },
+      "mean_bridges_used": {
+        "entropy_0.0": 3.0,
+        "entropy_0.005": 3.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "multi_bridge_rate": {
+        "entropy_0.0": 1.0,
+        "entropy_0.005": 1.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_largest_allocation": {
+        "entropy_0.0": 0.5044407430291176,
+        "entropy_0.005": 0.5881564402580262,
+        "delta_entropy_minus_baseline": 0.08371569722890859
+      },
+      "mean_allocation_entropy": {
+        "entropy_0.0": 1.4309585410992238,
+        "entropy_0.005": 1.3561518396817602,
+        "delta_entropy_minus_baseline": -0.0748067014174636
+      },
+      "mean_latency_cost": {
+        "entropy_0.0": 1.053456677244193,
+        "entropy_0.005": 1.0634863362956224,
+        "delta_entropy_minus_baseline": 0.010029659051429496
+      },
+      "mean_risk_cost": {
+        "entropy_0.0": 0.0,
+        "entropy_0.005": 0.0,
+        "delta_entropy_minus_baseline": 0.0
+      },
+      "mean_cost_term": {
+        "entropy_0.0": 1.951285808794242,
+        "entropy_0.005": 1.9649991948368035,
+        "delta_entropy_minus_baseline": 0.01371338604256156
+      }
+    },
+    "by_regime": {
+      "below_cheapest": {
+        "mean_reward": {
+          "entropy_0.0": 0.8101469047443701,
+          "entropy_0.005": 0.8084442772248824,
+          "delta_entropy_minus_baseline": -0.0017026275194876872
+        },
+        "completion_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 3.0,
+          "entropy_0.005": 3.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      },
+      "near_boundary": {
+        "mean_reward": {
+          "entropy_0.0": 1.109233208831785,
+          "entropy_0.005": 1.1021898867813462,
+          "delta_entropy_minus_baseline": -0.007043322050438672
+        },
+        "completion_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 3.0,
+          "entropy_0.005": 3.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      },
+      "splitting_needed": {
+        "mean_reward": {
+          "entropy_0.0": 0.7680003982516924,
+          "entropy_0.005": 0.7964897006907151,
+          "delta_entropy_minus_baseline": 0.0284893024390227
+        },
+        "completion_rate": {
+          "entropy_0.0": 0.7083333333333334,
+          "entropy_0.005": 0.875,
+          "delta_entropy_minus_baseline": 0.16666666666666663
+        },
+        "mean_bridges_used": {
+          "entropy_0.0": 3.0,
+          "entropy_0.005": 3.0,
+          "delta_entropy_minus_baseline": 0.0
+        },
+        "multi_bridge_rate": {
+          "entropy_0.0": 1.0,
+          "entropy_0.005": 1.0,
+          "delta_entropy_minus_baseline": 0.0
+        }
+      }
+    }
+  }
+}

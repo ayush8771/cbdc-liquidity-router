@@ -1,0 +1,31 @@
+{
+  "experiment": "stage1d_paired_entropy_regularization",
+  "runs": [
+    {
+      "name": "baseline_entropy000",
+      "entropy_coef": 0.0
+    },
+    {
+      "name": "entropy005",
+      "entropy_coef": 0.005
+    }
+  ],
+  "epochs": 20,
+  "batch_size": 32,
+  "learning_rate": 0.0003,
+  "seed": 42,
+  "device": "cuda",
+  "train_csv": "data\\processed\\stage1d_transactions_train.csv",
+  "validation_csv": "data\\processed\\stage1d_transactions_validation.csv",
+  "test_csv": "data\\processed\\stage1d_transactions_test.csv",
+  "split_sizes": {
+    "train": 500,
+    "validation": 100,
+    "test": 100
+  },
+  "test_regime_counts": {
+    "splitting_needed": 48,
+    "near_boundary": 33,
+    "below_cheapest": 19
+  }
+}
