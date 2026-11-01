@@ -1,0 +1,1058 @@
+[
+  {
+    "label": "test_seed42_entropy000",
+    "split": "test",
+    "checkpoint": "outputs\\experiments\\stage1d_entropy_pair_seed42_20261031_153140\\baseline_entropy000\\ppo_checkpoint.pt",
+    "saved_metrics": "outputs\\experiments\\stage1d_entropy_pair_seed42_20261031_153140\\baseline_entropy000\\evaluation_metrics.json",
+    "tolerance": 1e-06,
+    "fields": {
+      "ppo.mean_reward": {
+        "saved": 0.8886150619767318,
+        "replayed": 0.8886150619767318,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.completion_rate": {
+        "saved": 0.86,
+        "replayed": 0.86,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.total_unrouted": {
+        "saved": 451728.9191056986,
+        "replayed": 451728.9191056986,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.liquidity_utilization": {
+        "saved": 0.9852467318914613,
+        "replayed": 0.9852467318914613,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.completion_rate": {
+        "saved": 0.7083333333333334,
+        "replayed": 0.7083333333333334,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.8101469047443701,
+        "replayed": 0.8101469047443701,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.mean_reward": {
+        "saved": 1.109233208831785,
+        "replayed": 1.109233208831785,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.7680003982516924,
+        "replayed": 0.7680003982516924,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.mean_reward": {
+        "saved": 0.9197090480792187,
+        "replayed": 0.9197090480792187,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.total_unrouted": {
+        "saved": 0.16790677106473595,
+        "replayed": 0.16790677106473595,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.liquidity_utilization": {
+        "saved": 0.999999996984376,
+        "replayed": 0.999999996984376,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.8849080840268966,
+        "replayed": 0.8849080840268966,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0923101017172805,
+        "replayed": 1.0923101017172805,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.8148212053070951,
+        "replayed": 0.8148212053070951,
+        "abs_diff": 0.0,
+        "match": true
+      }
+    },
+    "ppo_failures_replayed": 14,
+    "ppo_failures_expected_from_saved": 14,
+    "match": true
+  },
+  {
+    "label": "test_seed42_entropy005",
+    "split": "test",
+    "checkpoint": "outputs\\experiments\\stage1d_entropy_pair_seed42_20261031_153140\\entropy005\\ppo_checkpoint.pt",
+    "saved_metrics": "outputs\\experiments\\stage1d_entropy_pair_seed42_20261031_153140\\entropy005\\evaluation_metrics.json",
+    "tolerance": 1e-06,
+    "fields": {
+      "ppo.mean_reward": {
+        "saved": 0.8996421316421152,
+        "replayed": 0.8996421316421152,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.completion_rate": {
+        "saved": 0.94,
+        "replayed": 0.94,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.total_unrouted": {
+        "saved": 92600.9815037566,
+        "replayed": 92600.9815037566,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.liquidity_utilization": {
+        "saved": 0.9969756856819457,
+        "replayed": 0.9969756856819457,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.completion_rate": {
+        "saved": 0.875,
+        "replayed": 0.875,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.8084442772248824,
+        "replayed": 0.8084442772248824,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.mean_reward": {
+        "saved": 1.1021898867813462,
+        "replayed": 1.1021898867813462,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.7964897006907151,
+        "replayed": 0.7964897006907151,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.mean_reward": {
+        "saved": 0.9197090480792187,
+        "replayed": 0.9197090480792187,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.total_unrouted": {
+        "saved": 0.16790677106473595,
+        "replayed": 0.16790677106473595,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.liquidity_utilization": {
+        "saved": 0.999999996984376,
+        "replayed": 0.999999996984376,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.8849080840268966,
+        "replayed": 0.8849080840268966,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0923101017172805,
+        "replayed": 1.0923101017172805,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.8148212053070951,
+        "replayed": 0.8148212053070951,
+        "abs_diff": 0.0,
+        "match": true
+      }
+    },
+    "ppo_failures_replayed": 6,
+    "ppo_failures_expected_from_saved": 6,
+    "match": true
+  },
+  {
+    "label": "val_seed42_entropy000",
+    "split": "validation",
+    "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\ppo_checkpoint.pt",
+    "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\validation_metrics.json",
+    "tolerance": 1e-06,
+    "fields": {
+      "ppo.mean_reward": {
+        "saved": 0.8954471318175389,
+        "replayed": 0.8954471318175389,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.completion_rate": {
+        "saved": 0.92,
+        "replayed": 0.92,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.total_unrouted": {
+        "saved": 245172.19641106087,
+        "replayed": 245172.19641106087,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.liquidity_utilization": {
+        "saved": 0.9928809263204526,
+        "replayed": 0.9928809263204526,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.completion_rate": {
+        "saved": 0.8571428571428571,
+        "replayed": 0.8571428571428571,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5540672532194949,
+        "replayed": 0.5540672532194949,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0316858751285358,
+        "replayed": 1.0316858751285358,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9760382921088786,
+        "replayed": 0.9760382921088786,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.mean_reward": {
+        "saved": 0.8800878236108761,
+        "replayed": 0.8800878236108761,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.total_unrouted": {
+        "saved": 0.256572865677299,
+        "replayed": 0.256572865677299,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.liquidity_utilization": {
+        "saved": 0.9999999973323754,
+        "replayed": 0.9999999973323754,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5300599512426322,
+        "replayed": 0.5300599512426322,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0296443067903398,
+        "replayed": 1.0296443067903398,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9588444407921826,
+        "replayed": 0.9588444407921826,
+        "abs_diff": 0.0,
+        "match": true
+      }
+    },
+    "ppo_failures_replayed": 8,
+    "ppo_failures_expected_from_saved": 8,
+    "match": true
+  },
+  {
+    "label": "val_seed42_entropy005",
+    "split": "validation",
+    "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\ppo_checkpoint.pt",
+    "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\validation_metrics.json",
+    "tolerance": 1e-06,
+    "fields": {
+      "ppo.mean_reward": {
+        "saved": 0.8951999653159411,
+        "replayed": 0.8951999653159411,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.completion_rate": {
+        "saved": 0.92,
+        "replayed": 0.92,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.total_unrouted": {
+        "saved": 214730.11047439533,
+        "replayed": 214730.11047439533,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.liquidity_utilization": {
+        "saved": 0.9937648789661832,
+        "replayed": 0.9937648789661832,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.completion_rate": {
+        "saved": 0.8571428571428571,
+        "replayed": 0.8571428571428571,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5545576236058836,
+        "replayed": 0.5545576236058836,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.mean_reward": {
+        "saved": 1.031005412500528,
+        "replayed": 1.031005412500528,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9756716024509474,
+        "replayed": 0.9756716024509474,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.mean_reward": {
+        "saved": 0.8800878236108761,
+        "replayed": 0.8800878236108761,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.total_unrouted": {
+        "saved": 0.256572865677299,
+        "replayed": 0.256572865677299,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.liquidity_utilization": {
+        "saved": 0.9999999973323754,
+        "replayed": 0.9999999973323754,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5300599512426322,
+        "replayed": 0.5300599512426322,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0296443067903398,
+        "replayed": 1.0296443067903398,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9588444407921826,
+        "replayed": 0.9588444407921826,
+        "abs_diff": 0.0,
+        "match": true
+      }
+    },
+    "ppo_failures_replayed": 8,
+    "ppo_failures_expected_from_saved": 8,
+    "match": true
+  },
+  {
+    "label": "val_seed123_entropy000",
+    "split": "validation",
+    "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\ppo_checkpoint.pt",
+    "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\validation_metrics.json",
+    "tolerance": 1e-06,
+    "fields": {
+      "ppo.mean_reward": {
+        "saved": 0.9027643817850053,
+        "replayed": 0.9027643817850053,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.completion_rate": {
+        "saved": 0.95,
+        "replayed": 0.95,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.total_unrouted": {
+        "saved": 306566.32594861335,
+        "replayed": 306566.32594861335,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.liquidity_utilization": {
+        "saved": 0.991098221714201,
+        "replayed": 0.991098221714201,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.completion_rate": {
+        "saved": 0.9107142857142857,
+        "replayed": 0.9107142857142857,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5863685622365549,
+        "replayed": 0.5863685622365549,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0464634651139946,
+        "replayed": 1.0464634651139946,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9706095281569365,
+        "replayed": 0.9706095281569365,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.mean_reward": {
+        "saved": 0.8800878236108761,
+        "replayed": 0.8800878236108761,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.total_unrouted": {
+        "saved": 0.256572865677299,
+        "replayed": 0.256572865677299,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.liquidity_utilization": {
+        "saved": 0.9999999973323754,
+        "replayed": 0.9999999973323754,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5300599512426322,
+        "replayed": 0.5300599512426322,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0296443067903398,
+        "replayed": 1.0296443067903398,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9588444407921826,
+        "replayed": 0.9588444407921826,
+        "abs_diff": 0.0,
+        "match": true
+      }
+    },
+    "ppo_failures_replayed": 5,
+    "ppo_failures_expected_from_saved": 5,
+    "match": true
+  },
+  {
+    "label": "val_seed123_entropy005",
+    "split": "validation",
+    "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\ppo_checkpoint.pt",
+    "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\validation_metrics.json",
+    "tolerance": 1e-06,
+    "fields": {
+      "ppo.mean_reward": {
+        "saved": 0.9005450349882506,
+        "replayed": 0.9005450349882506,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.completion_rate": {
+        "saved": 0.96,
+        "replayed": 0.96,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.total_unrouted": {
+        "saved": 90596.81052502338,
+        "replayed": 90596.81052502338,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.liquidity_utilization": {
+        "saved": 0.9973693355404979,
+        "replayed": 0.9973693355404979,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.completion_rate": {
+        "saved": 0.9285714285714286,
+        "replayed": 0.9285714285714286,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5748005300421475,
+        "replayed": 0.5748005300421475,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0399391323083698,
+        "replayed": 1.0399391323083698,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9737541236984588,
+        "replayed": 0.9737541236984588,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.mean_reward": {
+        "saved": 0.8800878236108761,
+        "replayed": 0.8800878236108761,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.total_unrouted": {
+        "saved": 0.256572865677299,
+        "replayed": 0.256572865677299,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.liquidity_utilization": {
+        "saved": 0.9999999973323754,
+        "replayed": 0.9999999973323754,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5300599512426322,
+        "replayed": 0.5300599512426322,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0296443067903398,
+        "replayed": 1.0296443067903398,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9588444407921826,
+        "replayed": 0.9588444407921826,
+        "abs_diff": 0.0,
+        "match": true
+      }
+    },
+    "ppo_failures_replayed": 4,
+    "ppo_failures_expected_from_saved": 4,
+    "match": true
+  },
+  {
+    "label": "val_seed2026_entropy000",
+    "split": "validation",
+    "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\ppo_checkpoint.pt",
+    "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\validation_metrics.json",
+    "tolerance": 1e-06,
+    "fields": {
+      "ppo.mean_reward": {
+        "saved": 0.8984299803856863,
+        "replayed": 0.8984299803856863,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.completion_rate": {
+        "saved": 0.98,
+        "replayed": 0.98,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.total_unrouted": {
+        "saved": 35695.23454033176,
+        "replayed": 35695.23454033176,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.liquidity_utilization": {
+        "saved": 0.9989635135456928,
+        "replayed": 0.9989635135456928,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.completion_rate": {
+        "saved": 0.9642857142857143,
+        "replayed": 0.9642857142857143,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5595794236763201,
+        "replayed": 0.5595794236763201,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0357208067103238,
+        "replayed": 1.0357208067103238,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9776141601796872,
+        "replayed": 0.9776141601796872,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.mean_reward": {
+        "saved": 0.8800878236108761,
+        "replayed": 0.8800878236108761,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.total_unrouted": {
+        "saved": 0.256572865677299,
+        "replayed": 0.256572865677299,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.liquidity_utilization": {
+        "saved": 0.9999999973323754,
+        "replayed": 0.9999999973323754,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5300599512426322,
+        "replayed": 0.5300599512426322,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0296443067903398,
+        "replayed": 1.0296443067903398,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9588444407921826,
+        "replayed": 0.9588444407921826,
+        "abs_diff": 0.0,
+        "match": true
+      }
+    },
+    "ppo_failures_replayed": 2,
+    "ppo_failures_expected_from_saved": 2,
+    "match": true
+  },
+  {
+    "label": "val_seed2026_entropy005",
+    "split": "validation",
+    "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\ppo_checkpoint.pt",
+    "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\validation_metrics.json",
+    "tolerance": 1e-06,
+    "fields": {
+      "ppo.mean_reward": {
+        "saved": 0.8988121755535833,
+        "replayed": 0.8988121755535833,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.completion_rate": {
+        "saved": 0.96,
+        "replayed": 0.96,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.total_unrouted": {
+        "saved": 117187.05857332889,
+        "replayed": 117187.05857332889,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.liquidity_utilization": {
+        "saved": 0.9965972393404972,
+        "replayed": 0.9965972393404972,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.completion_rate": {
+        "saved": 0.9285714285714286,
+        "replayed": 0.9285714285714286,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5629190896020805,
+        "replayed": 0.5629190896020805,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0413423645880489,
+        "replayed": 1.0413423645880489,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "ppo.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9747761707709911,
+        "replayed": 0.9747761707709911,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.mean_reward": {
+        "saved": 0.8800878236108761,
+        "replayed": 0.8800878236108761,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.total_unrouted": {
+        "saved": 0.256572865677299,
+        "replayed": 0.256572865677299,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.liquidity_utilization": {
+        "saved": 0.9999999973323754,
+        "replayed": 0.9999999973323754,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.completion_rate": {
+        "saved": 1.0,
+        "replayed": 1.0,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.below_cheapest.mean_reward": {
+        "saved": 0.5300599512426322,
+        "replayed": 0.5300599512426322,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.near_boundary.mean_reward": {
+        "saved": 1.0296443067903398,
+        "replayed": 1.0296443067903398,
+        "abs_diff": 0.0,
+        "match": true
+      },
+      "liquidity_waterfall.by_regime.splitting_needed.mean_reward": {
+        "saved": 0.9588444407921826,
+        "replayed": 0.9588444407921826,
+        "abs_diff": 0.0,
+        "match": true
+      }
+    },
+    "ppo_failures_replayed": 4,
+    "ppo_failures_expected_from_saved": 4,
+    "match": true
+  }
+]

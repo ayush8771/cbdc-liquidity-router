@@ -1,0 +1,191 @@
+{
+  "n_failed_rows": 51,
+  "by_checkpoint": {
+    "test_seed42_entropy000": {
+      "n_failed": 14,
+      "by_regime": {
+        "splitting_needed": 14
+      },
+      "by_primary_cause": {
+        "a_b_over_allocation_with_spare_elsewhere": 8,
+        "d_reward_tradeoff": 6
+      },
+      "n_flag_c": 14,
+      "n_over_allocated_cheapest": 13,
+      "transaction_ids": [
+        300005,
+        300036,
+        300038,
+        300042,
+        300051,
+        300061,
+        300071,
+        300079,
+        300084,
+        300085,
+        300089,
+        300094,
+        300097,
+        300099
+      ],
+      "mean_sample_completion_rate": 0.19357142857142853,
+      "mean_reward_gap_waterfall_minus_ppo": 0.12307381695504713,
+      "total_unrouted": 451728.9191056986
+    },
+    "test_seed42_entropy005": {
+      "n_failed": 6,
+      "by_regime": {
+        "splitting_needed": 6
+      },
+      "by_primary_cause": {
+        "a_b_over_allocation_with_spare_elsewhere": 6
+      },
+      "n_flag_c": 6,
+      "n_over_allocated_cheapest": 6,
+      "transaction_ids": [
+        300005,
+        300042,
+        300051,
+        300071,
+        300084,
+        300099
+      ],
+      "mean_sample_completion_rate": 0.13583333333333333,
+      "mean_reward_gap_waterfall_minus_ppo": 0.07510338342036527,
+      "total_unrouted": 92600.9815037566
+    },
+    "val_seed123_entropy000": {
+      "n_failed": 5,
+      "by_regime": {
+        "splitting_needed": 5
+      },
+      "by_primary_cause": {
+        "a_b_over_allocation_with_spare_elsewhere": 4,
+        "d_reward_tradeoff": 1
+      },
+      "n_flag_c": 4,
+      "n_over_allocated_cheapest": 0,
+      "transaction_ids": [
+        200018,
+        200019,
+        200045,
+        200061,
+        200072
+      ],
+      "mean_sample_completion_rate": 0.03,
+      "mean_reward_gap_waterfall_minus_ppo": 0.0402952317972184,
+      "total_unrouted": 306566.32594861335
+    },
+    "val_seed123_entropy005": {
+      "n_failed": 4,
+      "by_regime": {
+        "splitting_needed": 4
+      },
+      "by_primary_cause": {
+        "a_b_over_allocation_with_spare_elsewhere": 3,
+        "d_reward_tradeoff": 1
+      },
+      "n_flag_c": 3,
+      "n_over_allocated_cheapest": 0,
+      "transaction_ids": [
+        200019,
+        200045,
+        200061,
+        200072
+      ],
+      "mean_sample_completion_rate": 0.08124999999999999,
+      "mean_reward_gap_waterfall_minus_ppo": 0.010436542943314905,
+      "total_unrouted": 90596.81052502338
+    },
+    "val_seed2026_entropy000": {
+      "n_failed": 2,
+      "by_regime": {
+        "splitting_needed": 2
+      },
+      "by_primary_cause": {
+        "d_reward_tradeoff": 1,
+        "a_b_over_allocation_with_spare_elsewhere": 1
+      },
+      "n_flag_c": 1,
+      "n_over_allocated_cheapest": 1,
+      "transaction_ids": [
+        200019,
+        200035
+      ],
+      "mean_sample_completion_rate": 0.235,
+      "mean_reward_gap_waterfall_minus_ppo": -0.008318072799697207,
+      "total_unrouted": 35695.23454033176
+    },
+    "val_seed2026_entropy005": {
+      "n_failed": 4,
+      "by_regime": {
+        "splitting_needed": 4
+      },
+      "by_primary_cause": {
+        "a_b_over_allocation_with_spare_elsewhere": 3,
+        "d_reward_tradeoff": 1
+      },
+      "n_flag_c": 4,
+      "n_over_allocated_cheapest": 0,
+      "transaction_ids": [
+        200019,
+        200045,
+        200061,
+        200072
+      ],
+      "mean_sample_completion_rate": 0.1175,
+      "mean_reward_gap_waterfall_minus_ppo": 0.009301561877237893,
+      "total_unrouted": 117187.05857332889
+    },
+    "val_seed42_entropy000": {
+      "n_failed": 8,
+      "by_regime": {
+        "splitting_needed": 8
+      },
+      "by_primary_cause": {
+        "a_b_over_allocation_with_spare_elsewhere": 5,
+        "d_reward_tradeoff": 3
+      },
+      "n_flag_c": 8,
+      "n_over_allocated_cheapest": 8,
+      "transaction_ids": [
+        200018,
+        200019,
+        200035,
+        200045,
+        200061,
+        200070,
+        200072,
+        200073
+      ],
+      "mean_sample_completion_rate": 0.131875,
+      "mean_reward_gap_waterfall_minus_ppo": 0.014089330099676611,
+      "total_unrouted": 245172.19641106087
+    },
+    "val_seed42_entropy005": {
+      "n_failed": 8,
+      "by_regime": {
+        "splitting_needed": 8
+      },
+      "by_primary_cause": {
+        "a_b_over_allocation_with_spare_elsewhere": 5,
+        "d_reward_tradeoff": 3
+      },
+      "n_flag_c": 8,
+      "n_over_allocated_cheapest": 8,
+      "transaction_ids": [
+        200018,
+        200019,
+        200035,
+        200045,
+        200061,
+        200070,
+        200072,
+        200073
+      ],
+      "mean_sample_completion_rate": 0.17625000000000002,
+      "mean_reward_gap_waterfall_minus_ppo": 0.012316158387176535,
+      "total_unrouted": 214730.11047439533
+    }
+  }
+}

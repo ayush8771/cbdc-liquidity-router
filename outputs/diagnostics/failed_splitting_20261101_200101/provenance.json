@@ -1,0 +1,105 @@
+{
+  "script": "diagnose_failed_splitting.py",
+  "plan": "docs/FAILED_SPLITTING_INVESTIGATION_PLAN.md",
+  "generated_at": "20261101_200101",
+  "git_head": "e043cec29c6250a66d88f78e37c5bc4f1229da17",
+  "git_branch": "main",
+  "git_dirty": true,
+  "git_dirty_files": [
+    "?? diagnose_failed_splitting.py"
+  ],
+  "python": "3.10.11",
+  "torch": "2.13.0+cu130",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "n_samples": 200,
+  "sample_seed": 20261101,
+  "replay_tolerance": 1e-06,
+  "completion_tolerance_relative": 0.0001,
+  "data": {
+    "data/processed/stage1d_transactions_test.csv": "ab974c09a50a64d9ffaa76eed0ac6b79e20f1a5639c305e3ba95c24eabdcf1f1",
+    "data/processed/stage1d_transactions_validation.csv": "8c960ae0435bf0b98988e4508bb73855dc6ed462210dc93932936e81731c1335"
+  },
+  "checkpoints": [
+    {
+      "label": "test_seed42_entropy000",
+      "split": "test",
+      "csv": "data/processed/stage1d_transactions_test.csv",
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_pair_seed42_20261031_153140\\baseline_entropy000\\ppo_checkpoint.pt",
+      "checkpoint_sha256": "fa55ddcbd3cc64e4f8d7d223cd3e833af3884b223274f17bee2bb0fbcb86c7f8",
+      "checkpoint_last_commit": "4e4e4e3edceb3e423efafdf5a082809c2889ecb0",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_pair_seed42_20261031_153140\\baseline_entropy000\\evaluation_metrics.json",
+      "saved_metrics_sha256": "4f4f85311019fd3ad1836af9b5254723f0a2224af7fdf73f7c7ae3beb58c4f4c"
+    },
+    {
+      "label": "test_seed42_entropy005",
+      "split": "test",
+      "csv": "data/processed/stage1d_transactions_test.csv",
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_pair_seed42_20261031_153140\\entropy005\\ppo_checkpoint.pt",
+      "checkpoint_sha256": "5c459201d451b1f781df467b6be78cad0dec902111ddbb5d78b7b295dc34e6d2",
+      "checkpoint_last_commit": "4e4e4e3edceb3e423efafdf5a082809c2889ecb0",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_pair_seed42_20261031_153140\\entropy005\\evaluation_metrics.json",
+      "saved_metrics_sha256": "372dc7b0651a23f0967ddca50911977e2fed4e530395549cb14117bf571043df"
+    },
+    {
+      "label": "val_seed42_entropy000",
+      "split": "validation",
+      "csv": "data/processed/stage1d_transactions_validation.csv",
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\ppo_checkpoint.pt",
+      "checkpoint_sha256": "3502639c1884e15d54dd115fba370d81234776b884433baf6fa8f60b8e07c48f",
+      "checkpoint_last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\validation_metrics.json",
+      "saved_metrics_sha256": "a816785d9ae7beaa947dba01b38dfe8249b9248e4f764a941f3977af1aa67bed"
+    },
+    {
+      "label": "val_seed42_entropy005",
+      "split": "validation",
+      "csv": "data/processed/stage1d_transactions_validation.csv",
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\ppo_checkpoint.pt",
+      "checkpoint_sha256": "6e813f763e662028bd37352759fe2b77041b06370fcf2b6950ac2dc7897598bf",
+      "checkpoint_last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\validation_metrics.json",
+      "saved_metrics_sha256": "2236627393d1e37b82497544d8c83b543bb2f2952b4e908406d94aac7bbe650c"
+    },
+    {
+      "label": "val_seed123_entropy000",
+      "split": "validation",
+      "csv": "data/processed/stage1d_transactions_validation.csv",
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\ppo_checkpoint.pt",
+      "checkpoint_sha256": "9a57f635b8d048de4af9857deae1ceb26fff4e2816381fb1f50af95cf6d406b5",
+      "checkpoint_last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\validation_metrics.json",
+      "saved_metrics_sha256": "2507f939a35d6a9c5cc79bacbd89c87d5b9900966e7e7796318056d5663f605b"
+    },
+    {
+      "label": "val_seed123_entropy005",
+      "split": "validation",
+      "csv": "data/processed/stage1d_transactions_validation.csv",
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\ppo_checkpoint.pt",
+      "checkpoint_sha256": "228761c97c21715f6afb84c14cfd71ce3111a5fc339bc0b13208d3dc41b25196",
+      "checkpoint_last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\validation_metrics.json",
+      "saved_metrics_sha256": "1d8facda91e8cf1ae793061dba0002d6551f3a3da4616f68d35a46c416e79c71"
+    },
+    {
+      "label": "val_seed2026_entropy000",
+      "split": "validation",
+      "csv": "data/processed/stage1d_transactions_validation.csv",
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\ppo_checkpoint.pt",
+      "checkpoint_sha256": "10a38dc26e6bb954cc020786e835a7d4be28586bcb722e19e9717fa30b28a423",
+      "checkpoint_last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\validation_metrics.json",
+      "saved_metrics_sha256": "1892bdb1686dbb68f5d57e1aa69b3929d5c83fe7bbf1b8670251848aee08f736"
+    },
+    {
+      "label": "val_seed2026_entropy005",
+      "split": "validation",
+      "csv": "data/processed/stage1d_transactions_validation.csv",
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\ppo_checkpoint.pt",
+      "checkpoint_sha256": "65c6a739405d8281f4457977c13b3a323081d73f9d96a89a08008b6686644875",
+      "checkpoint_last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\validation_metrics.json",
+      "saved_metrics_sha256": "b52b967508e4bec1f723574253af35b2f626396449e0f368495922744beb8d8b"
+    }
+  ]
+}
