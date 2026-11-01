@@ -1,0 +1,58 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    # Windows + Python 3.10 matches the validated development environment and requirements-lock.txt
+    # (which includes the Windows-only pywin32 pin).
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      TELEMETRY_DISABLED: "1"               # Cognee telemetry off (tests use a fake Cognee anyway)
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"  # no network fetch of litellm's price table
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+
+      - name: Install torch (CPU build; the lock file excludes torch because its wheel is accelerator-specific)
+        run: python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install locked dependencies
+        run: python -m pip install -r requirements-lock.txt
+
+      - name: Check dependency consistency
+        run: python -m pip check
+
+      # Deselected: these 10 tests read data/raw/WDIData.csv (213 MB) and
+      # data/raw/rpw_dataset_2011_2025_q3.xlsx (51 MB), which are git-ignored and must be supplied
+      # locally (README "Dataset Requirements"). They pass locally; every other test runs here.
+      - name: Run tests
+        run: >
+          python -m pytest tests/ -q
+          --deselect tests/test_stage1b.py::test_wdi_no_aggregates
+          --deselect tests/test_stage1b.py::test_wdi_no_imputation
+          --deselect tests/test_stage1b.py::test_rpw_median_aggregation
+          --deselect tests/test_stage1b.py::test_rpw_no_fabricated_are_mex
+          --deselect tests/test_stage1b.py::test_are_mex_fallback_tagged_and_not_real
+          --deselect tests/test_stage1b.py::test_no_stale_carry_forward_flag_exists
+          --deselect tests/test_stage1b.py::test_macro_risk_no_real_daily_fx_for_currencies_without_a_fred_file
+          --deselect tests/test_stage1b.py::test_unconditioned_default_explicitly_present_for_full_timeline
+          --deselect tests/test_stage1b.py::test_fred_observations_after_simulation_end_excluded
+          --deselect tests/test_stage1d.py::test_stage1a_1b_1c_regression_all_pass

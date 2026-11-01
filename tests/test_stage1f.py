@@ -12,10 +12,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-os.chdir(ROOT)
 
 from src.backtesting import analysis as A
 from src.backtesting.evaluation import evaluate_scenario, reward_with_weights
@@ -24,9 +24,17 @@ from src.backtesting.scenarios import (CHEAPEST_PARQUET_IDS, SCENARIOS, Scenario
 from src.backtesting.statistics import equivalence, holm, two_level_bootstrap, wilcoxon_and_sign
 from src.envs import dynamic_bridge_state as dbs
 
-MULTISEED = Path("outputs/experiments/stage1d_entropy_multiseed_20261101_180551")
+MULTISEED = Path(ROOT) / "outputs/experiments/stage1d_entropy_multiseed_20261101_180551"
 CKPT = ("seed42_entropy000", MULTISEED / "seed42" / "entropy000" / "ppo_checkpoint.pt")
-PRIOR_HOLDOUT_RUN = Path("outputs/experiments/stage1d_holdout_eval_20261101_225445/per_transaction.csv")
+PRIOR_HOLDOUT_RUN = Path(ROOT) / "outputs/experiments/stage1d_holdout_eval_20261101_225445/per_transaction.csv"
+
+
+@pytest.fixture(autouse=True)
+def _run_from_repo_root(monkeypatch):
+    """The code under test resolves data paths relative to the repository root
+    (e.g. data/processed/...). Scope the working directory to each test and restore it
+    afterwards, instead of changing it for the whole session at import time."""
+    monkeypatch.chdir(ROOT)
 
 
 def _raises(fn, exc, contains=None):
@@ -153,7 +161,7 @@ def test_reward_with_unit_weights_equals_env_reward_when_unrouted_agrees():
 # --- Leakage guards ----------------------------------------------------------------
 
 def test_real_evaluation_set_passes_guards():
-    ev, rep = build_evaluation_set()
+    ev, rep = build_evaluation_set(root=ROOT)
     assert rep["rows_loaded"] == 1500 and rep["rows_excluded_duplicate_of_examined_test_split"] == 2
     assert rep["rows_evaluated"] == len(ev) == 1500 - 2 - rep["rows_removed_exact_duplicates_within_or_across_holdouts"]
     assert rep["rows_duplicating_train"] == 0 and rep["rows_duplicating_validation"] == 0
@@ -167,7 +175,7 @@ def _copy_inputs(tmp):
                          "data/processed/stage1d_transactions_test.csv"]:
         dst = Path(tmp) / p
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(p, dst)
+        shutil.copy(Path(ROOT) / p, dst)
 
 
 def test_guard_rejects_train_window_dates_and_train_duplicates():
@@ -201,7 +209,7 @@ def test_guard_rejects_checkpoints_not_selected_on_validation():
 # --- Harness ---------------------------------------------------------------------
 
 def _small_eval():
-    ev, _ = build_evaluation_set()
+    ev, _ = build_evaluation_set(root=ROOT)
     return ev[ev["source"] == "stage1d_transactions_holdout_seed20261102"].head(8).reset_index(drop=True)
 
 
@@ -249,6 +257,7 @@ def test_backtesting_does_not_import_training_loop_or_cognee():
 
 
 if __name__ == "__main__":
+    os.chdir(ROOT)  # direct-run mode only (a separate process), mirroring the pytest fixture
     tests = [v for k, v in dict(globals()).items() if k.startswith("test_") and callable(v)]
     failed = 0
     for t in tests:
