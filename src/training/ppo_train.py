@@ -20,13 +20,10 @@ from ..models.ppo_actor_critic import PPOActorCritic
 PPO_CLIP_EPS = 0.2
 PPO_EPOCHS_PER_UPDATE = 4
 GAMMA = 0.0  # single-step episodes (Decision 3) - no discounted future return within an episode
-ENTROPY_COEF = 0.005  # was 0.0 (disabled). Evidence: deterministic actions over-concentrated on
-# Bridge 0 despite the stochastic Dirichlet policy containing higher-reward capacity-aware actions -
-# a small entropy bonus counteracts premature concentration without destabilizing training. This
-# value is deliberately small: net.evaluate_actions()'s entropy can still be large-magnitude near
-# mask boundaries in edge cases (see ppo_actor_critic.py's docstring on the 1-feasible-slot and
-# 0-feasible-slot cases, where entropy is defined as exactly 0.0, not degenerate) - 0.005 was chosen
-# as a conventional small-but-nonzero PPO entropy coefficient, not tuned/swept for this environment.
+ENTROPY_COEF = 0.0  # Default: disabled. Restored after the seed-42 paired experiment; 0.005 is a
+# candidate under multi-seed validation (run_entropy_multiseed.py), NOT an accepted default.
+EXPERIMENTAL_ENTROPY_COEF = 0.005  # candidate value compared against the default; conventional small
+# PPO entropy coefficient, not tuned/swept for this environment.
 
 
 def _make_env_for_transactions(transactions_csv, structured_dir="data/structured", raw_dir="data/raw"):

@@ -568,10 +568,12 @@ def test_evaluate_uses_identical_execution_path_for_all_three_policies():
 # Entropy regularization ------------------------------------------------------
 
 def test_entropy_coef_is_explicit_nonzero_value():
-    """Entropy regularization must be explicitly enabled at the approved value."""
-    from src.training.ppo_train import ENTROPY_COEF
+    """Default entropy coefficient is disabled (0.0); the experimental
+    candidate is explicitly defined and non-zero (0.005)."""
+    from src.training.ppo_train import ENTROPY_COEF, EXPERIMENTAL_ENTROPY_COEF
 
-    assert ENTROPY_COEF == 0.005
+    assert ENTROPY_COEF == 0.0
+    assert EXPERIMENTAL_ENTROPY_COEF == 0.005
 
 
 def test_entropy_bonus_actually_changes_ppo_update():
