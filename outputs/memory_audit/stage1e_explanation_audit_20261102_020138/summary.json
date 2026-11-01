@@ -1,0 +1,35 @@
+{
+  "n_transactions": 1522,
+  "transactions_by_source": {
+    "failed_splitting_20261101_202140/failed_transactions.csv": 22,
+    "stage1d_holdout_eval_20261101_225445/per_transaction.csv": 500,
+    "stage1d_holdout_datedisjoint_eval_20261101_230534/per_transaction.csv": 500,
+    "stage1d_holdout_datedisjoint_v2_eval_20261101_233252/per_transaction.csv": 500
+  },
+  "allowed": 1522,
+  "blocked": 0,
+  "env_consistency": {
+    "checked": 1500,
+    "consistent": 1500,
+    "inconsistent": 0,
+    "not_available": 22
+  },
+  "semantic": {
+    "status_counts": {
+      "ok": 1522,
+      "error": 0,
+      "not_requested": 0
+    },
+    "transactions_covering_all_active_facts": 1522,
+    "transactions_missing_active_facts": 0,
+    "transactions_with_retrieved_inactive_facts": 0,
+    "transactions_with_ungrounded_results": 0,
+    "unknown_fact_ids_seen": [],
+    "corridors_retrieved": [
+      "ARE->MEX",
+      "GBR->PHL",
+      "USA->IND"
+    ],
+    "corridors_with_errors": []
+  }
+}

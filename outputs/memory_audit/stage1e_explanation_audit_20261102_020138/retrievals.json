@@ -1,0 +1,125 @@
+{
+  "ARE->MEX": {
+    "query": "Which rules, transfer limits or corridor restrictions apply to cross-border transfers from ARE to MEX?",
+    "search_type": "CHUNKS",
+    "dataset_name": "cbdc_knowledge_b01faa5afc8a",
+    "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+    "results": [
+      {
+        "text": "fact_id: global_max_single_transfer_usd\nrule_type: max_single_transfer_usd\nrule: A single cross-border transfer must not exceed 500,000.00 USD.\ncorridor scope: any country -> any country\neffective: unbounded to unbounded\nprovenance: project_assumption (verified: false)\nsource: Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation.\nnotes: Also mirrored by MAX_REGULATORY_TRANSFER_USD in src/training/transaction_generator.py. Overridable per environment via CBDCLiquidityEnv(max_transfer_usd=...).",
+        "chunk_id": "2dfd30b6-2919-5d75-8b5c-01749d02c27c",
+        "document_id": "b500b229-5efa-591a-bbea-0651ab1ff459",
+        "chunk_index": 0,
+        "dataset_name": "cbdc_knowledge_b01faa5afc8a",
+        "text_source": "chunk.text",
+        "fact_ids": [
+          "global_max_single_transfer_usd"
+        ],
+        "unknown_fact_ids": []
+      }
+    ],
+    "grounded_fact_ids": [
+      "global_max_single_transfer_usd"
+    ],
+    "grounded_facts": [
+      {
+        "fact_id": "global_max_single_transfer_usd",
+        "rule_type": "max_single_transfer_usd",
+        "value": 500000.0,
+        "scope": {
+          "sender": "*",
+          "receiver": "*"
+        },
+        "effective_from": null,
+        "effective_to": null,
+        "provenance_tag": "project_assumption",
+        "verified": false,
+        "source": "Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation.",
+        "notes": "Also mirrored by MAX_REGULATORY_TRANSFER_USD in src/training/transaction_generator.py. Overridable per environment via CBDCLiquidityEnv(max_transfer_usd=...)."
+      }
+    ],
+    "ungrounded_result_count": 0
+  },
+  "GBR->PHL": {
+    "query": "Which rules, transfer limits or corridor restrictions apply to cross-border transfers from GBR to PHL?",
+    "search_type": "CHUNKS",
+    "dataset_name": "cbdc_knowledge_b01faa5afc8a",
+    "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+    "results": [
+      {
+        "text": "fact_id: global_max_single_transfer_usd\nrule_type: max_single_transfer_usd\nrule: A single cross-border transfer must not exceed 500,000.00 USD.\ncorridor scope: any country -> any country\neffective: unbounded to unbounded\nprovenance: project_assumption (verified: false)\nsource: Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation.\nnotes: Also mirrored by MAX_REGULATORY_TRANSFER_USD in src/training/transaction_generator.py. Overridable per environment via CBDCLiquidityEnv(max_transfer_usd=...).",
+        "chunk_id": "2dfd30b6-2919-5d75-8b5c-01749d02c27c",
+        "document_id": "b500b229-5efa-591a-bbea-0651ab1ff459",
+        "chunk_index": 0,
+        "dataset_name": "cbdc_knowledge_b01faa5afc8a",
+        "text_source": "chunk.text",
+        "fact_ids": [
+          "global_max_single_transfer_usd"
+        ],
+        "unknown_fact_ids": []
+      }
+    ],
+    "grounded_fact_ids": [
+      "global_max_single_transfer_usd"
+    ],
+    "grounded_facts": [
+      {
+        "fact_id": "global_max_single_transfer_usd",
+        "rule_type": "max_single_transfer_usd",
+        "value": 500000.0,
+        "scope": {
+          "sender": "*",
+          "receiver": "*"
+        },
+        "effective_from": null,
+        "effective_to": null,
+        "provenance_tag": "project_assumption",
+        "verified": false,
+        "source": "Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation.",
+        "notes": "Also mirrored by MAX_REGULATORY_TRANSFER_USD in src/training/transaction_generator.py. Overridable per environment via CBDCLiquidityEnv(max_transfer_usd=...)."
+      }
+    ],
+    "ungrounded_result_count": 0
+  },
+  "USA->IND": {
+    "query": "Which rules, transfer limits or corridor restrictions apply to cross-border transfers from USA to IND?",
+    "search_type": "CHUNKS",
+    "dataset_name": "cbdc_knowledge_b01faa5afc8a",
+    "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+    "results": [
+      {
+        "text": "fact_id: global_max_single_transfer_usd\nrule_type: max_single_transfer_usd\nrule: A single cross-border transfer must not exceed 500,000.00 USD.\ncorridor scope: any country -> any country\neffective: unbounded to unbounded\nprovenance: project_assumption (verified: false)\nsource: Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation.\nnotes: Also mirrored by MAX_REGULATORY_TRANSFER_USD in src/training/transaction_generator.py. Overridable per environment via CBDCLiquidityEnv(max_transfer_usd=...).",
+        "chunk_id": "2dfd30b6-2919-5d75-8b5c-01749d02c27c",
+        "document_id": "b500b229-5efa-591a-bbea-0651ab1ff459",
+        "chunk_index": 0,
+        "dataset_name": "cbdc_knowledge_b01faa5afc8a",
+        "text_source": "chunk.text",
+        "fact_ids": [
+          "global_max_single_transfer_usd"
+        ],
+        "unknown_fact_ids": []
+      }
+    ],
+    "grounded_fact_ids": [
+      "global_max_single_transfer_usd"
+    ],
+    "grounded_facts": [
+      {
+        "fact_id": "global_max_single_transfer_usd",
+        "rule_type": "max_single_transfer_usd",
+        "value": 500000.0,
+        "scope": {
+          "sender": "*",
+          "receiver": "*"
+        },
+        "effective_from": null,
+        "effective_to": null,
+        "provenance_tag": "project_assumption",
+        "verified": false,
+        "source": "Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation.",
+        "notes": "Also mirrored by MAX_REGULATORY_TRANSFER_USD in src/training/transaction_generator.py. Overridable per environment via CBDCLiquidityEnv(max_transfer_usd=...)."
+      }
+    ],
+    "ungrounded_result_count": 0
+  }
+}

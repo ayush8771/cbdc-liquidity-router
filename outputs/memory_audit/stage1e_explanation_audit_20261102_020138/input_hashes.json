@@ -1,0 +1,29 @@
+{
+  "inputs": [
+    {
+      "path": "outputs\\experiments\\stage1d_holdout_eval_20261101_225445\\per_transaction.csv",
+      "label": "stage1d_holdout_eval_20261101_225445/per_transaction.csv",
+      "sha256": "6bfb4966cb1c4c74890c2ef0c86b77973b744ffab8b827641af453678fa317c1",
+      "rows": 9000
+    },
+    {
+      "path": "outputs\\experiments\\stage1d_holdout_datedisjoint_eval_20261101_230534\\per_transaction.csv",
+      "label": "stage1d_holdout_datedisjoint_eval_20261101_230534/per_transaction.csv",
+      "sha256": "110ed84fce25bb7eca67f0695a5aea7c49b394e62bb692fcb1248df82471a893",
+      "rows": 9000
+    },
+    {
+      "path": "outputs\\experiments\\stage1d_holdout_datedisjoint_v2_eval_20261101_233252\\per_transaction.csv",
+      "label": "stage1d_holdout_datedisjoint_v2_eval_20261101_233252/per_transaction.csv",
+      "sha256": "5f9a637ae74dd5ff7d35668ac9f45989506b87b5b7c8d6e648646c0f8ce0252b",
+      "rows": 9000
+    },
+    {
+      "path": "outputs\\diagnostics\\failed_splitting_20261101_202140\\failed_transactions.csv",
+      "label": "failed_splitting_20261101_202140/failed_transactions.csv",
+      "sha256": "8873509b551eec124ba9e19be1467de3fb3a99236141e49e516d33afe3160d7c",
+      "rows": 51
+    }
+  ],
+  "verified_unchanged_after_audit": true
+}

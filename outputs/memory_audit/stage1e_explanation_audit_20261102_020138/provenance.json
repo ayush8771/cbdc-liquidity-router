@@ -1,0 +1,87 @@
+{
+  "workflow": "stage1e_explanation_audit",
+  "started_at": "20261102_020138",
+  "mode": "cognee",
+  "inputs": [
+    "outputs/experiments/stage1d_holdout_eval_20261101_225445/per_transaction.csv",
+    "outputs/experiments/stage1d_holdout_datedisjoint_eval_20261101_230534/per_transaction.csv",
+    "outputs/experiments/stage1d_holdout_datedisjoint_v2_eval_20261101_233252/per_transaction.csv",
+    "outputs/diagnostics/failed_splitting_20261101_202140/failed_transactions.csv"
+  ],
+  "top_k": 5,
+  "knowledge": {
+    "path": "C:\\Users\\Ayush\\OneDrive\\Desktop\\cbdc-liquidity-router\\data\\knowledge\\regulatory_facts.json",
+    "version": "2026-11-02.1",
+    "sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+    "fact_ids": [
+      "global_max_single_transfer_usd"
+    ]
+  },
+  "decision_authority": "StaticMemoryProvider",
+  "cognee_settings": {
+    "llm_provider": "ollama",
+    "llm_model": "llama3.1:8b",
+    "llm_endpoint": "http://localhost:11434/v1",
+    "llm_api_key_set": true,
+    "llm_api_key_placeholder": true,
+    "llm_instructor_mode": "json_schema_mode",
+    "embedding_provider": "ollama",
+    "embedding_model": "nomic-embed-text:latest",
+    "embedding_endpoint": "http://localhost:11434/api/embed",
+    "embedding_dimensions": 768,
+    "embedding_api_key_set": false,
+    "root": "C:\\Users\\Ayush\\OneDrive\\Desktop\\cbdc-liquidity-router\\.cognee",
+    "telemetry": false,
+    "dll_dir": "C:\\Program Files\\Git\\mingw64\\bin"
+  },
+  "cognee_ingest_manifest": {
+    "dataset_name": "cbdc_knowledge_b01faa5afc8a",
+    "knowledge_version": "2026-11-02.1",
+    "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+    "knowledge_path": "C:\\Users\\Ayush\\OneDrive\\Desktop\\cbdc-liquidity-router\\data\\knowledge\\regulatory_facts.json",
+    "fact_ids": [
+      "global_max_single_transfer_usd"
+    ],
+    "ingested_at_utc": "2026-11-01T20:31:38Z",
+    "settings": {
+      "llm_provider": "ollama",
+      "llm_model": "llama3.1:8b",
+      "llm_endpoint": "http://localhost:11434/v1",
+      "llm_api_key_set": true,
+      "llm_api_key_placeholder": true,
+      "llm_instructor_mode": "json_schema_mode",
+      "embedding_provider": "ollama",
+      "embedding_model": "nomic-embed-text:latest",
+      "embedding_endpoint": "http://localhost:11434/api/embed",
+      "embedding_dimensions": 768,
+      "embedding_api_key_set": false,
+      "root": "C:\\Users\\Ayush\\OneDrive\\Desktop\\cbdc-liquidity-router\\.cognee",
+      "telemetry": false,
+      "dll_dir": "C:\\Program Files\\Git\\mingw64\\bin"
+    }
+  },
+  "cognee_dataset": "cbdc_knowledge_b01faa5afc8a",
+  "git_head": "c3c07df7eb8cc93ec0d1ac7574a605dcdb3a510c",
+  "git_dirty": true,
+  "git_dirty_files": [
+    "?? run_stage1e_explanation_audit.py",
+    "?? src/memory/explanation_audit.py",
+    "?? tests/test_stage1e_audit.py"
+  ],
+  "code_sha256": {
+    "run_stage1e_explanation_audit.py": "df11bdeedf30c8b74486e69def2c92d2d3ef962970c9b0346ed1945aedabd2ae",
+    "src/memory/explanation_audit.py": "750cf17c9779b474197e64c5fe7af3fbea678ed2a83180b236d2b3b80e1f7deb",
+    "src/memory/cognee_adapter.py": "9971960069465321b72a773f7f10acdb38f49581bf22d68f07e167214a0afc77",
+    "src/memory/provider.py": "29c83ffde41c8b6c53c49d0feab02c4d3abc9dc830bd6f316eec44645ca15273",
+    "src/memory/knowledge.py": "c3f5466d6607c7425d098746479a76f9a519cd1e50d3315086355a652bcd6be8"
+  },
+  "code_git_blob": {
+    "run_stage1e_explanation_audit.py": "a33e921d178bbbf11ea837a31eaa3e7733b85eb8",
+    "src/memory/explanation_audit.py": "e2851135b38f26060154b29eff3582400825e8d2",
+    "src/memory/cognee_adapter.py": "1f73c14b95f45ecb0965395de2a7135d2c306116",
+    "src/memory/provider.py": "ce965fb124586ff92cb29294a7cc1615ca007e38",
+    "src/memory/knowledge.py": "c9bad0a4b65caf6ffa0d5f231d7b0f23d55395fe"
+  },
+  "python": "3.10.11",
+  "ppo_training_or_evaluation_run": false
+}
