@@ -2,7 +2,7 @@
 
 **Document type:** Long-term product and architecture roadmap  
 **Status:** Planning reference; not an implementation specification  
-**Current development focus:** Major Phase 1 — Offline AI/RL Foundation, especially internal Stage 1D validation
+**Current development focus:** Major Phase 1 — Offline AI/RL Foundation. Stage 1D is finalized; the next milestones are Stage 1F and Stage 1E, both planned and not started.
 
 > **Source-of-truth and scope rule:** This document describes the intended destination of the project. It does not override the live repository, root `CLAUDE.md`, or `docs/PROJECT_HANDOVER.md`. For current implementation details, completed work, approved constraints, and immediate tasks, inspect those sources and the code. Do not implement future-phase components merely because they appear in this roadmap. Each phase and major architectural decision must be planned and approved before implementation.
 
@@ -42,7 +42,7 @@ The project has **three major product phases**. Major Phase 1 contains internal 
 | **1A** | Environment and network foundation | Completed and regression-tested. Establishes the network, bridge representation, Gymnasium environment, and basic execution/reward path. |
 | **1B** | Data preprocessing and simulation | Completed and regression-tested. Includes historical financial/macro data processing, validation, and simulated bridge-state inputs. |
 | **1C** | 1D CNN temporal feature foundation | Completed and regression-tested. Provides the historical-window encoder used by the Stage 1D policy. |
-| **1D** | Dynamic state and PPO policy optimization | Implemented and under experimental validation. Includes dynamic bridge liquidity/congestion, capacity-aware execution, risk/cost inputs, masked Dirichlet PPO, baselines, metrics, and regime-based evaluation. |
+| **1D** | Dynamic state and PPO policy optimization | Implemented and experimentally evaluated (finalized 1 November 2026; see `docs/STAGE1D_RESULTS.md`). Includes dynamic bridge liquidity/congestion, capacity-aware execution, risk/cost inputs, masked Dirichlet PPO, baselines, metrics, regime-based evaluation, and an inference-time capacity projection. |
 | **1E** | Cognee / semantic memory integration | Planned. Add a controlled knowledge layer for structured relationships, regulatory information, corridor context, holidays, and relevant operational events. Define precisely how verified knowledge can affect policy context, constraints, or explanations. |
 | **1F** | Comprehensive backtesting and evaluation | Planned as the comprehensive evaluation milestone. Expand beyond implementation tests and initial Stage 1D comparisons to robust, reproducible evaluation across seeds, regimes, corridors, and simulation conditions. |
 
@@ -50,9 +50,20 @@ The exact completion status must be checked in the live repository. Basic evalua
 
 ### Important Stage 1D research status
 
-The first paired entropy experiment compared `ENTROPY_COEF=0.0` against `0.005` using seed 42. The experimental coefficient improved the recorded test metrics, including overall completion from 86% to 94% and `splitting_needed` completion from 70.83% to 87.5%. This is promising but is **not yet a robust or final conclusion**: it is one seed, the validation result was slightly lower for the entropy run, and the waterfall baseline remains stronger on the recorded test set.
+Stage 1D is finalized. The full results and output folders are in `docs/STAGE1D_RESULTS.md`.
 
-Next work should follow the current handover plan: preserve the seed-42 artifacts, run additional paired seeds, diagnose remaining failures, avoid selecting hyperparameters on the already examined test split, and arrange a fresh final holdout before making final claims.
+- **Entropy:** the paired multi-seed validation (seeds 42, 123 and 2026) found no consistent benefit from `ENTROPY_COEF=0.005`, so the default is 0.0. The earlier seed-42 test improvement did not replicate.
+- **Failures:** every diagnosed PPO failure is an over-allocation on one liquidity-limited bridge in GBR→PHL `splitting_needed` transactions.
+- **Capacity projection:** inference-time projection brings PPO's completion up to the waterfall's level, with no retraining.
+- **Reward against the waterfall is inconclusive.** It changes sign across holdouts.
+- **No independent out-of-time holdout was possible.** All data ends at 2025-09-30, the same date as the end of the test window.
+
+Open items for Stage 1F:
+- an independent out-of-time holdout, which requires extending the data;
+- calibration of the reward weights, and sensitivity analysis;
+- confidence intervals for the PPO-vs-waterfall comparison;
+- better coverage of `exceeds_combined`;
+- deciding whether capacity awareness should be learned rather than projected.
 
 ### Core Phase 1 architecture
 
@@ -69,7 +80,7 @@ Next work should follow the current handover plan: preserve the seed-42 artifact
 
 ### Optional advanced execution mechanics: AMM-style slippage
 
-The original project vision also includes modelling **non-linear execution slippage** in automated market-maker (AMM) liquidity pools. This is a valid future research direction, but it is **not implemented in the current Stage 1D environment** and is not a reason to change the current hard-capacity-clipping semantics during the active entropy-validation work.
+The original project vision also includes modelling **non-linear execution slippage** in automated market-maker (AMM) liquidity pools. This is a valid future research direction, but it is **not implemented in the current Stage 1D environment**, and it is not a reason to change the current hard-capacity-clipping semantics.
 
 If approved, treat AMM slippage as a separately scoped **Phase 1 simulator extension**, after the current Stage 1D policy and baseline experiments have been validated and before the final Phase 1 model/checkpoint is frozen for Phase 2. It may be developed alongside the broader Stage 1F evaluation work, but the simulator mechanics and training implications must be specified first.
 
@@ -238,7 +249,7 @@ Plan and implement, as appropriate:
 
 | Technology / mechanic | Are we planning to use it? | Planned place | Important qualification |
 |---|---|---|---|
-| **AMM non-linear slippage** | Yes, as an optional future simulator extension | Major Phase 1, after current Stage 1D validation and before the final model is frozen for Phase 2; coordinate with Stage 1F evaluation | Not implemented now; requires an approved pool/reserve and execution model. It complements hard capacity limits rather than silently replacing them. |
+| **AMM non-linear slippage** | Yes, as an optional future simulator extension | Major Phase 1, after Stage 1D (now finalized) and before the final model is frozen for Phase 2; coordinate with Stage 1F evaluation | Not implemented now; requires an approved pool/reserve and execution model. It complements hard capacity limits rather than silently replacing them. |
 | **Live WebSocket feeds** | Yes, where providers offer suitable live streaming interfaces | Major Phase 3 | Use polling/scheduled ingestion when a source does not offer WebSockets. Live FX/news does not equal live CBDC bridge-liquidity telemetry. |
 | **ScrapeGraphAI** | Yes, as a candidate extraction tool | Major Phase 3 data-ingestion pipeline | Extract public news/announcements into structured, traceable records; validate before Cognee or routing decisions use them. |
 
@@ -323,4 +334,4 @@ Do not treat it as a command to implement future features. For an implementation
 4. Confirm the relevant design decisions and acceptance criteria with the developer.
 5. Implement only the explicitly approved scope.
 
-**Current intended focus remains Major Phase 1 / Stage 1D validation unless the developer explicitly changes the priority.**
+**Current intended focus remains Major Phase 1. Stage 1D is finalized, and the next step (Stage 1F or Stage 1E) is chosen by the developer.**

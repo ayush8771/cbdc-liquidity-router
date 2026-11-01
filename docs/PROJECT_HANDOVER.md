@@ -2,8 +2,10 @@
 
 **Handover prepared:** 31 October 2026  
 **Repository folder previously used:** `cbdc-liquidity-router`  
-**Current milestone:** Stage 1D implementation and experimental validation  
+**Current milestone:** Stage 1D finalized (1 November 2026); Stages 1E–1F planned, not started\
 **Primary handover target:** Claude (web) + Claude Code working directly in the repository
+
+> **Status update (1 November 2026): Stage 1D finalized.** Sections 1–8 below are the original handover and are kept as a historical record. The finalized Stage 1D results are in [section 8A](#8a-stage-1d-finalized-results-1-november-2026) and in `docs/STAGE1D_RESULTS.md`, which is authoritative for all numbers. Sections 6, 9 and 14 have been updated to the current state.
 
 > **Important source-of-truth rule:** This document summarizes the project state established in prior development conversations and the latest experiment output supplied by the developer. It is not a substitute for inspecting the live repository. The receiving agent must first inspect the actual branch, files, git history, data, scripts, and tests. Where this document says “known”, confirm the implementation still matches before making a change.
 
@@ -156,7 +158,9 @@ Previous inspection found that the environment calls `lagged_real_cost_baseline_
 
 ## 6. Test status and known warning
 
-Latest recorded full-suite result after adding two entropy tests:
+**Current (1 November 2026):** `python -m pytest tests/` → **111 passed, 9 warnings**. The breakdown is Stage 1A 17, Stage 1B 26, Stage 1C 13, Stage 1D 35, and capacity projection 20 (`tests/test_capacity_projection.py`). In the Stage 1D file, the entropy test now asserts `ENTROPY_COEF == 0.0` and `EXPERIMENTAL_ENTROPY_COEF == 0.005`, and the file still has 35 tests. The 9 warnings are unchanged (pandas `pct_change`).
+
+Historical record — full-suite result after adding the two entropy tests:
 
 ```text
 91 passed, 9 warnings
@@ -318,9 +322,59 @@ This makes the test improvement promising but not conclusive. It is a single-see
 ### Experimental conclusion
 Classify `ENTROPY_COEF=0.005` as a **promising candidate requiring multi-seed robustness validation**, not as an established improvement or permanent Stage 1D default. Do not commit it as the new accepted setting solely on the basis of seed 42.
 
+*(Superseded by section 8A: the multi-seed validation found no consistent benefit, and the default is 0.0.)*
+
+---
+
+## 8A. Stage 1D finalized results (1 November 2026)
+
+All numbers come from `docs/STAGE1D_RESULTS.md`, which also cites the output folders. If they disagree, that document and its folders are authoritative.
+
+### Entropy coefficient — resolved
+- **Experiment:** paired multi-seed, seeds 42, 123 and 2026 × {0.0, 0.005}, compared on **validation**. Folder: `outputs/experiments/stage1d_entropy_multiseed_20261101_180551/`.
+- **Mean reward:** 0.8989 ± 0.0037 (0.0) versus 0.8982 ± 0.0027 (0.005), a difference of −0.0007 ± 0.0014.
+- **Completion:** 0.950 versus 0.947.
+- **Conclusion:** no consistent benefit. The default is `ENTROPY_COEF = 0.0`; `EXPERIMENTAL_ENTROPY_COEF = 0.005` is kept for comparison only.
+- **Reproducibility:** retraining seed 42 did not reproduce the original run bit-for-bit (best validation reward 0.895447 versus 0.896450).
+
+### Failure diagnosis — completed
+- **Folder:** `outputs/diagnostics/failed_splitting_20261101_202140/` (authoritative).
+- **Scope:** 51 failed rows across 8 checkpoints. All of them are `splitting_needed` transactions in **GBR→PHL**.
+- **Mechanism:** every failure is an over-allocation. At least one bridge was asked for more than its liquidity, and the excess was clipped and not redistributed. None exceeded combined liquidity. The clipped excess had a median of 5.13% of the amount.
+- **Unrouted-amount accounting:** the environment counts unrouted as *requested − executed*. An all-zero action therefore scores 0.0. PPO's actions sum to 1, so PPO cannot exploit this.
+
+### Capacity projection — completed
+- **What it is:** `src/training/capacity_projection.py`, an inference-time Euclidean projection onto per-bridge liquidity caps. It involves no retraining and no change to the model, environment or reward.
+- **Validation result:** completion rises from 0.948 to 1.000, and reward from 0.89853 to 0.89893. The waterfall scores 0.88009 on reward. These validation figures are optimistic, because validation also selected each checkpoint.
+- **Holdout result:** completion matches the waterfall on all holdouts, an increase of 3.6 to 6.8 points.
+
+### Holdout evaluations — completed, with limitations
+- **Holdouts:** three new synthetic holdouts (seeds 20261102, 20261103 and 20261104), plus overlap-sensitivity subsets. See `outputs/experiments/stage1d_holdout_README.md`.
+- **Reward against the waterfall is inconclusive.** Projected PPO minus waterfall ranges from −0.0033 to +0.0051 across the five holdout views, and projected PPO wins on 2 to 6 of the 6 checkpoints.
+- **No independent out-of-time holdout was possible.** The data ends at 2025-09-30, which is also the end of the test window. The holdouts share that period, and most rows' 30-day history windows overlap already-examined dates.
+- **`exceeds_combined`** has only 0 to 3 rows per holdout, which is too few to evaluate.
+
 ---
 
 ## 9. Next work: recommended order
+
+> **Status (1 November 2026):** Priorities 0–3 and 5 below are **done** (see section 8A).
+> - Priority 0: the audit is complete.
+> - Priority 1: the artifacts are preserved and committed.
+> - Priority 2: the multi-seed experiment is done.
+> - Priority 3: the failures are diagnosed.
+> - Priority 5: holdouts were evaluated, but a genuinely independent out-of-time holdout was **not** possible.
+>
+> Priority 4, a sweep of the entropy coefficient, was not pursued, because multi-seed validation found no benefit from 0.005.
+>
+> Remaining work moves to **Stage 1F**:
+> - an independent out-of-time holdout, which requires extending the data past 2025-09-30;
+> - calibration of the reward weights (all λ are 1.0 placeholders), and sensitivity analysis;
+> - confidence intervals for the PPO-vs-waterfall comparison;
+> - better coverage of `exceeds_combined`;
+> - deciding whether capacity awareness should be learned rather than projected.
+>
+> Stage 1E (Cognee) is planned. None of this has been started without approval. The priorities below are kept as the historical plan.
 
 ### Priority 0 — Establish the actual repo state (first task for Claude Code)
 Before modifying anything:
@@ -495,4 +549,13 @@ The first audit should provide evidence-backed answers to:
 
 ## 14. Current status in one paragraph
 
-Stage 1D has a previously passing 91-test repository suite (17/26/13/35 across Stages 1A–1D), dynamic bridge state and reward wiring, a masked Dirichlet PPO policy, two hand-crafted baselines, and regime-based evaluation. The first paired entropy experiment on seed 42 compared coefficients 0.0 and 0.005 on a 500/100/100 train/validation/test split. Entropy 0.005 raised test completion from 86% to 94%, lowered total unrouted value from about $451.7K to $92.6K, and raised `splitting_needed` completion from 70.83% to 87.5%. It still trails the waterfall policy, has slightly lower best validation reward, and is only one seed. The next responsible step is to audit the live repository and reproduce paired runs with additional seeds before deciding whether 0.005 should become the default.
+**Current (1 November 2026):** Stage 1D is finalized.
+
+- **Components:** dynamic bridge state, a masked Dirichlet PPO policy, two baselines, regime-based evaluation, and an inference-time capacity projection. The test suite passes 111 tests (17/26/13/35/20).
+- **Entropy:** the paired multi-seed validation (seeds 42, 123 and 2026) found no consistent benefit from 0.005, so the default is `ENTROPY_COEF = 0.0`.
+- **Failures:** every diagnosed PPO failure is a small over-allocation on one liquidity-limited bridge, with no redistribution, in GBR→PHL `splitting_needed` transactions.
+- **Capacity projection:** inference-time projection brings PPO's completion up to the waterfall's on validation and on every holdout. PPO's reward advantage over the waterfall is **inconclusive**: it ranges from −0.0033 to +0.0051 depending on the holdout.
+- **Holdout limitation:** no independent out-of-time holdout was possible, because the data ends at 2025-09-30 and the holdouts share the test period.
+- **Next:** Stage 1F (comprehensive evaluation, including the items in section 9) and Stage 1E (Cognee). Neither has been started.
+
+*Historical (31 October 2026):* Stage 1D had a previously passing 91-test repository suite (17/26/13/35 across Stages 1A–1D), dynamic bridge state and reward wiring, a masked Dirichlet PPO policy, two hand-crafted baselines, and regime-based evaluation. The first paired entropy experiment on seed 42 compared coefficients 0.0 and 0.005 on a 500/100/100 train/validation/test split. Entropy 0.005 raised test completion from 86% to 94%, lowered total unrouted value from about $451.7K to $92.6K, and raised `splitting_needed` completion from 70.83% to 87.5%. It still trailed the waterfall policy, had a slightly lower best validation reward, and was only one seed.
