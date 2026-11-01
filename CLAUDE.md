@@ -67,3 +67,27 @@ Known Stage 1D test-regime counts in the recorded entropy experiment: 48 `splitt
 
 ## Current research status
 The first paired entropy experiment (seed 42; entropy coefficient 0.0 versus 0.005) showed promising improvements on the existing 100-row test split, especially `splitting_needed`, but it is a single-seed result. Do not promote 0.005 to the permanent default or claim robust superiority until paired multi-seed validation is complete. See `docs/PROJECT_HANDOVER.md` for the recorded measurements and next-step protocol.
+
+## Long-Term Project Roadmap
+
+Refer to `docs/FUTURE_PHASES_ROADMAP.md` for the complete
+three-phase product architecture and long-term vision.
+
+The three major phases are:
+
+1. Major Phase 1 — Offline AI/RL Foundation
+   - Internal stages 1A–1F.
+2. Major Phase 2 — Full-Stack Web Orchestration.
+3. Major Phase 3 — Real-Time Streaming & Production.
+
+Important distinctions:
+
+- Stage 1E (Cognee) belongs to Major Phase 1.
+- AMM-style slippage is a planned optional Phase 1 simulator extension.
+- ScrapeGraphAI and live WebSocket feeds are planned for Major Phase 3.
+
+The roadmap is a planning reference, not an instruction to
+implement all future features immediately.
+
+Always follow the current repository state, approved scope,
+and docs/PROJECT_HANDOVER.md when performing implementation work.
