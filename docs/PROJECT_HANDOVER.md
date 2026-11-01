@@ -2,9 +2,11 @@
 
 **Handover prepared:** 31 October 2026  
 **Repository folder previously used:** `cbdc-liquidity-router`  
-**Current milestone:** Stage 1D finalized (1 November 2026); Stages 1E–1F planned, not started\
+**Current milestone:** Stage 1D finalized (1 November 2026); Stage 1E complete as an infrastructure milestone (2 November 2026, knowledge population deferred); Stage 1F planned, not started\
 **Primary handover target:** Claude (web) + Claude Code working directly in the repository
 
+> **Status update (2 November 2026): Stage 1E complete as an infrastructure milestone** — see [section 8B](#8b-stage-1e-cognee--semantic-memory-2-november-2026) and `docs/STAGE1E_MEMORY.md`.
+>
 > **Status update (1 November 2026): Stage 1D finalized.** Sections 1–8 below are the original handover and are kept as a historical record. The finalized Stage 1D results are in [section 8A](#8a-stage-1d-finalized-results-1-november-2026) and in `docs/STAGE1D_RESULTS.md`, which is authoritative for all numbers. Sections 6, 9 and 14 have been updated to the current state.
 
 > **Important source-of-truth rule:** This document summarizes the project state established in prior development conversations and the latest experiment output supplied by the developer. It is not a substitute for inspecting the live repository. The receiving agent must first inspect the actual branch, files, git history, data, scripts, and tests. Where this document says “known”, confirm the implementation still matches before making a change.
@@ -158,7 +160,9 @@ Previous inspection found that the environment calls `lagged_real_cost_baseline_
 
 ## 6. Test status and known warning
 
-**Current (1 November 2026):** `python -m pytest tests/` → **111 passed, 9 warnings**. The breakdown is Stage 1A 17, Stage 1B 26, Stage 1C 13, Stage 1D 35, and capacity projection 20 (`tests/test_capacity_projection.py`). In the Stage 1D file, the entropy test now asserts `ENTROPY_COEF == 0.0` and `EXPERIMENTAL_ENTROPY_COEF == 0.005`, and the file still has 35 tests. The 9 warnings are unchanged (pandas `pct_change`).
+**Current (2 November 2026):** `python -m pytest tests/` → **177 passed, 9 warnings**. The breakdown is 1A 17, 1B 26, 1C 13, 1D 35, capacity projection 20, Stage 1E 18, Stage 1E Cognee adapter 33 (mocked) and Stage 1E audit 15 (mocked).
+
+Previous (1 November 2026): `python -m pytest tests/` → **111 passed, 9 warnings**. The breakdown is Stage 1A 17, Stage 1B 26, Stage 1C 13, Stage 1D 35, and capacity projection 20 (`tests/test_capacity_projection.py`). In the Stage 1D file, the entropy test now asserts `ENTROPY_COEF == 0.0` and `EXPERIMENTAL_ENTROPY_COEF == 0.005`, and the file still has 35 tests. The 9 warnings are unchanged (pandas `pct_change`).
 
 Historical record — full-suite result after adding the two entropy tests:
 
@@ -356,6 +360,23 @@ All numbers come from `docs/STAGE1D_RESULTS.md`, which also cites the output fol
 
 ---
 
+## 8B. Stage 1E Cognee / semantic memory (2 November 2026)
+
+Complete as an **infrastructure milestone**. `docs/STAGE1E_MEMORY.md` is authoritative.
+
+- **Commits:** `71b800c` (deterministic memory foundation), `c3c07df` (Cognee adapter) and `0fe3152` (explanation and audit workflow).
+- **Feasibility:** decided only by `StaticMemoryProvider`, reading the deterministic knowledge base `data/knowledge/regulatory_facts.json`. The environment's memory wrapper behaves exactly as the pre-1E stub did, verified on more than 2,000 rows.
+- **Cognee:** used for explanations and audit only, grounded to known fact IDs. It is never imported by the environment, training, evaluation or the model.
+- **Live verification** with local Ollama (`llama3.1:8b`, `nomic-embed-text`), using the adapter's defaults:
+  - the smoke test passed 7 of 7 checks;
+  - the audit covered 1,522 transactions: 3 of 3 corridors grounded, 1,500 of 1,500 decisions consistent with the recorded Stage 1D outcomes, and input files verified unchanged.
+- **Deferred:**
+  - the knowledge base holds only the assumed $500K cap (`project_assumption`, unverified). Real, cited regulatory and operational facts need sources;
+  - retrieval quality is unmeasured;
+  - letting dated or corridor-scoped facts affect feasibility requires an approved environment change.
+
+---
+
 ## 9. Next work: recommended order
 
 > **Status (1 November 2026):** Priorities 0–3 and 5 below are **done** (see section 8A).
@@ -374,7 +395,7 @@ All numbers come from `docs/STAGE1D_RESULTS.md`, which also cites the output fol
 > - better coverage of `exceeds_combined`;
 > - deciding whether capacity awareness should be learned rather than projected.
 >
-> Stage 1E (Cognee) is planned. None of this has been started without approval. The priorities below are kept as the historical plan.
+> Stage 1E (Cognee) is complete as an infrastructure milestone (section 8B); its knowledge population is deferred. None of the Stage 1F work has been started without approval. The priorities below are kept as the historical plan.
 
 ### Priority 0 — Establish the actual repo state (first task for Claude Code)
 Before modifying anything:
@@ -549,13 +570,14 @@ The first audit should provide evidence-backed answers to:
 
 ## 14. Current status in one paragraph
 
-**Current (1 November 2026):** Stage 1D is finalized.
+**Current (2 November 2026):** Stage 1D is finalized, and Stage 1E is complete as an infrastructure milestone.
 
-- **Components:** dynamic bridge state, a masked Dirichlet PPO policy, two baselines, regime-based evaluation, and an inference-time capacity projection. The test suite passes 111 tests (17/26/13/35/20).
+- **Components:** dynamic bridge state, a masked Dirichlet PPO policy, two baselines, regime-based evaluation, and an inference-time capacity projection. The test suite passes 177 tests (17/26/13/35/20, plus 18/33/15 for Stage 1E).
 - **Entropy:** the paired multi-seed validation (seeds 42, 123 and 2026) found no consistent benefit from 0.005, so the default is `ENTROPY_COEF = 0.0`.
 - **Failures:** every diagnosed PPO failure is a small over-allocation on one liquidity-limited bridge, with no redistribution, in GBR→PHL `splitting_needed` transactions.
 - **Capacity projection:** inference-time projection brings PPO's completion up to the waterfall's on validation and on every holdout. PPO's reward advantage over the waterfall is **inconclusive**: it ranges from −0.0033 to +0.0051 depending on the holdout.
 - **Holdout limitation:** no independent out-of-time holdout was possible, because the data ends at 2025-09-30 and the holdouts share the test period.
-- **Next:** Stage 1F (comprehensive evaluation, including the items in section 9) and Stage 1E (Cognee). Neither has been started.
+- **Stage 1E (2 November 2026):** complete as an infrastructure milestone. It adds a deterministic knowledge base and `StaticMemoryProvider` (the feasibility authority), plus a Cognee adapter and audit for explanations only, verified live with Ollama. The test suite now passes 177 tests. Real knowledge population is deferred.
+- **Next:** Stage 1F (comprehensive evaluation, including the items in section 9). It has not been started.
 
 *Historical (31 October 2026):* Stage 1D had a previously passing 91-test repository suite (17/26/13/35 across Stages 1A–1D), dynamic bridge state and reward wiring, a masked Dirichlet PPO policy, two hand-crafted baselines, and regime-based evaluation. The first paired entropy experiment on seed 42 compared coefficients 0.0 and 0.005 on a 500/100/100 train/validation/test split. Entropy 0.005 raised test completion from 86% to 94%, lowered total unrouted value from about $451.7K to $92.6K, and raised `splitting_needed` completion from 70.83% to 87.5%. It still trailed the waterfall policy, had a slightly lower best validation reward, and was only one seed.

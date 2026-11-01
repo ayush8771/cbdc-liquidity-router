@@ -239,6 +239,17 @@ def test_memory_modules_do_not_import_cognee():
     assert out == "False"
 
 
+def test_generator_cap_matches_knowledge_base_cap():
+    """The Stage 1D transaction generator hard-codes the regulatory cap it samples under.
+    It must equal the knowledge-base cap the environment enforces, or generated data would
+    silently stop matching the feasibility check."""
+    from src.training.transaction_generator import MAX_REGULATORY_TRANSFER_USD
+    kb_caps = [f.value for f in load_knowledge().facts
+               if f.rule_type == "max_single_transfer_usd" and f.is_global and f.is_undated]
+    assert kb_caps == [MAX_REGULATORY_TRANSFER_USD], (kb_caps, MAX_REGULATORY_TRANSFER_USD)
+    assert CogneeMemoryLayer().constraints["max_single_transfer_usd"] == MAX_REGULATORY_TRANSFER_USD
+
+
 def test_seed_file_round_trips_through_fact_serialization():
     raw = json.loads(open(DEFAULT_KNOWLEDGE_PATH, encoding="utf-8").read())
     kb = load_knowledge()

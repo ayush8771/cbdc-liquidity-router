@@ -24,16 +24,16 @@ The research objective is to determine whether an RL agent can learn **liquidity
 | 1B | Data Preprocessing & Simulation | ✅ Complete |
 | 1C | 1D CNN Feature Extraction | ✅ Complete |
 | 1D | Dynamic State & PPO Policy Optimization | ✅ Implemented and experimentally evaluated (see [Stage 1D](#stage-1d--dynamic-state--ppo-policy-optimization)) |
-| 1E | Cognee / Semantic Memory | ⏳ Planned |
+| 1E | Cognee / Semantic Memory | ✅ Complete as an infrastructure milestone; real knowledge population deferred (see [Stage 1E](#stage-1e--cognee--semantic-memory)) |
 | 1F | Comprehensive Backtesting / Evaluation | ⏳ Planned |
 
-**111/111 tests passing** across Stages 1A–1D and the capacity projection (see [Validation Status](#validation-status)).
+**177/177 tests passing** across Stages 1A–1E and the capacity projection (see [Validation Status](#validation-status)).
 
 ## Architecture
 
 The project is organized into three **Major Phases**, distinct from the internal **Stage 1A–1F** numbering below — these are two separate schemes and should not be conflated:
 
-- **Major Phase 1 — Offline AI/RL Foundation**: Stages 1A–1F make up the offline AI/RL foundation. Stages 1A–1D are implemented and validated; Stages 1E–1F are planned.
+- **Major Phase 1 — Offline AI/RL Foundation**: Stages 1A–1F make up the offline AI/RL foundation. Stages 1A–1D are implemented and validated; Stage 1E is complete as an infrastructure milestone; Stage 1F is planned.
 - **Major Phase 2 — Full-Stack Web Orchestration**: a future FastAPI/React application layer. Not started.
 - **Major Phase 3 — Real-Time Streaming & Production**: future live data feeds and production inference. Not started.
 
@@ -171,6 +171,16 @@ The Stage 1C wrapper is a **validated feature/observation construction path**. I
 - **PPO vs waterfall on reward is inconclusive.** Across five holdout views, projected PPO minus the waterfall ranged from −0.0033 to +0.0051. Projected PPO beat the waterfall on between 2 and 6 of the 6 checkpoints, depending on which holdout was drawn.
 - **No independent out-of-time holdout was possible.** All data ends at 2025-09-30, the same date as the end of the test window. The holdouts share that period, and most rows' 30-day history windows overlap the history of already-examined dates.
 
+## Stage 1E — Cognee / Semantic Memory
+
+Status: **complete as an infrastructure milestone.** Populating the knowledge base with real regulatory knowledge is **deferred**. Full details are in [`docs/STAGE1E_MEMORY.md`](docs/STAGE1E_MEMORY.md).
+
+- **Deterministic knowledge base** (`data/knowledge/regulatory_facts.json`): versioned facts, each with provenance, a `verified` flag and a source; the file's SHA-256 is recorded. It is read by `StaticMemoryProvider`, the **only authority for feasibility**. The environment's memory wrapper behaves exactly as the pre-1E stub did, which is verified on more than 2,000 dataset rows.
+- **Cognee adapter (optional; explanations only):** lazily imported and never used by the environment, training, evaluation or the model. It ingests facts, retrieves them as chunks, and grounds every result to a known fact ID. Cognee output can't change a decision.
+- **Read-only audit** (`run_stage1e_explanation_audit.py`): template-based explanations of Stage 1D results, with fact provenance and knowledge hashes. The audit verifies its input files are unchanged.
+- **Verified live** with local Ollama (`llama3.1:8b`, `nomic-embed-text`): the smoke test passed 7 of 7 checks. The audit covered 1,522 transactions: 3 of 3 corridors grounded, and 1,500 of 1,500 decisions consistent with the recorded Stage 1D outcomes.
+- **Current content:** the knowledge base contains only the assumed $500K cap, so the live results validate the workflow, not retrieval quality.
+
 ## Data Provenance
 
 | Category | Examples |
@@ -193,10 +203,12 @@ cbdc-liquidity-router/
 ├── run_holdout_evaluation.py          # Stage 1D: fresh synthetic holdout evaluation
 ├── run_holdout_overlap_analysis.py    # Stage 1D: overlap sensitivity + date-disjoint holdout
 ├── run_holdout_disjoint_v2.py         # Stage 1D: holdout excluding test + earlier holdout dates
+├── run_cognee_smoke_test.py          # Stage 1E: manual live Cognee smoke test (--yes)
+├── run_stage1e_explanation_audit.py  # Stage 1E: read-only explanation & audit of Stage 1D results
 ├── analyze_training_boundaries.py, policy_gradient_capacity_diagnostic.py,
 │   splitting_reward_analysis.py       # earlier Stage 1D analysis scripts
 ├── docs/                    # PROJECT_HANDOVER.md, FUTURE_PHASES_ROADMAP.md, STAGE1D_RESULTS.md,
-│                            # FAILED_SPLITTING_INVESTIGATION_PLAN.md
+│                            # FAILED_SPLITTING_INVESTIGATION_PLAN.md, STAGE1E_MEMORY.md
 ├── data/
 │   ├── structured/          # bridge_network.csv (9 venues), transaction_requests.csv, countries.csv
 │   ├── raw/                 # WDI, CPI, RPW, FRED source files (see Dataset Requirements)
@@ -214,7 +226,9 @@ cbdc-liquidity-router/
 │   ├── training/            # Stage 1D: ppo_train.py, evaluate.py, baselines.py, metrics.py,
 │   │                        # transaction_generator.py, cost_baseline.py, risk_proxy.py,
 │   │                        # capacity_projection.py
-│   ├── memory/              # cognee_layer.py (regulatory stub, not real Cognee)
+│   ├── memory/              # Stage 1E: knowledge.py, provider.py (StaticMemoryProvider),
+│   │                        # cognee_layer.py (environment wrapper), cognee_adapter.py,
+│   │                        # explanation_audit.py
 │   └── preprocessing/       # Stage 1B: wdi.py, cpi.py, rpw.py, macro_risk.py, normalization.py,
 │                            # synthetic_generator.py, synthetic_bridge_expansion.py,
 │                            # are_mex_fallback.py, country_reference.py, fx_daily.py, split.py,
@@ -224,7 +238,10 @@ cbdc-liquidity-router/
     ├── test_stage1b.py
     ├── test_stage1c.py
     ├── test_stage1d.py
-    └── test_capacity_projection.py
+    ├── test_capacity_projection.py
+    ├── test_stage1e.py
+    ├── test_stage1e_cognee.py
+    └── test_stage1e_audit.py
 ```
 
 ## Dataset Requirements
@@ -258,6 +275,11 @@ python -m pytest tests/
 python run_entropy_multiseed.py                # trains 6 PPO runs; compares on validation
 python run_capacity_projection_experiment.py   # evaluation only, validation split
 python run_holdout_evaluation.py               # evaluation only, synthetic holdout
+
+# Stage 1E memory (provider settings: docs/STAGE1E_MEMORY.md)
+python run_stage1e_explanation_audit.py --static-only   # no LLM/provider needed
+python run_stage1e_explanation_audit.py --yes           # with Cognee retrieval
+python run_cognee_smoke_test.py --yes                   # live Cognee smoke test
 ```
 
 The holdout and projection scripts load existing checkpoints and do not train.
@@ -271,7 +293,10 @@ The holdout and projection scripts load existing checkpoints and do not train.
 | Stage 1C | 13/13 passed |
 | Stage 1D | 35/35 passed |
 | Capacity projection | 20/20 passed |
-| **Total** | **111/111 passed** |
+| Stage 1E memory | 18/18 passed |
+| Stage 1E Cognee adapter (mocked) | 33/33 passed |
+| Stage 1E audit (mocked) | 15/15 passed |
+| **Total** | **177/177 passed** |
 
 The command is `python -m pytest tests/`. The 9 known warnings are pandas `pct_change` FutureWarnings from `macro_risk.py`.
 
@@ -288,10 +313,11 @@ These tests validate **implementation mechanics and regression safety** — corr
 - **Too few `exceeds_combined` examples:** they are rare (0–3 per 500-row holdout) because of the $500K regulatory cap.
 - The macro-risk proxy is a coarse, assumption-laden signal, not a validated volatility forecast.
 - **Small scale:** 3 corridors and 6 checkpoints from 3 seeds; observed PPO failures concentrate in one corridor (GBR→PHL).
+- **The Stage 1E knowledge base has no real content yet.** It holds only the assumed $500K cap (`project_assumption`, unverified), so Cognee retrieval quality is unmeasured. Populating it with real, cited regulatory knowledge is deferred (see `docs/STAGE1E_MEMORY.md`).
 
 ## Future Roadmap
 
-- **Stage 1E — Cognee / Semantic Memory**: integrate a real knowledge/memory layer (regulatory rules, corridor relationships, holidays, operational events) beyond the current hardcoded stub, and define exactly how verified knowledge may affect policy context, constraints or explanations.
+- **Stage 1E — deferred knowledge work**: populate the knowledge base with real, cited regulatory and operational facts (transfer caps, restricted corridors, payment-system holidays, operational events), measure retrieval quality, and decide through an approved environment change whether dated or corridor-scoped facts may affect feasibility.
 - **Stage 1F — Comprehensive Backtesting / Evaluation**: robust, reproducible evaluation across seeds, regimes, corridors and simulation conditions. Open items carried over from Stage 1D:
   - a genuinely independent out-of-time holdout, which requires extending the data past 2025-09-30;
   - calibration of the reward weights, and sensitivity analysis;
@@ -301,7 +327,7 @@ These tests validate **implementation mechanics and regression safety** — corr
 - **Major Phase 2 — Full-Stack Web Orchestration**: FastAPI backend, React dashboard.
 - **Major Phase 3 — Real-Time Streaming & Production**: live data feeds, production inference.
 
-None of Stages 1E–1F or Major Phases 2–3 is implemented yet. See `docs/FUTURE_PHASES_ROADMAP.md`.
+Stage 1F and Major Phases 2–3 are not implemented yet; Stage 1E's knowledge population is deferred. See `docs/FUTURE_PHASES_ROADMAP.md`.
 
 ## Reproducibility
 
