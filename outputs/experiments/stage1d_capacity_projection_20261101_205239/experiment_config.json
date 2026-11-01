@@ -1,0 +1,85 @@
+{
+  "experiment": "stage1d_capacity_projection_validation",
+  "policies": [
+    "ppo_original",
+    "ppo_projected",
+    "liquidity_waterfall"
+  ],
+  "projection": "Euclidean projection onto {0<=x_i<=liquidity_i/amount on feasible slots, sum x = 1}; if combined capacity < amount, x_i = cap_i",
+  "split": "validation",
+  "validation_csv": "data/processed/stage1d_transactions_validation.csv",
+  "validation_sha256": "8c960ae0435bf0b98988e4508bb73855dc6ed462210dc93932936e81731c1335",
+  "test_split_used": false,
+  "training_performed": false,
+  "ppo_action_mode": "deterministic (normalized Dirichlet concentration)",
+  "checkpoints": [
+    {
+      "label": "seed42_entropy000",
+      "seed": 42,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "3502639c1884e15d54dd115fba370d81234776b884433baf6fa8f60b8e07c48f",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\validation_metrics.json"
+    },
+    {
+      "label": "seed42_entropy005",
+      "seed": 42,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "6e813f763e662028bd37352759fe2b77041b06370fcf2b6950ac2dc7897598bf",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\validation_metrics.json"
+    },
+    {
+      "label": "seed123_entropy000",
+      "seed": 123,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "9a57f635b8d048de4af9857deae1ceb26fff4e2816381fb1f50af95cf6d406b5",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\validation_metrics.json"
+    },
+    {
+      "label": "seed123_entropy005",
+      "seed": 123,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "228761c97c21715f6afb84c14cfd71ce3111a5fc339bc0b13208d3dc41b25196",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\validation_metrics.json"
+    },
+    {
+      "label": "seed2026_entropy000",
+      "seed": 2026,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "10a38dc26e6bb954cc020786e835a7d4be28586bcb722e19e9717fa30b28a423",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\validation_metrics.json"
+    },
+    {
+      "label": "seed2026_entropy005",
+      "seed": 2026,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "65c6a739405d8281f4457977c13b3a323081d73f9d96a89a08008b6686644875",
+      "saved_metrics": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\validation_metrics.json"
+    }
+  ],
+  "git_head": "f35146959feca7ede802338b17a33bad0edba521",
+  "git_dirty": true,
+  "git_dirty_files": [
+    "?? outputs/experiments/stage1d_capacity_projection_20261101_205047/",
+    "?? run_capacity_projection_experiment.py",
+    "?? src/training/capacity_projection.py",
+    "?? tests/test_capacity_projection.py"
+  ],
+  "code_sha256": {
+    "run_capacity_projection_experiment.py": "4bb8559d04d53de9bd8c6f0d783ac3783cacc8e57c1ced91356264f98a938731",
+    "src/training/capacity_projection.py": "f855e8ea82f9e66dfac184b6ebd157a889b8fa09655acbbae33874c6e2a79bfe"
+  },
+  "code_git_blob": {
+    "run_capacity_projection_experiment.py": "b704a9f8a7cf0f827d242d6f0d5813deef3acec2",
+    "src/training/capacity_projection.py": "384b565702acf03b3fdc5a40b6209d8638023f71"
+  },
+  "python": "3.10.11",
+  "torch": "2.13.0+cu130",
+  "device": "cuda",
+  "started_at": "20261101_205239"
+}
