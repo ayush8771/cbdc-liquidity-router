@@ -1,0 +1,274 @@
+{
+  "experiment": "stage1d_holdout_datedisjoint_v2_evaluation",
+  "started_at": "20261101_233252",
+  "training_performed": false,
+  "tuning_performed": false,
+  "git_head": "55a81dd71aeb39d1ea539f5b2ca35221c89dcf11",
+  "git_dirty": true,
+  "git_dirty_files": [
+    "?? data/processed/stage1d_transactions_holdout_datedisjoint_seed20261103.csv",
+    "?? data/processed/stage1d_transactions_holdout_datedisjoint_v2_seed20261104.csv",
+    "?? data/processed/stage1d_transactions_holdout_seed20261102.csv",
+    "?? outputs/experiments/stage1d_holdout_datedisjoint_eval_20261101_230534/",
+    "?? outputs/experiments/stage1d_holdout_datedisjoint_v2_eval_20261101_233252/",
+    "?? outputs/experiments/stage1d_holdout_eval_20261101_223302/",
+    "?? outputs/experiments/stage1d_holdout_eval_20261101_224109/",
+    "?? outputs/experiments/stage1d_holdout_eval_20261101_225445/",
+    "?? outputs/experiments/stage1d_holdout_sensitivity_20261101_230534/",
+    "?? run_holdout_disjoint_v2.py",
+    "?? run_holdout_evaluation.py",
+    "?? run_holdout_overlap_analysis.py"
+  ],
+  "code_sha256": {
+    "run_holdout_overlap_analysis.py": "186b14c522a0b36489e1d524cbd4a3a9e2b7bb4ea667b71c9790bd263917adf3",
+    "run_holdout_evaluation.py": "aec2256790f610d195e9b6dfa6308d5f5978a21e89b44296135c76482147200f",
+    "src/training/capacity_projection.py": "aac2848cd994956db7ee372358e9337359cbfc36d713cf8451f47ba387b2386f",
+    "src/training/transaction_generator.py": "75b98ffbf932fbcc5e1791af1871ad2a5cfde8cbf68466efd61c55cdaa389639",
+    "run_holdout_disjoint_v2.py": "923dfa98f2dd89957e3f1ba3e435e2738b0c3ec96dc599c79b4a892bf1956f81"
+  },
+  "code_git_blob": {
+    "run_holdout_overlap_analysis.py": "135800c6d9e0bb2442403a4f54cbf21c0c61d133",
+    "run_holdout_evaluation.py": "def43cbad931d6f474a02ed57a406e3dc2a37a3d",
+    "src/training/capacity_projection.py": "5f18e3cbb33eaaf826c02d263b2968004210b598",
+    "src/training/transaction_generator.py": "8ff1c762d9d5fb772af26eebe7667becc65cf0a7",
+    "run_holdout_disjoint_v2.py": "8fd99726e3b039b83700ecfd7549d0348ad2a756"
+  },
+  "test_split_sha256": "ab974c09a50a64d9ffaa76eed0ac6b79e20f1a5639c305e3ba95c24eabdcf1f1",
+  "history_window_days": 30,
+  "python": "3.10.11",
+  "torch": "2.13.0+cu130",
+  "device": "cuda",
+  "unrouted_definitions": {
+    "env_unrouted": "requested - executed",
+    "amount_unrouted": "max(amount - executed, 0)"
+  },
+  "holdout": {
+    "generator": "src.training.transaction_generator.generate_split (unchanged)",
+    "window": "test",
+    "seed": 20261104,
+    "rows_drawn": 3000,
+    "rows_kept": 500,
+    "draws_consumed_to_reach_n": 1238,
+    "rows_rejected_before_n": 738,
+    "filter": "simulation_date not in the UNION of dates of the test split and holdout seed20261102 (any corridor)",
+    "excluded_dates": {
+      "test_split": 87,
+      "holdout_seed20261102": 300,
+      "union": 346
+    },
+    "distinct_dates_used": 181,
+    "start_id": 600000,
+    "path": "data\\processed\\stage1d_transactions_holdout_datedisjoint_v2_seed20261104.csv",
+    "sha256": "c5015ca77cd10e4973ef3e87f959bf0d21aa516f7f2bc4bcdf20bdec0ef05568",
+    "file_reused_after_identity_check": false,
+    "existing_datasets_sha256_unchanged": {
+      "data\\processed\\stage1d_transactions_train.csv": "bd9cb6707d61de7d2f1e02b424ecd2b86e16261db609b07bcbb5b757b67b63c4",
+      "data\\processed\\stage1d_transactions_validation.csv": "8c960ae0435bf0b98988e4508bb73855dc6ed462210dc93932936e81731c1335",
+      "data\\processed\\stage1d_transactions_test.csv": "ab974c09a50a64d9ffaa76eed0ac6b79e20f1a5639c305e3ba95c24eabdcf1f1",
+      "data\\processed\\stage1d_transactions_holdout_seed20261102.csv": "a170761c45c2f2108df396ed4b31a95e954da98342b2b47db0580917ff38ef0e",
+      "data\\processed\\stage1d_transactions_holdout_datedisjoint_seed20261103.csv": "5d3febb8fc6207b282f76fceaca3ef56e00aa334875e65690b1a62a1f437cc30"
+    },
+    "date_range": [
+      "2024-02-06",
+      "2025-08-30"
+    ],
+    "true_regime_counts": {
+      "splitting_needed": 218,
+      "near_boundary": 171,
+      "below_cheapest": 111
+    },
+    "intended_regime_counts": {
+      "near_boundary": 139,
+      "below_cheapest": 130,
+      "splitting_needed": 117,
+      "exceeds_combined": 114
+    },
+    "corridor_counts": {
+      "ARE->MEX": 173,
+      "USA->IND": 168,
+      "GBR->PHL": 159
+    },
+    "exact_duplicate_rows_with_existing": [
+      {
+        "sender_country": "ARE",
+        "receiver_country": "MEX",
+        "simulation_date": "2025-08-03",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600069,
+        "transaction_id_existing": 500006,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "ARE",
+        "receiver_country": "MEX",
+        "simulation_date": "2024-12-07",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600090,
+        "transaction_id_existing": 500508,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "ARE",
+        "receiver_country": "MEX",
+        "simulation_date": "2025-05-26",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600245,
+        "transaction_id_existing": 500233,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "USA",
+        "receiver_country": "IND",
+        "simulation_date": "2024-11-02",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600278,
+        "transaction_id_existing": 500498,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "USA",
+        "receiver_country": "IND",
+        "simulation_date": "2025-02-17",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600292,
+        "transaction_id_existing": 500463,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "simulation_date": "2024-10-28",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600403,
+        "transaction_id_existing": 500512,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "USA",
+        "receiver_country": "IND",
+        "simulation_date": "2024-05-24",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600411,
+        "transaction_id_existing": 500284,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "USA",
+        "receiver_country": "IND",
+        "simulation_date": "2025-01-04",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600538,
+        "transaction_id_existing": 500078,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "USA",
+        "receiver_country": "IND",
+        "simulation_date": "2025-03-17",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600627,
+        "transaction_id_existing": 500292,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "simulation_date": "2024-03-02",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600702,
+        "transaction_id_existing": 500570,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "simulation_date": "2024-03-02",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600702,
+        "transaction_id_existing": 500578,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "USA",
+        "receiver_country": "IND",
+        "simulation_date": "2024-05-24",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 600749,
+        "transaction_id_existing": 500284,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      },
+      {
+        "sender_country": "ARE",
+        "receiver_country": "MEX",
+        "simulation_date": "2025-02-27",
+        "amount_usd": 495000.0,
+        "transaction_id_holdout": 601063,
+        "transaction_id_existing": 500049,
+        "source": "stage1d_transactions_holdout_datedisjoint_seed20261103"
+      }
+    ],
+    "rows_sharing_any_date_with": {
+      "stage1d_transactions_train": 0,
+      "stage1d_transactions_validation": 0,
+      "stage1d_transactions_test": 0,
+      "stage1d_transactions_holdout_seed20261102": 0,
+      "stage1d_transactions_holdout_datedisjoint_seed20261103": 292
+    }
+  },
+  "policies": [
+    "ppo_original",
+    "ppo_projected",
+    "liquidity_waterfall"
+  ],
+  "overlap_reference_sets": [
+    "test_split",
+    "holdout_seed20261102",
+    "union_test_and_holdout_seed20261102",
+    "holdout_datedisjoint_seed20261103"
+  ],
+  "evaluation_function": "run_holdout_evaluation.evaluate_checkpoint (HOLDOUT_CSV attribute pointed at this holdout)",
+  "checkpoints": [
+    {
+      "label": "seed42_entropy000",
+      "seed": 42,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "3502639c1884e15d54dd115fba370d81234776b884433baf6fa8f60b8e07c48f"
+    },
+    {
+      "label": "seed42_entropy005",
+      "seed": 42,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "6e813f763e662028bd37352759fe2b77041b06370fcf2b6950ac2dc7897598bf"
+    },
+    {
+      "label": "seed123_entropy000",
+      "seed": 123,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "9a57f635b8d048de4af9857deae1ceb26fff4e2816381fb1f50af95cf6d406b5"
+    },
+    {
+      "label": "seed123_entropy005",
+      "seed": 123,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "228761c97c21715f6afb84c14cfd71ce3111a5fc339bc0b13208d3dc41b25196"
+    },
+    {
+      "label": "seed2026_entropy000",
+      "seed": 2026,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "10a38dc26e6bb954cc020786e835a7d4be28586bcb722e19e9717fa30b28a423"
+    },
+    {
+      "label": "seed2026_entropy005",
+      "seed": 2026,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "65c6a739405d8281f4457977c13b3a323081d73f9d96a89a08008b6686644875"
+    }
+  ]
+}

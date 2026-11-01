@@ -1,0 +1,491 @@
+{
+  "holdout": {
+    "seed": 20261104,
+    "rows_kept": 500,
+    "excluded_dates": {
+      "test_split": 87,
+      "holdout_seed20261102": 300,
+      "union": 346
+    },
+    "draws_consumed_to_reach_n": 1238,
+    "distinct_dates_used": 181,
+    "date_range": [
+      "2024-02-06",
+      "2025-08-30"
+    ],
+    "true_regime_counts": {
+      "splitting_needed": 218,
+      "near_boundary": 171,
+      "below_cheapest": 111
+    },
+    "corridor_counts": {
+      "ARE->MEX": 173,
+      "USA->IND": 168,
+      "GBR->PHL": 159
+    }
+  },
+  "history_overlap": {
+    "test_split": {
+      "n": 500,
+      "rows_sharing_corridor_date_with_test": 0,
+      "rows_sharing_date_with_test": 0,
+      "rows_with_any_30d_window_overlap_same_corridor": 477,
+      "window_overlap_days_same_corridor": {
+        "mean": 20.994,
+        "median": 23.0,
+        "max": 29,
+        "share_of_window_mean": 0.6998
+      },
+      "days_to_nearest_test_date_same_corridor": {
+        "min": 1,
+        "median": 7.0
+      },
+      "days_to_nearest_test_date_any_corridor": {
+        "min": 1,
+        "median": 3.0
+      }
+    },
+    "holdout_seed20261102": {
+      "n": 500,
+      "rows_sharing_corridor_date_with_test": 0,
+      "rows_sharing_date_with_test": 0,
+      "rows_with_any_30d_window_overlap_same_corridor": 500,
+      "window_overlap_days_same_corridor": {
+        "mean": 27.666,
+        "median": 28.0,
+        "max": 29,
+        "share_of_window_mean": 0.9222
+      },
+      "days_to_nearest_test_date_same_corridor": {
+        "min": 1,
+        "median": 2.0
+      },
+      "days_to_nearest_test_date_any_corridor": {
+        "min": 1,
+        "median": 1.0
+      }
+    },
+    "union_test_and_holdout_seed20261102": {
+      "n": 500,
+      "rows_sharing_corridor_date_with_test": 0,
+      "rows_sharing_date_with_test": 0,
+      "rows_with_any_30d_window_overlap_same_corridor": 500,
+      "window_overlap_days_same_corridor": {
+        "mean": 28.04,
+        "median": 29.0,
+        "max": 29,
+        "share_of_window_mean": 0.9346666666666666
+      },
+      "days_to_nearest_test_date_same_corridor": {
+        "min": 1,
+        "median": 1.0
+      },
+      "days_to_nearest_test_date_any_corridor": {
+        "min": 1,
+        "median": 1.0
+      }
+    },
+    "holdout_datedisjoint_seed20261103": {
+      "n": 500,
+      "rows_sharing_corridor_date_with_test": 135,
+      "rows_sharing_date_with_test": 292,
+      "rows_with_any_30d_window_overlap_same_corridor": 500,
+      "window_overlap_days_same_corridor": {
+        "mean": 28.312,
+        "median": 29.0,
+        "max": 30,
+        "share_of_window_mean": 0.9437333333333334
+      },
+      "days_to_nearest_test_date_same_corridor": {
+        "min": 0,
+        "median": 1.0
+      },
+      "days_to_nearest_test_date_any_corridor": {
+        "min": 0,
+        "median": 0.0
+      }
+    }
+  },
+  "overall": [
+    {
+      "policy": "liquidity_waterfall",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.9347513510874705,
+      "amount_total_unrouted_mean": 0.9356519605935318,
+      "mean_reward_mean": 1.0463240550381283,
+      "mean_cost_term_mean": 2.178560376832158,
+      "mean_latency_cost_mean": 1.1322363170210206,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 0.9999999955560025,
+      "mean_bridges_used_mean": 1.6239999999999999,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 0.0,
+      "mean_reward_sd": 0.0,
+      "mean_cost_term_sd": 0.0,
+      "mean_latency_cost_sd": 0.0,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 0.0,
+      "mean_bridges_used_sd": 0.0,
+      "n": 500.0
+    },
+    {
+      "policy": "ppo_original",
+      "env_completion_rate_mean": 0.964,
+      "amount_completion_rate_mean": 0.964,
+      "env_total_unrouted_mean": 504923.1959587364,
+      "amount_total_unrouted_mean": 504925.3563777604,
+      "mean_reward_mean": 1.043913662540566,
+      "mean_cost_term_mean": 2.171618762178775,
+      "mean_latency_cost_mean": 1.1256193945864847,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 0.9966106813806114,
+      "mean_bridges_used_mean": 3.0,
+      "env_completion_rate_sd": 0.028955137713366146,
+      "amount_completion_rate_sd": 0.028955137713366146,
+      "env_total_unrouted_sd": 351554.75170137436,
+      "amount_total_unrouted_sd": 351554.7805389956,
+      "mean_reward_sd": 0.002096930137578884,
+      "mean_cost_term_sd": 0.002577377315755716,
+      "mean_latency_cost_sd": 0.004969238415918637,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 0.0023598261730469676,
+      "mean_bridges_used_sd": 0.0,
+      "n": 500.0
+    },
+    {
+      "policy": "ppo_projected",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.0,
+      "amount_total_unrouted_mean": 3.3893835886071124e-09,
+      "mean_reward_mean": 1.0468490830041555,
+      "mean_cost_term_mean": 2.175329214383262,
+      "mean_latency_cost_mean": 1.1284801313791066,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 1.0,
+      "mean_bridges_used_mean": 3.0,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 3.689449829428947e-10,
+      "mean_reward_sd": 0.003592556193149068,
+      "mean_cost_term_sd": 0.0002689238714338612,
+      "mean_latency_cost_sd": 0.003568577648282006,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 0.0,
+      "mean_bridges_used_sd": 0.0,
+      "n": 500.0
+    }
+  ],
+  "by_regime": [
+    {
+      "regime": "below_cheapest",
+      "policy": "liquidity_waterfall",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.0,
+      "amount_total_unrouted_mean": 0.0,
+      "mean_reward_mean": 0.9302119836120788,
+      "mean_cost_term_mean": 2.0737162162162157,
+      "mean_latency_cost_mean": 1.1435042326041376,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 1.0,
+      "mean_bridges_used_mean": 1.0,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 0.0,
+      "mean_reward_sd": 0.0,
+      "mean_cost_term_sd": 0.0,
+      "mean_latency_cost_sd": 0.0,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 0.0,
+      "mean_bridges_used_sd": 0.0,
+      "n": 111.0
+    },
+    {
+      "regime": "below_cheapest",
+      "policy": "ppo_original",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.0,
+      "amount_total_unrouted_mean": 0.1517576989687465,
+      "mean_reward_mean": 0.93931410935964,
+      "mean_cost_term_mean": 2.069397676492506,
+      "mean_latency_cost_mean": 1.130083567132866,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 1.0000000025432392,
+      "mean_bridges_used_mean": 3.0,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 0.023152669272239395,
+      "mean_reward_sd": 0.00263643394110156,
+      "mean_cost_term_sd": 0.00028565549318450983,
+      "mean_latency_cost_sd": 0.0025592280651119226,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 3.7537440920374465e-09,
+      "mean_bridges_used_sd": 0.0,
+      "n": 111.0
+    },
+    {
+      "regime": "below_cheapest",
+      "policy": "ppo_projected",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.0,
+      "amount_total_unrouted_mean": 3.6986117872099083e-10,
+      "mean_reward_mean": 0.9393141071440402,
+      "mean_cost_term_mean": 2.0693976739763875,
+      "mean_latency_cost_mean": 1.1300835668323472,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 1.0,
+      "mean_bridges_used_mean": 3.0,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 8.695961631246677e-11,
+      "mean_reward_sd": 0.00263643363373525,
+      "mean_cost_term_sd": 0.0002856635952212081,
+      "mean_latency_cost_sd": 0.0025592285939449962,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 9.930136612989092e-17,
+      "mean_bridges_used_sd": 0.0,
+      "n": 111.0
+    },
+    {
+      "regime": "near_boundary",
+      "policy": "liquidity_waterfall",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.2251634502754314,
+      "amount_total_unrouted_mean": 0.15201283137139399,
+      "mean_reward_mean": 1.1224015076006282,
+      "mean_cost_term_mean": 2.3011522565423044,
+      "mean_latency_cost_mean": 1.178750744630554,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 0.9999999966070541,
+      "mean_bridges_used_mean": 1.5204678362573099,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 0.0,
+      "mean_reward_sd": 0.0,
+      "mean_cost_term_sd": 0.0,
+      "mean_latency_cost_sd": 0.0,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 0.0,
+      "mean_bridges_used_sd": 0.0,
+      "n": 171.0
+    },
+    {
+      "regime": "near_boundary",
+      "policy": "ppo_original",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.0,
+      "amount_total_unrouted_mean": 0.6442978510288716,
+      "mean_reward_mean": 1.1258778745094877,
+      "mean_cost_term_mean": 2.297151555912666,
+      "mean_latency_cost_mean": 1.1712736814031786,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 0.9999999987266857,
+      "mean_bridges_used_mean": 3.0,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 0.10089104148228684,
+      "mean_reward_sd": 0.0020986345673527345,
+      "mean_cost_term_sd": 0.00028076003132925854,
+      "mean_latency_cost_sd": 0.0023597794612733344,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 3.345891328512994e-09,
+      "mean_bridges_used_sd": 0.0,
+      "n": 171.0
+    },
+    {
+      "regime": "near_boundary",
+      "policy": "ppo_projected",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.0,
+      "amount_total_unrouted_mean": 1.292695136119922e-09,
+      "mean_reward_mean": 1.1258778781428547,
+      "mean_cost_term_mean": 2.2971515583523767,
+      "mean_latency_cost_mean": 1.171273680209522,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 1.0,
+      "mean_bridges_used_mean": 3.0,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 1.600490176369377e-10,
+      "mean_reward_sd": 0.0020986366072796477,
+      "mean_cost_term_sd": 0.0002807567081462592,
+      "mean_latency_cost_sd": 0.0023597776017551075,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 9.930136612989092e-17,
+      "mean_bridges_used_sd": 0.0,
+      "n": 171.0
+    },
+    {
+      "regime": "splitting_needed",
+      "policy": "liquidity_waterfall",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.7095879008120392,
+      "amount_total_unrouted_mean": 0.7836391292221379,
+      "mean_reward_mean": 1.045769906139523,
+      "mean_cost_term_mean": 2.1357828098502063,
+      "mean_latency_cost_mean": 1.0900128961450741,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 0.9999999945562342,
+      "mean_bridges_used_mean": 2.022935779816514,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 0.0,
+      "mean_reward_sd": 0.0,
+      "mean_cost_term_sd": 0.0,
+      "mean_latency_cost_sd": 0.0,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 0.0,
+      "mean_bridges_used_sd": 0.0,
+      "n": 218.0
+    },
+    {
+      "regime": "splitting_needed",
+      "policy": "ppo_original",
+      "env_completion_rate_mean": 0.9174311926605504,
+      "amount_completion_rate_mean": 0.9174311926605504,
+      "env_total_unrouted_mean": 504923.1959587364,
+      "amount_total_unrouted_mean": 504924.56032221037,
+      "mean_reward_mean": 1.0328800394047735,
+      "mean_cost_term_mean": 2.1251987290718044,
+      "mean_latency_cost_mean": 1.0875349624841775,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 0.9947095619431147,
+      "mean_bridges_used_mean": 3.0,
+      "env_completion_rate_sd": 0.06641086631506003,
+      "amount_completion_rate_sd": 0.06641086631506003,
+      "env_total_unrouted_sd": 351554.75170137436,
+      "amount_total_unrouted_sd": 351554.77573769883,
+      "mean_reward_sd": 0.0038326309939583337,
+      "mean_cost_term_sd": 0.006032084365350277,
+      "mean_latency_cost_sd": 0.010228881713918109,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 0.0036834878795892097,
+      "mean_bridges_used_sd": 0.0,
+      "n": 218.0
+    },
+    {
+      "regime": "splitting_needed",
+      "policy": "ppo_projected",
+      "env_completion_rate_mean": 1.0,
+      "amount_completion_rate_mean": 1.0,
+      "env_total_unrouted_mean": 0.0,
+      "amount_total_unrouted_mean": 1.7268272737661998e-09,
+      "mean_reward_mean": 1.0396126534250507,
+      "mean_cost_term_mean": 2.1337089399174105,
+      "mean_latency_cost_mean": 1.0940962864923598,
+      "mean_risk_cost_mean": 0.0,
+      "liquidity_utilization_mean": 1.0,
+      "mean_bridges_used_mean": 3.0,
+      "env_completion_rate_sd": 0.0,
+      "amount_completion_rate_sd": 0.0,
+      "env_total_unrouted_sd": 0.0,
+      "amount_total_unrouted_sd": 3.6428262160467346e-10,
+      "mean_reward_sd": 0.007236818679787469,
+      "mean_cost_term_sd": 0.0002522168076583168,
+      "mean_latency_cost_sd": 0.007181294107427109,
+      "mean_risk_cost_sd": 0.0,
+      "liquidity_utilization_sd": 0.0,
+      "mean_bridges_used_sd": 0.0,
+      "n": 218.0
+    }
+  ],
+  "paired": {
+    "amount_completion_rate": {
+      "projected_minus_original": {
+        "mean": 0.036,
+        "std": 0.02895513771336614,
+        "min": 0.014000000000000012,
+        "max": 0.07599999999999996
+      },
+      "projected_minus_waterfall": {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    },
+    "mean_reward": {
+      "projected_minus_original": {
+        "mean": 0.002935420463589226,
+        "std": 0.002738601107539098,
+        "min": 0.0006598506191812792,
+        "max": 0.00636172447522565
+      },
+      "projected_minus_waterfall": {
+        "mean": 0.0005250279660270843,
+        "std": 0.0035925561931491505,
+        "min": -0.0039075983650631585,
+        "max": 0.005341467083164186
+      }
+    },
+    "mean_cost_term": {
+      "projected_minus_original": {
+        "mean": 0.003710452204486995,
+        "std": 0.0026609230256509895,
+        "min": 0.0011692160476761693,
+        "max": 0.007272631333675061
+      },
+      "projected_minus_waterfall": {
+        "mean": -0.0032311624488961708,
+        "std": 0.0002689238714340443,
+        "min": -0.0036139230114304866,
+        "max": -0.002921814929370825
+      }
+    },
+    "mean_latency_cost": {
+      "projected_minus_original": {
+        "mean": 0.0028607367926217764,
+        "std": 0.0017359544344333797,
+        "min": 0.001127996462249481,
+        "max": 0.005012449504155914
+      },
+      "projected_minus_waterfall": {
+        "mean": -0.003756185641914008,
+        "std": 0.003568577648282057,
+        "min": -0.00844167297996723,
+        "max": 0.0009857882087012104
+      }
+    },
+    "liquidity_utilization": {
+      "projected_minus_original": {
+        "mean": 0.0033893186193887,
+        "std": 0.002359826173046952,
+        "min": 0.001038112573162886,
+        "max": 0.006544256538643989
+      },
+      "projected_minus_waterfall": {
+        "mean": 4.443997503322805e-09,
+        "std": 0.0,
+        "min": 4.443997503322805e-09,
+        "max": 4.443997503322805e-09
+      }
+    },
+    "checkpoints_projected_reward_gt_waterfall": 3
+  },
+  "checks": {
+    "n_rows": 9000,
+    "rejected_rows": 0,
+    "env_vs_amount_completion_disagree_rows": {},
+    "env_vs_amount_unrouted_material_rows": {},
+    "max_over_executed_usd": 0.05255680822301656,
+    "waterfall_identical_across_checkpoints": true
+  }
+}

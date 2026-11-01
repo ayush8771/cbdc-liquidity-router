@@ -1,0 +1,157 @@
+{
+  "experiment": "stage1d_fresh_holdout_evaluation",
+  "started_at": "20261101_224109",
+  "holdout": {
+    "generator": "src.training.transaction_generator.generate_split",
+    "window": "test",
+    "seed": 20261102,
+    "effective_rng_seed": "seed + SPLIT_SEED_OFFSET['test'] (= seed + 2)",
+    "n": 500,
+    "start_id": 400000,
+    "path": "data\\processed\\stage1d_transactions_holdout_seed20261102.csv",
+    "sha256": "a170761c45c2f2108df396ed4b31a95e954da98342b2b47db0580917ff38ef0e",
+    "existing_splits_sha256_unchanged": {
+      "data\\processed\\stage1d_transactions_train.csv": "bd9cb6707d61de7d2f1e02b424ecd2b86e16261db609b07bcbb5b757b67b63c4",
+      "data\\processed\\stage1d_transactions_validation.csv": "8c960ae0435bf0b98988e4508bb73855dc6ed462210dc93932936e81731c1335",
+      "data\\processed\\stage1d_transactions_test.csv": "ab974c09a50a64d9ffaa76eed0ac6b79e20f1a5639c305e3ba95c24eabdcf1f1"
+    },
+    "date_range": [
+      "2024-02-01",
+      "2025-08-26"
+    ],
+    "true_regime_counts": {
+      "splitting_needed": 240,
+      "near_boundary": 153,
+      "below_cheapest": 104,
+      "exceeds_combined": 3
+    },
+    "intended_regime_counts": {
+      "exceeds_combined": 145,
+      "near_boundary": 123,
+      "below_cheapest": 119,
+      "splitting_needed": 113
+    },
+    "corridor_counts": {
+      "USA->IND": 179,
+      "ARE->MEX": 166,
+      "GBR->PHL": 155
+    },
+    "holdout_file_reused_after_identity_check": true,
+    "exact_duplicate_rows_with_existing_splits": 2,
+    "exact_duplicate_rows_detail": [
+      {
+        "transaction_id_x": 400078,
+        "sender_country": "USA",
+        "receiver_country": "IND",
+        "amount_usd": 495000.0,
+        "simulation_date": "2024-08-11",
+        "intended_regime": "exceeds_combined",
+        "regime_x": "splitting_needed",
+        "split": "test",
+        "transaction_id_y": 400078,
+        "regime_y": "splitting_needed"
+      },
+      {
+        "transaction_id_x": 400158,
+        "sender_country": "USA",
+        "receiver_country": "IND",
+        "amount_usd": 495000.0,
+        "simulation_date": "2024-09-28",
+        "intended_regime": "exceeds_combined",
+        "regime_x": "splitting_needed",
+        "split": "test",
+        "transaction_id_y": 400158,
+        "regime_y": "splitting_needed"
+      }
+    ],
+    "holdout_rows_sharing_corridor_and_date_with_existing": {
+      "test": 30
+    },
+    "transaction_id_overlap_with_existing": 0
+  },
+  "policies": [
+    "ppo_original",
+    "ppo_projected",
+    "liquidity_waterfall"
+  ],
+  "ppo_action_mode": "deterministic (normalized Dirichlet concentration)",
+  "projection": "Euclidean projection onto {0<=x_i<=liquidity_i/amount, sum x = 1}; if combined liquidity < amount, x_i = cap_i (requests < 100% of amount)",
+  "unrouted_definitions": {
+    "env_unrouted": "requested - executed (environment's definition)",
+    "amount_unrouted": "amount - executed"
+  },
+  "completion_tolerance_relative": 0.0001,
+  "training_performed": false,
+  "tuning_performed": false,
+  "checkpoints": [
+    {
+      "label": "seed42_entropy000",
+      "seed": 42,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "3502639c1884e15d54dd115fba370d81234776b884433baf6fa8f60b8e07c48f",
+      "last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17"
+    },
+    {
+      "label": "seed42_entropy005",
+      "seed": 42,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed42\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "6e813f763e662028bd37352759fe2b77041b06370fcf2b6950ac2dc7897598bf",
+      "last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17"
+    },
+    {
+      "label": "seed123_entropy000",
+      "seed": 123,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "9a57f635b8d048de4af9857deae1ceb26fff4e2816381fb1f50af95cf6d406b5",
+      "last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17"
+    },
+    {
+      "label": "seed123_entropy005",
+      "seed": 123,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed123\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "228761c97c21715f6afb84c14cfd71ce3111a5fc339bc0b13208d3dc41b25196",
+      "last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17"
+    },
+    {
+      "label": "seed2026_entropy000",
+      "seed": 2026,
+      "entropy_coef": 0.0,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy000\\ppo_checkpoint.pt",
+      "sha256": "10a38dc26e6bb954cc020786e835a7d4be28586bcb722e19e9717fa30b28a423",
+      "last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17"
+    },
+    {
+      "label": "seed2026_entropy005",
+      "seed": 2026,
+      "entropy_coef": 0.005,
+      "checkpoint": "outputs\\experiments\\stage1d_entropy_multiseed_20261101_180551\\seed2026\\entropy005\\ppo_checkpoint.pt",
+      "sha256": "65c6a739405d8281f4457977c13b3a323081d73f9d96a89a08008b6686644875",
+      "last_commit": "e043cec29c6250a66d88f78e37c5bc4f1229da17"
+    }
+  ],
+  "git_head": "55a81dd71aeb39d1ea539f5b2ca35221c89dcf11",
+  "git_dirty": true,
+  "git_dirty_files": [
+    "?? data/processed/stage1d_transactions_holdout_seed20261102.csv",
+    "?? outputs/experiments/stage1d_holdout_eval_20261101_223302/",
+    "?? run_holdout_evaluation.py"
+  ],
+  "code_sha256": {
+    "run_holdout_evaluation.py": "70c3580adf45ac537b80783334f045eef98a78b6330590a1664eebe3ca81f1fa",
+    "src/training/capacity_projection.py": "aac2848cd994956db7ee372358e9337359cbfc36d713cf8451f47ba387b2386f",
+    "src/training/transaction_generator.py": "75b98ffbf932fbcc5e1791af1871ad2a5cfde8cbf68466efd61c55cdaa389639"
+  },
+  "code_git_blob": {
+    "run_holdout_evaluation.py": "f5a51e2b6c8f97623459e43cb9dba54ff161c2cb",
+    "src/training/capacity_projection.py": "5f18e3cbb33eaaf826c02d263b2968004210b598",
+    "src/training/transaction_generator.py": "8ff1c762d9d5fb772af26eebe7667becc65cf0a7"
+  },
+  "python": "3.10.11",
+  "torch": "2.13.0+cu130",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU"
+}

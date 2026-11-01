@@ -1,0 +1,44 @@
+{
+  "experiment": "stage1d_holdout_sensitivity",
+  "started_at": "20261101_230534",
+  "training_performed": false,
+  "tuning_performed": false,
+  "git_head": "55a81dd71aeb39d1ea539f5b2ca35221c89dcf11",
+  "git_dirty": true,
+  "git_dirty_files": [
+    "?? data/processed/stage1d_transactions_holdout_seed20261102.csv",
+    "?? outputs/experiments/stage1d_holdout_eval_20261101_223302/",
+    "?? outputs/experiments/stage1d_holdout_eval_20261101_224109/",
+    "?? outputs/experiments/stage1d_holdout_eval_20261101_225445/",
+    "?? outputs/experiments/stage1d_holdout_sensitivity_20261101_230534/",
+    "?? run_holdout_evaluation.py",
+    "?? run_holdout_overlap_analysis.py"
+  ],
+  "code_sha256": {
+    "run_holdout_overlap_analysis.py": "186b14c522a0b36489e1d524cbd4a3a9e2b7bb4ea667b71c9790bd263917adf3",
+    "run_holdout_evaluation.py": "aec2256790f610d195e9b6dfa6308d5f5978a21e89b44296135c76482147200f",
+    "src/training/capacity_projection.py": "aac2848cd994956db7ee372358e9337359cbfc36d713cf8451f47ba387b2386f",
+    "src/training/transaction_generator.py": "75b98ffbf932fbcc5e1791af1871ad2a5cfde8cbf68466efd61c55cdaa389639"
+  },
+  "code_git_blob": {
+    "run_holdout_overlap_analysis.py": "135800c6d9e0bb2442403a4f54cbf21c0c61d133",
+    "run_holdout_evaluation.py": "def43cbad931d6f474a02ed57a406e3dc2a37a3d",
+    "src/training/capacity_projection.py": "5f18e3cbb33eaaf826c02d263b2968004210b598",
+    "src/training/transaction_generator.py": "8ff1c762d9d5fb772af26eebe7667becc65cf0a7"
+  },
+  "test_split_sha256": "ab974c09a50a64d9ffaa76eed0ac6b79e20f1a5639c305e3ba95c24eabdcf1f1",
+  "history_window_days": 30,
+  "python": "3.10.11",
+  "torch": "2.13.0+cu130",
+  "device": "cuda",
+  "unrouted_definitions": {
+    "env_unrouted": "requested - executed",
+    "amount_unrouted": "max(amount - executed, 0)"
+  },
+  "source_run": "outputs\\experiments\\stage1d_holdout_eval_20261101_225445",
+  "source_per_transaction_sha256": "6bfb4966cb1c4c74890c2ef0c86b77973b744ffab8b827641af453678fa317c1",
+  "source_provenance_sha256": "010c555a629ee0984df16293a5ea8e613e40d0588f672bfcd4e1837df12c22f5",
+  "holdout_csv": "data\\processed\\stage1d_transactions_holdout_seed20261102.csv",
+  "holdout_sha256": "a170761c45c2f2108df396ed4b31a95e954da98342b2b47db0580917ff38ef0e",
+  "re_evaluated": false
+}
