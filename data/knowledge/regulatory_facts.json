@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "knowledge_version": "2026-11-02.1",
+  "description": "Stage 1E seed knowledge base. Holds only the constraints already enforced by the pre-Stage-1E memory stub. No real regulatory facts have been added yet; any future fact must cite a real, verifiable source.",
+  "facts": [
+    {
+      "fact_id": "global_max_single_transfer_usd",
+      "rule_type": "max_single_transfer_usd",
+      "value": 500000.0,
+      "scope": {"sender": "*", "receiver": "*"},
+      "effective_from": null,
+      "effective_to": null,
+      "provenance_tag": "project_assumption",
+      "verified": false,
+      "source": "Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation.",
+      "notes": "Also mirrored by MAX_REGULATORY_TRANSFER_USD in src/training/transaction_generator.py. Overridable per environment via CBDCLiquidityEnv(max_transfer_usd=...)."
+    }
+  ]
+}
