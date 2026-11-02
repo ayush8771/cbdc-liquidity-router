@@ -1,7 +1,15 @@
 # Major Phase 2 — API Contract
 
-**Status:** v0.2 (2 November 2026), proposed for team approval through the Phase 2 pull request. This document is normative until `contracts/*.openapi.yaml` exists; after that the OpenAPI files are, and this document must be kept in sync with them.
+**Status:** v0.3 (2 November 2026), proposed for team approval through the Phase 2 pull request. This document is normative until `contracts/openapi/inference.v1.yaml` and `contracts/openapi/app.v1.yaml` exist; after that the OpenAPI files are, and this document must be kept in sync with them.
 **Architecture and roles:** `docs/PHASE2_ARCHITECTURE.md`. Section references written "arch §n" point there.
+
+**Changes in v0.3:**
+- Paths aligned with the v0.3 folder structure (arch §4):
+  - OpenAPI files are in `contracts/openapi/`, fixtures in `contracts/fixtures/{inference,app}/`;
+  - inference tests are in `services/inference/tests/`, end-to-end tests in `e2e/`, and Compose is in `infra/compose.yaml`.
+- `runtime.lock_file` now points to `services/inference/requirements/<platform>.txt`.
+- The test table (§9) names the folder and CI workflow for each suite.
+- No change to any endpoint, schema or error code.
 
 **Changes in v0.2:**
 - Explicit states no longer accept per-venue `risk`. Risk and the cost baseline come from `reference_date` (§2.4).
@@ -19,7 +27,7 @@ There are two APIs:
 | **Inference API** (internal) | Dev A, FastAPI | Dev B only | `http://inference:8000/v1` | `snake_case` |
 | **Application API** (public) | Dev B, Express | Dev C | `/api/v1` (same origin through the Vite proxy; backend on port 4000) | `camelCase` |
 
-> **Example values in this document are illustrative.** They show the shape of each response, not real engine output. Dev A will replace the fixtures with engine-generated ones.
+> **Example values in this document are illustrative.** They show the shape of each response, not real engine output. Dev A will replace the fixtures in `contracts/fixtures/inference/` with engine-generated ones.
 
 ---
 
@@ -108,7 +116,7 @@ The FastAPI process answers `/v1/health`, `/v1/version`, `/v1/replay/calendar` a
     "date_range": {"start": "2011-01-01", "end": "2025-09-30"}
   },
   "reward_weights": {"lambda_latency": 1.0, "lambda_risk": 1.0, "lambda_unrouted": 1.0, "status": "placeholder"},
-  "runtime": {"platform": "linux-x86_64", "python": "3.10.11", "torch": "2.13.0+cpu", "device": "cpu", "lock_file": "locks/inference-linux-x86_64-cpu.txt"}
+  "runtime": {"platform": "linux-x86_64", "python": "3.10.11", "torch": "2.13.0+cpu", "device": "cpu", "lock_file": "services/inference/requirements/linux-x86_64-cpu.txt"}
 }
 ```
 
@@ -661,7 +669,7 @@ A regulatory rejection is **not** an error (§2.8). `ENGINE_BUSY` and `NOT_READY
 
 - **Backend → inference:** a 15 s timeout (the engine's own task timeout is 10 s). `POST` requests are never retried automatically; `GET` requests may retry once. `X-Request-Id` is forwarded. The `Authorization` header is never forwarded: the inference service has no auth.
 - **Caching:** cached `GET` results (`version`, `network`, `calendar`, `scenarios`) are invalidated when `/v1/version` reports a different `git_commit`, `knowledge.sha256` or `checkpoint.sha256`.
-- **Network exposure:** the inference service listens on the internal Compose network only and must not be published to the host in the `full` profile. For local debugging, Dev A may publish it on `127.0.0.1:8000`.
+- **Network exposure:** the inference service listens on the internal Compose network only and must not be published to the host in the `full` profile of `infra/compose.yaml`. For local debugging, Dev A may publish it on `127.0.0.1:8000`.
 
 ---
 
@@ -720,13 +728,13 @@ Each transaction request (including the full state spec, so explicit states can 
 
 | Variable | Service | Default | Meaning |
 |---|---|---|---|
-| `CBDC_REPO_ROOT` | inference | `.` | Repository root; engine workers `chdir` here |
+| `CBDC_REPO_ROOT` | inference | `.` (container: `/repo`) | Repository root; engine workers `chdir` here |
 | `CBDC_PPO_CHECKPOINT_ID` | inference | unset | Entry in the approval registry; unset disables `ppo_projected` |
 | `CBDC_DEVICE` | inference | `cpu` | `cpu` or `cuda` |
 | `CBDC_ENGINE_WORKERS` | inference | `2` | Engine worker processes per server process |
 | `CBDC_ENGINE_TASK_TIMEOUT_S` | inference | `10` | Per-task timeout; exceeding it recycles the pool |
 | `CBDC_ENGINE_MAX_QUEUE` | inference | `32` | Waiting tasks before `ENGINE_BUSY` |
-| `CBDC_ENABLE_COGNEE` | inference | `false` | Explanation-only semantic context (needs local Ollama and the `cognee` lock; see `docs/STAGE1E_MEMORY.md`) |
+| `CBDC_ENABLE_COGNEE` | inference | `false` | Explanation-only semantic context (needs local Ollama and the `services/inference/requirements/cognee-<platform>.txt` lock; see `docs/STAGE1E_MEMORY.md`) |
 | `INFERENCE_URL` | backend | `http://inference:8000` | Inference base URL |
 | `INFERENCE_MODE` | backend | `live` | `live` or `mock` |
 | `INFERENCE_TIMEOUT_MS` | backend | `15000` | Inference request timeout |
@@ -742,12 +750,14 @@ No token, password or secret is ever put in a `VITE_*` variable: Vite embeds tho
 
 ## 9. Contract tests (minimum)
 
-| Owner | Test |
+Each suite lives in its owner's folder and runs in that owner's path-filtered CI workflow (arch §5.4). None of them goes under Phase 1's `tests/`.
+
+| Owner (location · workflow) | Test |
 |---|---|
-| A | **Parity:** on the Stage 1D validation split and one holdout, `route()` and `/v1/route` match `src/training/evaluate.py`'s waterfall and cheapest-feasible results for every row (action, executed, unrouted, reward) exactly. With a configured checkpoint, `ppo_projected` matches `src/backtesting/evaluation.py`'s projected PPO path within 1e-6. Under a scenario, results match the Stage 1F harness for that scenario. |
-| A | **Explicit state:** an explicit state equal to the replay values for a date gives results identical to replay on that date. Overriding one venue changes only that venue's inputs. The history rules and every 422 code. |
-| A | **Concurrency and isolation** (arch §6.4), on Windows and Linux. |
-| A | **API:** schemas, defaults (no policy given → `waterfall`), the disabled-PPO path, regulatory rejection returning 200, determinism (same request → same body and `decision_id`), and that no Phase 1 file changes (hashes before and after). |
-| B | Mapping completeness (every engine field maps to an app field), persistence round trip, error passthrough, timeout → 503, mock mode. **Auth:** startup refusal in each forbidden configuration; 401 for missing, malformed or unknown tokens; 403 for a viewer requesting `ppoProjected`; `Authorization` never logged or persisted. |
-| C | Rendering from every fixture, including rejection, partial completion, the disabled experimental policy, an explicit state, 401 and 403. Mandatory labels and the dev-auth banner present. Token absent from `localStorage`, URLs and the built bundle; cleared on 401 and sign-out. |
-| D | Every fixture validates against the OpenAPI specs. Lock drift and install checks on Linux and Windows. Docker images build. The `full` profile end to end: sign in → submit → route → persist → read back → explain. |
+| A (`services/inference/tests/parity/` · `phase2-inference.yml`) | **Parity:** on the Stage 1D validation split and one holdout, `route()` and `/v1/route` match `src/training/evaluate.py`'s waterfall and cheapest-feasible results for every row (action, executed, unrouted, reward) exactly. With a configured checkpoint, `ppo_projected` matches `src/backtesting/evaluation.py`'s projected PPO path within 1e-6. Under a scenario, results match the Stage 1F harness for that scenario. |
+| A (`services/inference/tests/parity/`) | **Explicit state:** an explicit state equal to the replay values for a date gives results identical to replay on that date. Overriding one venue changes only that venue's inputs. The history rules and every 422 code. |
+| A (`services/inference/tests/concurrency/`) | **Concurrency and isolation** (arch §6.4), on Windows and Linux. |
+| A (`services/inference/tests/api/`) | **API:** schemas, defaults (no policy given → `waterfall`), the disabled-PPO path, regulatory rejection returning 200, determinism (same request → same body and `decision_id`), and that no Phase 1 file changes (hashes before and after). |
+| B (`services/backend/test/` · `phase2-backend.yml`) | Mapping completeness (every engine field maps to an app field), persistence round trip, error passthrough, timeout → 503, mock mode. **Auth:** startup refusal in each forbidden configuration; 401 for missing, malformed or unknown tokens; 403 for a viewer requesting `ppoProjected`; `Authorization` never logged or persisted. |
+| C (`services/web/test/` · `phase2-web.yml`) | Rendering from every fixture, including rejection, partial completion, the disabled experimental policy, an explicit state, 401 and 403. Mandatory labels and the dev-auth banner present. Token absent from `localStorage`, URLs and the built bundle; cleared on 401 and sign-out. |
+| D (`e2e/`, `infra/scripts/` · `phase2-integration.yml`) | Every fixture in `contracts/fixtures/` validates against `contracts/openapi/`. Lock drift and install checks on Linux and Windows. Docker images build. The `infra/compose.yaml` `full` profile end to end: sign in → submit → route → persist → read back → explain. |
