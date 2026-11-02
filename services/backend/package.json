@@ -1,0 +1,39 @@
+{
+  "name": "cbdc-backend",
+  "version": "0.1.0",
+  "description": "Phase 2 application backend (Express + TypeScript) for the CBDC Liquidity Router",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=20.6.0 <21",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "start:env": "node --env-file=.env dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "dev:env": "tsx watch --env-file=.env src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "postinstall": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "prisma:seed": "prisma db seed",
+    "test": "node scripts/run-tests.mjs"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "express": "5.3.0",
+    "prisma": "6.19.3"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "20.19.43",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

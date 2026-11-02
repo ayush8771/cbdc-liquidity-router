@@ -1,0 +1,209 @@
+// Phase 2 backend schema (Step 5B).
+// Basis: API contract §1, §2.8, §3.2–§3.8, §6; architecture §5.2, §7.3, §8.2.
+// Fields marked PROVISIONAL follow team decisions still awaiting confirmation.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"] // arch §7.3
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // contract §8
+}
+
+// ---- Enums: values from contract §1 and §3.2 ----
+
+enum Role {
+  viewer
+  analyst
+}
+
+enum TransactionStatus {
+  routed
+  failed
+}
+
+// Application API spellings (§3.2); engineResponse keeps the engine's own.
+enum StateMode {
+  historicalReplay
+  scenario
+  explicit
+}
+
+enum Policy {
+  waterfall
+  cheapestFeasible
+  ppoProjected
+}
+
+enum PolicyStatus {
+  default
+  baseline
+  experimental
+}
+
+// Values kept unchanged in the app API (§3.2 example).
+enum ValuesProvenance {
+  synthetic_simulation
+  synthetic_scenario
+  user_supplied_synthetic
+}
+
+// ---- Models (contract §6.3) ----
+
+/// Seeded from dev-tokens.json: id, email and role only.
+/// Never stores a token or token hash (§6.1, arch §8.2).
+model User {
+  id    String @id // the token-file userId, e.g. "u-analyst-1" (§3.0, §3.2 createdBy)
+  email String // not unique (approved Step 2 decision)
+  role  Role
+
+  transactionRequests TransactionRequest[]
+  comparisons         Comparison[]
+  auditLogs           AuditLog[]
+}
+
+/// Append-only. Saved once, after the inference outcome is known (§3.2, §6.1).
+/// A 422 from the engine is not saved (§3.2).
+model TransactionRequest {
+  id              String            @id @default(uuid()) @db.Uuid
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+  createdById     String
+  createdBy       User              @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  senderCountry   String
+  receiverCountry String
+  /// "USA->IND" etc. (§1); a String because "->" isn't allowed in enum names.
+  /// PROVISIONAL: null when it can't be established from documented request or
+  /// network data, e.g. a failed transaction with no engine response.
+  corridor        String?
+  amountUsd       Float // money is a JSON float (§1)
+  stateMode       StateMode
+  stateSpec       Json // full state spec, so explicit states can be replayed (§6.2)
+  simulationDate  DateTime          @db.Date
+  /// Canonical policy for this transaction: the policy after defaulting, always
+  /// sent to the engine. RoutingDecision.policy must equal it; the persistence
+  /// code checks this before saving.
+  requestedPolicy Policy
+  status          TransactionStatus
+  clientReference String?
+
+  decision RoutingDecision? // none when status = failed
+
+  // PROVISIONAL: history is sorted by createdAt (§3.3); filters are paired with it.
+  @@index([createdAt])
+  @@index([corridor, createdAt])
+  @@index([requestedPolicy, createdAt]) // also covers failed rows, which have no decision
+  @@index([stateMode, createdAt])
+}
+
+/// Exactly one per routed transaction (provisional decision).
+model RoutingDecision {
+  id                     String             @id @default(uuid()) @db.Uuid
+  transactionId          String             @unique @db.Uuid // one decision per transaction
+  transaction            TransactionRequest @relation(fields: [transactionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  decisionId             String // "sha256:…"; NOT unique: identical requests share it (§1)
+  policy                 Policy // validated against TransactionRequest.requestedPolicy before saving
+  policyStatus           PolicyStatus
+  allowed                Boolean
+  completed              Boolean
+  completionRatio        Float
+  executedUsd            Float
+  unroutedEnvUsd         Float
+  unroutedAmountBasedUsd Float
+  // PROVISIONAL: nullable because metrics may be absent, e.g. on a regulatory
+  // rejection (§2.8 doesn't list metrics for that case). Stored as returned.
+  rewardEnv              Float?
+  rewardAmountBased      Float?
+  latencyTerm            Float? // copied from metrics.latency_term
+  riskTerm               Float? // copied from metrics.risk_term
+  valuesProvenance       ValuesProvenance
+  stateFrameSha256       String
+  checkpointSha256       String? // null while ppo_projected is disabled (§2.2, §2.8)
+  knowledgeSha256        String
+  gitCommit              String
+  engineResponse         Json // RouteResponse, verbatim (§6.1, arch §5.2)
+  // No feeCostPct: its source and definition are unconfirmed (§3.8).
+
+  allocations Allocation[]
+  explanation Explanation?
+}
+
+model Allocation {
+  id                    String          @id @default(uuid()) @db.Uuid
+  routingDecisionId     String          @db.Uuid // the outline's "decisionId", renamed to avoid the hash clash
+  routingDecision       RoutingDecision @relation(fields: [routingDecisionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  slot                  Int
+  bridgeUid             String
+  shareRequested        Float
+  amountRequestedUsd    Float
+  amountExecutedUsd     Float
+  amountClippedUsd      Float
+  liquidityUsd          Float
+  congestion            Float
+  risk                  Float
+  shareBeforeProjection Float? // null except for ppo_projected (§2.8)
+
+  @@unique([routingDecisionId, slot]) // PROVISIONAL: one row per venue
+}
+
+/// Creates no TransactionRequest (provisional decision). The §3.6 response is
+/// rebuilt from this row alone:
+///   id <- id, createdAt <- createdAt, createdBy <- createdById
+///   transaction {senderCountry, receiverCountry, corridor, amountUsd,
+///                simulationDate, clientReference} <- the columns of the same name
+///                (§3.2's transaction object has no identifier of its own)
+///   results, skipped, sameState, note <- engineResponse, mapped field for field
+model Comparison {
+  id              String    @id @default(uuid()) @db.Uuid
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  createdById     String
+  createdBy       User      @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  senderCountry   String
+  receiverCountry String
+  /// PROVISIONAL: null when it can't be established, e.g. every policy skipped.
+  corridor        String?
+  amountUsd       Float
+  simulationDate  DateTime  @db.Date // state.date, or state.reference_date in explicit mode (§2.8)
+  clientReference String?
+  stateMode       StateMode // PROVISIONAL: not in the response; kept so the request can be replayed
+  stateSpec       Json // PROVISIONAL: as above
+  policies        Policy[] // PROVISIONAL: the list actually sent to the engine, after the viewer default (§3.6)
+  engineResponse  Json // /v1/compare response, verbatim
+
+  @@index([createdAt]) // PROVISIONAL
+}
+
+/// At most one per decision: stored on the first request (§3.5).
+/// A DECISION_MISMATCH (409) result is not stored.
+model Explanation {
+  id                String          @id @default(uuid()) @db.Uuid
+  routingDecisionId String          @unique @db.Uuid
+  routingDecision   RoutingDecision @relation(fields: [routingDecisionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  engineResponse    Json
+  createdAt         DateTime        @default(now()) @db.Timestamptz(3)
+}
+
+/// One row per mutating call (§6.2). Holds identifiers only, with no free-text,
+/// header, token or hash column (§6.1, arch §8.2).
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  at         DateTime @default(now()) @db.Timestamptz(3)
+  /// PROVISIONAL: required and linked to User; must become optional if 401s
+  /// are ever audited.
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  action     String // PROVISIONAL: allowed values not yet agreed
+  requestId  String // §1
+  /// PROVISIONAL, optional: an audited call may end before any record exists
+  /// (e.g. a 403, or a 422 that §3.2 says is not saved), leaving nothing to
+  /// reference. If the agreed rules audit only successful writes, entityType
+  /// and entityId become required. "Both set or both empty" needs a CHECK
+  /// constraint in migration SQL; Prisma can't express it.
+  entityType String?
+  entityId   String? // refers to different tables, so it has no foreign key
+  outcome    String // PROVISIONAL: allowed values not yet agreed
+
+  @@index([at]) // PROVISIONAL
+  @@index([requestId]) // PROVISIONAL
+}
