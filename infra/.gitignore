@@ -1,0 +1,5 @@
+# Real environment files are never committed; only env/*.env.example is.
+env/*.env
+.venv/
+__pycache__/
+.pytest_cache/

@@ -1,0 +1,36 @@
+{
+  "description": "Viewer requests ppoProjected.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-viewer",
+      "X-Request-Id": "fixture-403_forbidden_policy_transaction"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      },
+      "policy": "ppoProjected"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "X-Request-Id": "fixture-403_forbidden_policy_transaction"
+    },
+    "body": {
+      "error": {
+        "code": "FORBIDDEN_POLICY",
+        "message": "Only analysts may request ppoProjected.",
+        "details": {},
+        "requestId": "fixture-403_forbidden_policy_transaction"
+      }
+    }
+  }
+}

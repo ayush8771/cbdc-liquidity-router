@@ -1,0 +1,25 @@
+{
+  "description": "No Authorization header.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "headers": {
+      "X-Request-Id": "fixture-401_missing_token"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "X-Request-Id": "fixture-401_missing_token"
+    },
+    "body": {
+      "error": {
+        "code": "UNAUTHENTICATED",
+        "message": "Missing or invalid token.",
+        "details": {},
+        "requestId": "fixture-401_missing_token"
+      }
+    }
+  }
+}

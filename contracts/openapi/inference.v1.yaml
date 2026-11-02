@@ -1,0 +1,922 @@
+openapi: 3.1.0
+info:
+  title: CBDC Liquidity Router — Inference API (internal)
+  version: 0.3.0
+  description: |
+    Machine-readable form of docs/PHASE2_API_CONTRACT.md v0.3, §1, §2, §4 and §7.
+    Producer: Dev A (FastAPI, services/inference/). Consumer: Dev B only.
+    Field case: snake_case. Internal Compose network only; no authentication.
+
+    Status: DRAFT pending approval by Dev A, B and C (arch §10). Until it is
+    approved, docs/PHASE2_API_CONTRACT.md stays normative; any difference
+    between the two is a bug in this file.
+
+    Response schemas are closed (additionalProperties: false) so the
+    conformance check catches undocumented fields. Adding an optional field is
+    still non-breaking for consumers (§1), but it must be added here first.
+servers:
+  - url: http://inference:8000
+    description: Compose-internal (arch §5.5). Never published to the host in the full profile.
+tags:
+  - name: metadata
+  - name: routing
+
+paths:
+  /v1/health:
+    get:
+      tags: [metadata]
+      operationId: getHealth
+      summary: Liveness and readiness (§2.1)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: Ready. `status` may still be `degraded`.
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}
+        '503':
+          description: Not ready (`ready` is false). Same body shape.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/XRequestId'}
+            Retry-After: {$ref: '#/components/headers/RetryAfter'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}
+
+  /v1/version:
+    get:
+      tags: [metadata]
+      operationId: getVersion
+      summary: Engine, data, knowledge and checkpoint versions; enabled policies (§2.2)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Version'}}}
+        '503': {$ref: '#/components/responses/NotReady'}
+
+  /v1/network:
+    get:
+      tags: [metadata]
+      operationId: getNetwork
+      summary: Corridors and venues, static metadata (§2.3)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Network'}}}
+        '503': {$ref: '#/components/responses/NotReady'}
+
+  /v1/state:
+    get:
+      tags: [metadata]
+      operationId: getState
+      summary: Bridge state for a corridor under replay or a scenario (§2.5)
+      parameters:
+        - {$ref: '#/components/parameters/RequestId'}
+        - {name: corridor, in: query, required: true, schema: {$ref: '#/components/schemas/Corridor'}}
+        - name: mode
+          in: query
+          required: true
+          description: Explicit states are not looked up (§2.5).
+          schema: {type: string, enum: [historical_replay, scenario]}
+        - {name: date, in: query, required: true, schema: {type: string, format: date}}
+        - name: scenario_id
+          in: query
+          required: false
+          description: Required when mode=scenario.
+          schema: {$ref: '#/components/schemas/ScenarioId'}
+        - {name: include_history, in: query, required: false, schema: {type: boolean, default: false}}
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/StateView'}}}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/EngineTimeout'}
+
+  /v1/replay/calendar:
+    get:
+      tags: [metadata]
+      operationId: getReplayCalendar
+      summary: Valid dates and the excluded gap buffers (§2.6)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ReplayCalendar'}}}
+        '503': {$ref: '#/components/responses/NotReady'}
+
+  /v1/scenarios:
+    get:
+      tags: [metadata]
+      operationId: getScenarios
+      summary: Stage 1F scenario definitions (§2.7)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScenarioList'}}}
+        '503': {$ref: '#/components/responses/NotReady'}
+
+  /v1/route:
+    post:
+      tags: [routing]
+      operationId: route
+      summary: Route one transaction with one policy (§2.8)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RouteRequest'}}}
+      responses:
+        '200':
+          description: Routed. A regulatory rejection is also a 200, with feasibility.allowed=false.
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/RouteResponse'}}}
+        '400': {$ref: '#/components/responses/Malformed'}
+        '409': {$ref: '#/components/responses/PolicyDisabled'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/EngineTimeout'}
+
+  /v1/compare:
+    post:
+      tags: [routing]
+      operationId: compare
+      summary: Route one transaction with several policies on the same state (§2.9)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CompareRequest'}}}
+      responses:
+        '200':
+          description: Disabled or unavailable policies go into `skipped`; they don't fail the request.
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/CompareResponse'}}}
+        '400': {$ref: '#/components/responses/Malformed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/EngineTimeout'}
+
+  /v1/explain:
+    post:
+      tags: [routing]
+      operationId: explain
+      summary: Structured explanation of a routing decision (§2.10)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ExplainRequest'}}}
+      responses:
+        '200':
+          description: The decision_id equals the one /v1/route returns for the same request.
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ExplainResponse'}}}
+        '400': {$ref: '#/components/responses/Malformed'}
+        '409': {$ref: '#/components/responses/PolicyDisabled'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/EngineTimeout'}
+
+components:
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Generated by the receiver when missing; echoed in the response header and error bodies (§1).
+      schema: {type: string, minLength: 1, maxLength: 200}
+
+  headers:
+    XRequestId:
+      schema: {type: string}
+    RetryAfter:
+      description: Seconds. Sent with ENGINE_BUSY and NOT_READY (§4).
+      schema: {type: integer, minimum: 0}
+
+  responses:
+    Malformed:
+      description: MALFORMED_REQUEST — invalid JSON.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    PolicyDisabled:
+      description: POLICY_DISABLED — ppo_projected requested but no approved checkpoint is enabled.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Unprocessable:
+      description: |
+        VALIDATION_ERROR, UNSUPPORTED_CORRIDOR, INVALID_AMOUNT, DATE_OUT_OF_RANGE,
+        DATE_IN_GAP_BUFFER, UNKNOWN_SCENARIO, STATE_VENUE_MISMATCH,
+        INVALID_STATE_VALUE or POLICY_UNAVAILABLE_FOR_STATE.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    InternalError:
+      description: INTERNAL_ERROR — including a failed engine integrity check. No result is returned.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    ServiceUnavailable:
+      description: ENGINE_BUSY (queue full) or NOT_READY. Both send Retry-After.
+      headers: {Retry-After: {$ref: '#/components/headers/RetryAfter'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    NotReady:
+      description: NOT_READY — required artefacts failed to load.
+      headers: {Retry-After: {$ref: '#/components/headers/RetryAfter'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    EngineTimeout:
+      description: ENGINE_TIMEOUT — the engine task exceeded CBDC_ENGINE_TASK_TIMEOUT_S.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+
+  schemas:
+    # ---------- shared enums (§1) ----------
+    Policy:
+      type: string
+      enum: [waterfall, cheapest_feasible, ppo_projected]
+    PolicyStatus:
+      type: string
+      enum: [default, baseline, experimental]
+    StateMode:
+      type: string
+      enum: [historical_replay, scenario, explicit]
+    ValuesProvenance:
+      type: string
+      enum: [synthetic_simulation, synthetic_scenario, user_supplied_synthetic]
+    ScenarioId:
+      type: string
+      enum: [baseline, liquidity_minus30, liquidity_minus50, cheapest_venue_outage, congestion_x2, combined_stress]
+    Corridor:
+      type: string
+      enum: ['USA->IND', 'GBR->PHL', 'ARE->MEX']
+    CountryCode:
+      type: string
+      pattern: '^[A-Z]{3}$'
+    Split:
+      type: string
+      enum: [train, validation, test]
+    Regime:
+      type: string
+      enum: [below_cheapest, near_boundary, splitting_needed, exceeds_combined]
+    DataSourceTag:
+      description: Passed through from bridge_network.csv unchanged (§2.3).
+      type: string
+      enum: [real_static_bridge, synthetic_bridge_expansion, synthetic_no_real_anchor]
+    BridgeUid:
+      type: string
+      pattern: '^[A-Z]{3}->[A-Z]{3}#[0-9]+$'
+    Sha256Hex:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+    DecisionId:
+      description: Hash of the canonical request plus artefact versions, never the outputs (§1).
+      type: string
+      pattern: '^sha256:[0-9a-f]{64}$'
+    Money:
+      description: USD as a JSON number (§1).
+      type: number
+    NonNegMoney:
+      type: number
+      minimum: 0
+    Share:
+      type: number
+      minimum: 0
+      maximum: 1
+    Date:
+      type: string
+      format: date
+    Timestamp:
+      type: string
+      format: date-time
+
+    # ---------- metadata ----------
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, ready, checks, engine_pool, time]
+      properties:
+        status: {type: string, enum: [ok, degraded]}
+        ready: {type: boolean}
+        checks:
+          type: object
+          additionalProperties: false
+          required: [structured_data, daily_state, knowledge_base, engine_workers, ppo_checkpoint]
+          properties:
+            structured_data: {type: string, enum: [ok, error]}
+            daily_state: {type: string, enum: [ok, error]}
+            knowledge_base: {type: string, enum: [ok, error]}
+            engine_workers: {type: string, enum: [ok, rebuilding, error]}
+            ppo_checkpoint: {type: string, enum: [ok, disabled, error]}
+        engine_pool:
+          type: object
+          additionalProperties: false
+          required: [workers, queued, max_queue, rebuilds_since_start]
+          properties:
+            workers: {type: integer, minimum: 0}
+            queued: {type: integer, minimum: 0}
+            max_queue: {type: integer, minimum: 0}
+            rebuilds_since_start: {type: integer, minimum: 0}
+        time: {$ref: '#/components/schemas/Timestamp'}
+
+    RewardWeights:
+      type: object
+      additionalProperties: false
+      required: [lambda_latency, lambda_risk, lambda_unrouted, status]
+      properties:
+        lambda_latency: {type: number}
+        lambda_risk: {type: number}
+        lambda_unrouted: {type: number}
+        status: {type: string, const: placeholder, description: 'D8: always "placeholder" until calibrated.'}
+
+    Checkpoint:
+      description: An approved checkpoint (§2.2, §7). Null when ppo_projected is disabled.
+      type: object
+      additionalProperties: false
+      required: [checkpoint_id, sha256, approved_by, approved_on, source_run]
+      properties:
+        checkpoint_id: {type: string, minLength: 1}
+        sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        approved_by: {type: string, minLength: 1}
+        approved_on: {$ref: '#/components/schemas/Date'}
+        source_run: {type: string, minLength: 1}
+
+    PolicyAvailability:
+      type: object
+      additionalProperties: false
+      required: [policy, status, enabled]
+      properties:
+        policy: {$ref: '#/components/schemas/Policy'}
+        status: {$ref: '#/components/schemas/PolicyStatus'}
+        enabled: {type: boolean}
+        disabled_reason: {type: string}
+
+    Version:
+      type: object
+      additionalProperties: false
+      required: [api_version, engine_version, phase1_baseline_tag, git_commit, default_policy, policies,
+                 checkpoint, knowledge, data, reward_weights, runtime]
+      properties:
+        api_version: {type: string, const: v1}
+        engine_version: {type: string}
+        phase1_baseline_tag: {type: string}
+        git_commit: {type: string, pattern: '^[0-9a-f]{7,40}$'}
+        default_policy: {type: string, const: waterfall, description: 'D1'}
+        policies:
+          type: array
+          items: {$ref: '#/components/schemas/PolicyAvailability'}
+        checkpoint:
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Checkpoint'}]
+        knowledge:
+          type: object
+          additionalProperties: false
+          required: [knowledge_version, sha256]
+          properties:
+            knowledge_version: {type: string}
+            sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        data:
+          type: object
+          additionalProperties: false
+          required: [daily_state_sha256, bridge_network_sha256, normalization_stats_sha256, date_range]
+          properties:
+            daily_state_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+            bridge_network_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+            normalization_stats_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+            date_range: {$ref: '#/components/schemas/DateRange'}
+        reward_weights: {$ref: '#/components/schemas/RewardWeights'}
+        runtime:
+          type: object
+          additionalProperties: false
+          required: [platform, python, torch, device, lock_file]
+          properties:
+            platform: {type: string}
+            python: {type: string}
+            torch: {type: string}
+            device: {type: string, enum: [cpu, cuda]}
+            lock_file: {type: string}
+
+    DateRange:
+      type: object
+      additionalProperties: false
+      required: [start, end]
+      properties:
+        start: {$ref: '#/components/schemas/Date'}
+        end: {$ref: '#/components/schemas/Date'}
+
+    NetworkVenue:
+      type: object
+      additionalProperties: false
+      required: [slot, bridge_uid, fee_pct, baseline_capacity_usd, data_source_tag]
+      properties:
+        slot: {type: integer, minimum: 0}
+        bridge_uid: {$ref: '#/components/schemas/BridgeUid'}
+        fee_pct: {type: number, minimum: 0, description: 'Fraction (0.015 = 1.5%).'}
+        baseline_capacity_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        data_source_tag: {$ref: '#/components/schemas/DataSourceTag'}
+
+    Network:
+      type: object
+      additionalProperties: false
+      required: [corridors, max_single_transfer_usd, max_single_transfer_provenance]
+      properties:
+        corridors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [corridor, sender_country, receiver_country, venues]
+            properties:
+              corridor: {$ref: '#/components/schemas/Corridor'}
+              sender_country: {$ref: '#/components/schemas/CountryCode'}
+              receiver_country: {$ref: '#/components/schemas/CountryCode'}
+              venues:
+                type: array
+                items: {$ref: '#/components/schemas/NetworkVenue'}
+        max_single_transfer_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        max_single_transfer_provenance: {type: string}
+
+    VenueHistory:
+      description: 30 raw (not normalised) values, oldest first (§2.5).
+      type: object
+      additionalProperties: false
+      required: [dates, liquidity_usd, congestion]
+      properties:
+        dates: {type: array, minItems: 30, maxItems: 30, items: {$ref: '#/components/schemas/Date'}}
+        liquidity_usd: {type: array, minItems: 30, maxItems: 30, items: {type: number, minimum: 0}}
+        congestion: {type: array, minItems: 30, maxItems: 30, items: {type: number, minimum: 0}}
+
+    StateViewVenue:
+      type: object
+      additionalProperties: false
+      required: [slot, bridge_uid, fee_pct, liquidity_usd, congestion, data_source_tag, values_provenance]
+      properties:
+        slot: {type: integer, minimum: 0}
+        bridge_uid: {$ref: '#/components/schemas/BridgeUid'}
+        fee_pct: {type: number, minimum: 0}
+        liquidity_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        congestion: {type: number, minimum: 0}
+        data_source_tag: {$ref: '#/components/schemas/DataSourceTag'}
+        values_provenance: {$ref: '#/components/schemas/ValuesProvenance'}
+        history: {$ref: '#/components/schemas/VenueHistory'}
+
+    StateView:
+      type: object
+      additionalProperties: false
+      required: [corridor, state, corridor_risk, baseline_cost_pct, venues, warnings]
+      properties:
+        corridor: {$ref: '#/components/schemas/Corridor'}
+        state:
+          type: object
+          additionalProperties: false
+          required: [mode, date, split, scenario_id]
+          properties:
+            mode: {type: string, enum: [historical_replay, scenario]}
+            date: {$ref: '#/components/schemas/Date'}
+            split: {$ref: '#/components/schemas/Split'}
+            scenario_id:
+              oneOf: [{type: 'null'}, {$ref: '#/components/schemas/ScenarioId'}]
+        corridor_risk: {type: number, minimum: 0}
+        baseline_cost_pct: {type: number}
+        venues:
+          type: array
+          items: {$ref: '#/components/schemas/StateViewVenue'}
+        warnings:
+          type: array
+          items: {$ref: '#/components/schemas/Warning'}
+
+    ReplayCalendar:
+      type: object
+      additionalProperties: false
+      required: [start, end, splits, gap_buffer_days, excluded_ranges, note]
+      properties:
+        start: {$ref: '#/components/schemas/Date'}
+        end: {$ref: '#/components/schemas/Date'}
+        splits:
+          type: object
+          additionalProperties: false
+          required: [train, validation, test]
+          properties:
+            train: {$ref: '#/components/schemas/DateRange'}
+            validation: {$ref: '#/components/schemas/DateRange'}
+            test: {$ref: '#/components/schemas/DateRange'}
+        gap_buffer_days: {type: integer, minimum: 0}
+        excluded_ranges:
+          type: array
+          items: {$ref: '#/components/schemas/DateRange'}
+        note: {type: string}
+
+    Scenario:
+      type: object
+      additionalProperties: false
+      required: [scenario_id, description, liquidity_multiplier, congestion_multiplier, cheapest_venue_liquidity_multiplier]
+      properties:
+        scenario_id: {$ref: '#/components/schemas/ScenarioId'}
+        description: {type: string}
+        liquidity_multiplier: {type: number, exclusiveMinimum: 0}
+        congestion_multiplier: {type: number, exclusiveMinimum: 0}
+        cheapest_venue_liquidity_multiplier: {type: number, exclusiveMinimum: 0}
+
+    ScenarioList:
+      type: object
+      additionalProperties: false
+      required: [scenarios, note]
+      properties:
+        scenarios:
+          type: array
+          items: {$ref: '#/components/schemas/Scenario'}
+        note: {type: string}
+
+    # ---------- state specification (§2.4) ----------
+    StateSpec:
+      description: Exactly one of three modes. Unknown fields are rejected with VALIDATION_ERROR (§2.4).
+      oneOf:
+        - {$ref: '#/components/schemas/ReplayState'}
+        - {$ref: '#/components/schemas/ScenarioState'}
+        - {$ref: '#/components/schemas/ExplicitState'}
+      discriminator:
+        propertyName: mode
+        mapping:
+          historical_replay: '#/components/schemas/ReplayState'
+          scenario: '#/components/schemas/ScenarioState'
+          explicit: '#/components/schemas/ExplicitState'
+
+    ReplayState:
+      type: object
+      additionalProperties: false
+      required: [mode, date]
+      properties:
+        mode: {type: string, const: historical_replay}
+        date: {$ref: '#/components/schemas/Date'}
+
+    ScenarioState:
+      type: object
+      additionalProperties: false
+      required: [mode, date, scenario_id]
+      properties:
+        mode: {type: string, const: scenario}
+        date: {$ref: '#/components/schemas/Date'}
+        scenario_id: {type: string, description: 'Validated against ScenarioId by the service (UNKNOWN_SCENARIO), not by schema.'}
+
+    ExplicitState:
+      type: object
+      additionalProperties: false
+      required: [mode, reference_date, venues]
+      properties:
+        mode: {type: string, const: explicit}
+        reference_date: {$ref: '#/components/schemas/Date'}
+        venues:
+          description: Exactly the corridor's venues, each once (STATE_VENUE_MISMATCH otherwise).
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/ExplicitVenue'}
+
+    ExplicitVenue:
+      description: No fee, risk, baseline_cost_pct or data_source_tag can be set (§2.4).
+      type: object
+      additionalProperties: false
+      required: [bridge_uid, liquidity_usd, congestion]
+      properties:
+        bridge_uid: {type: string}
+        liquidity_usd: {type: number, description: '>= 0 and finite; INVALID_STATE_VALUE otherwise.'}
+        congestion: {type: number, description: '>= 0 and finite; INVALID_STATE_VALUE otherwise.'}
+        history:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ExplicitHistory'}
+
+    ExplicitHistory:
+      description: |
+        30 finite, non-negative numbers per channel, oldest first; the last
+        equals the current value within 1e-9 relative. Length and value rules
+        are enforced by the service as INVALID_STATE_VALUE, so the schema
+        does not constrain them.
+      type: object
+      additionalProperties: false
+      required: [liquidity_usd, congestion]
+      properties:
+        liquidity_usd: {type: array, items: {type: number}}
+        congestion: {type: array, items: {type: number}}
+
+    # ---------- route / compare / explain ----------
+    TransactionInput:
+      type: object
+      required: [sender_country, receiver_country, amount_usd]
+      properties:
+        sender_country: {type: string}
+        receiver_country: {type: string}
+        amount_usd:
+          type: number
+          description: '> 0 and finite (INVALID_AMOUNT). Above the $500K cap is not an error: 200 with feasibility.allowed=false.'
+        client_reference: {type: ['string', 'null'], maxLength: 200}
+
+    RouteRequest:
+      type: object
+      required: [transaction, state]
+      properties:
+        transaction: {$ref: '#/components/schemas/TransactionInput'}
+        state: {$ref: '#/components/schemas/StateSpec'}
+        policy:
+          allOf: [{$ref: '#/components/schemas/Policy'}]
+          default: waterfall
+
+    ExplainRequest:
+      description: The /v1/route body plus an optional flag that does not enter decision_id.
+      type: object
+      required: [transaction, state]
+      properties:
+        transaction: {$ref: '#/components/schemas/TransactionInput'}
+        state: {$ref: '#/components/schemas/StateSpec'}
+        policy:
+          allOf: [{$ref: '#/components/schemas/Policy'}]
+          default: waterfall
+        include_semantic_context: {type: boolean, default: false}
+
+    CompareRequest:
+      type: object
+      required: [transaction, state]
+      properties:
+        transaction: {$ref: '#/components/schemas/TransactionInput'}
+        state: {$ref: '#/components/schemas/StateSpec'}
+        policies:
+          description: Defaults to every enabled policy.
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Policy'}
+
+    TransactionEcho:
+      type: object
+      additionalProperties: false
+      required: [sender_country, receiver_country, amount_usd, corridor, simulation_date, client_reference]
+      properties:
+        sender_country: {$ref: '#/components/schemas/CountryCode'}
+        receiver_country: {$ref: '#/components/schemas/CountryCode'}
+        amount_usd: {type: number, exclusiveMinimum: 0}
+        corridor: {$ref: '#/components/schemas/Corridor'}
+        simulation_date: {$ref: '#/components/schemas/Date'}
+        client_reference: {type: ['string', 'null']}
+
+    Feasibility:
+      type: object
+      additionalProperties: false
+      required: [allowed, reason, decisive_fact_ids, knowledge_version]
+      properties:
+        allowed: {type: boolean}
+        reason: {type: ['string', 'null'], description: "Phase 1's reason string when rejected."}
+        decisive_fact_ids: {type: array, items: {type: string}}
+        knowledge_version: {type: string}
+
+    Allocation:
+      type: object
+      additionalProperties: false
+      required: [slot, bridge_uid, data_source_tag, fee_pct, liquidity_usd, congestion, risk, share_requested,
+                 amount_requested_usd, amount_executed_usd, amount_clipped_usd, share_before_projection]
+      properties:
+        slot: {type: integer, minimum: 0}
+        bridge_uid: {$ref: '#/components/schemas/BridgeUid'}
+        data_source_tag: {$ref: '#/components/schemas/DataSourceTag'}
+        fee_pct: {type: number, minimum: 0}
+        liquidity_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        congestion: {type: number, minimum: 0}
+        risk: {type: number, minimum: 0, description: 'Corridor risk; same for every venue in the corridor.'}
+        share_requested: {$ref: '#/components/schemas/Share'}
+        amount_requested_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        amount_executed_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        amount_clipped_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        share_before_projection:
+          description: Raw PPO share for ppo_projected; null otherwise.
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Share'}]
+
+    Totals:
+      type: object
+      additionalProperties: false
+      required: [amount_usd, requested_usd, executed_usd, unrouted_env_usd, unrouted_amount_based_usd,
+                 completion_ratio, completed, bridges_used]
+      properties:
+        amount_usd: {type: number, exclusiveMinimum: 0}
+        requested_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        executed_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        unrouted_env_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        unrouted_amount_based_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        completion_ratio: {$ref: '#/components/schemas/Share'}
+        completed: {type: boolean}
+        bridges_used: {type: integer, minimum: 0}
+
+    Metrics:
+      type: object
+      additionalProperties: false
+      required: [fee_cost_usd, baseline_cost_pct, cost_term, latency_term, risk_term, unrouted_term_env,
+                 unrouted_term_amount_based, reward_env, reward_amount_based, reward_weights]
+      properties:
+        fee_cost_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        baseline_cost_pct: {type: number}
+        cost_term: {type: number}
+        latency_term: {type: number}
+        risk_term: {type: number}
+        unrouted_term_env: {type: number}
+        unrouted_term_amount_based: {type: number}
+        reward_env: {type: number}
+        reward_amount_based: {type: number}
+        reward_weights: {$ref: '#/components/schemas/RewardWeights'}
+
+    Diagnostics:
+      type: object
+      additionalProperties: false
+      required: [regime, combined_liquidity_usd, projection_applied]
+      properties:
+        regime: {$ref: '#/components/schemas/Regime'}
+        combined_liquidity_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        projection_applied: {type: boolean}
+
+    Provenance:
+      type: object
+      additionalProperties: false
+      required: [state_mode, state_date, split, scenario_id, values_provenance, engine_version, git_commit,
+                 knowledge_sha256, daily_state_sha256, state_frame_sha256, checkpoint, device, platform]
+      properties:
+        state_mode: {$ref: '#/components/schemas/StateMode'}
+        state_date: {$ref: '#/components/schemas/Date'}
+        split: {$ref: '#/components/schemas/Split'}
+        scenario_id:
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/ScenarioId'}]
+        values_provenance: {$ref: '#/components/schemas/ValuesProvenance'}
+        engine_version: {type: string}
+        git_commit: {type: string, pattern: '^[0-9a-f]{7,40}$'}
+        knowledge_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        daily_state_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        state_frame_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        checkpoint:
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Checkpoint'}]
+        device: {type: string, enum: [cpu, cuda]}
+        platform: {type: string}
+
+    WarningCode:
+      type: string
+      enum: [EXPERIMENTAL_POLICY, DATE_IN_TRAINING_SPLIT, STATE_OUTSIDE_TRAINING_RANGE, RISK_FALLBACK_USED,
+             COST_BASELINE_FALLBACK_USED, SYNTHETIC_COST_ANCHOR, PARTIAL_COMPLETION]
+
+    Warning:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: {$ref: '#/components/schemas/WarningCode'}
+        message: {type: string}
+
+    RouteResponse:
+      type: object
+      additionalProperties: false
+      required: [decision_id, policy, policy_status, transaction, feasibility, allocations, totals, metrics,
+                 diagnostics, provenance, warnings]
+      properties:
+        decision_id: {$ref: '#/components/schemas/DecisionId'}
+        policy: {$ref: '#/components/schemas/Policy'}
+        policy_status: {$ref: '#/components/schemas/PolicyStatus'}
+        transaction: {$ref: '#/components/schemas/TransactionEcho'}
+        feasibility: {$ref: '#/components/schemas/Feasibility'}
+        allocations:
+          description: One entry per feasible venue, sorted by slot. Empty on a regulatory rejection.
+          type: array
+          items: {$ref: '#/components/schemas/Allocation'}
+        totals: {$ref: '#/components/schemas/Totals'}
+        metrics: {$ref: '#/components/schemas/Metrics'}
+        diagnostics: {$ref: '#/components/schemas/Diagnostics'}
+        provenance: {$ref: '#/components/schemas/Provenance'}
+        warnings:
+          type: array
+          items: {$ref: '#/components/schemas/Warning'}
+
+    SkippedPolicy:
+      type: object
+      additionalProperties: false
+      required: [policy, code, message]
+      properties:
+        policy: {$ref: '#/components/schemas/Policy'}
+        code: {type: string, enum: [POLICY_DISABLED, POLICY_UNAVAILABLE_FOR_STATE]}
+        message: {type: string}
+
+    CompareResponse:
+      type: object
+      additionalProperties: false
+      required: [results, skipped, same_state, note]
+      properties:
+        results:
+          type: array
+          items: {$ref: '#/components/schemas/RouteResponse'}
+        skipped:
+          type: array
+          items: {$ref: '#/components/schemas/SkippedPolicy'}
+        same_state: {type: boolean, const: true}
+        note: {type: string}
+
+    ActiveFact:
+      type: object
+      additionalProperties: false
+      required: [fact_id, rule_type, value, provenance_tag, verified, source]
+      properties:
+        fact_id: {type: string}
+        rule_type: {type: string}
+        value: {}
+        provenance_tag: {type: string}
+        verified: {type: boolean}
+        source: {type: string}
+
+    ReasonCode:
+      type: string
+      enum: [CHEAPEST_FILLED_TO_LIQUIDITY, NEXT_CHEAPEST_REMAINDER, FILLED_TO_LIQUIDITY, AMOUNT_EXHAUSTED,
+             NO_LIQUIDITY, CHEAPEST_SELECTED, NOT_CHEAPEST, CLIPPED_AT_LIQUIDITY, PPO_SHARE,
+             PROJECTION_REDUCED_TO_CAPACITY, PROJECTION_INCREASED, INFEASIBLE_REGULATORY]
+
+    VenueExplanation:
+      type: object
+      additionalProperties: false
+      required: [bridge_uid, outcome, reason_code, text]
+      properties:
+        bridge_uid: {$ref: '#/components/schemas/BridgeUid'}
+        outcome: {type: string, enum: [used, unused]}
+        reason_code: {$ref: '#/components/schemas/ReasonCode'}
+        text: {type: string}
+
+    ExplainResponse:
+      type: object
+      additionalProperties: false
+      required: [decision_id, policy, summary, feasibility, venue_explanations, policy_notes, semantic_context,
+                 limitations]
+      properties:
+        decision_id: {$ref: '#/components/schemas/DecisionId'}
+        policy: {$ref: '#/components/schemas/Policy'}
+        summary: {type: string}
+        feasibility:
+          type: object
+          additionalProperties: false
+          required: [allowed, reason, active_facts, provider]
+          properties:
+            allowed: {type: boolean}
+            reason: {type: ['string', 'null']}
+            active_facts:
+              type: array
+              items: {$ref: '#/components/schemas/ActiveFact'}
+            provider: {type: string, const: StaticMemoryProvider, description: 'D6'}
+        venue_explanations:
+          description: Fill order for the waterfall, slot order otherwise.
+          type: array
+          items: {$ref: '#/components/schemas/VenueExplanation'}
+        policy_notes: {type: array, items: {type: string}}
+        semantic_context:
+          description: Null unless Cognee is enabled and include_semantic_context is true. Never changes feasibility.
+          # Inner shape not yet defined by the contract (contracts/README.md, issue C6).
+          oneOf:
+            - {type: 'null'}
+            - {type: object}
+        limitations: {type: array, items: {type: string}, minItems: 1}
+
+    # ---------- errors (§4) ----------
+    ErrorCode:
+      type: string
+      enum: [MALFORMED_REQUEST, NOT_FOUND, POLICY_DISABLED, VALIDATION_ERROR, UNSUPPORTED_CORRIDOR, INVALID_AMOUNT,
+             DATE_OUT_OF_RANGE, DATE_IN_GAP_BUFFER, UNKNOWN_SCENARIO, STATE_VENUE_MISMATCH, INVALID_STATE_VALUE,
+             POLICY_UNAVAILABLE_FOR_STATE, INTERNAL_ERROR, ENGINE_BUSY, NOT_READY, ENGINE_TIMEOUT]
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, details, request_id]
+          properties:
+            code: {$ref: '#/components/schemas/ErrorCode'}
+            message: {type: string, description: 'Never includes tokens or stack traces.'}
+            details:
+              type: object
+              properties:
+                field: {type: string}
+                errors:
+                  description: VALIDATION_ERROR only.
+                  type: array
+                  items:
+                    type: object
+                    required: [field, message]
+                    properties:
+                      field: {type: string}
+                      message: {type: string}
+            request_id: {type: string}
+
+# HTTP status for each error code (contract §4). Read by infra/scripts/check_contracts.py.
+x-error-status:
+  MALFORMED_REQUEST: 400
+  NOT_FOUND: 404
+  POLICY_DISABLED: 409
+  VALIDATION_ERROR: 422
+  UNSUPPORTED_CORRIDOR: 422
+  INVALID_AMOUNT: 422
+  DATE_OUT_OF_RANGE: 422
+  DATE_IN_GAP_BUFFER: 422
+  UNKNOWN_SCENARIO: 422
+  STATE_VENUE_MISMATCH: 422
+  INVALID_STATE_VALUE: 422
+  POLICY_UNAVAILABLE_FOR_STATE: 422
+  INTERNAL_ERROR: 500
+  ENGINE_BUSY: 503
+  NOT_READY: 503
+  ENGINE_TIMEOUT: 504

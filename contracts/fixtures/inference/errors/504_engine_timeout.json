@@ -1,0 +1,36 @@
+{
+  "description": "Engine task exceeded CBDC_ENGINE_TASK_TIMEOUT_S.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-504_engine_timeout"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 504,
+    "headers": {
+      "X-Request-Id": "fixture-504_engine_timeout"
+    },
+    "body": {
+      "error": {
+        "code": "ENGINE_TIMEOUT",
+        "message": "Engine task timed out after 10 s.",
+        "details": {},
+        "request_id": "fixture-504_engine_timeout"
+      }
+    }
+  }
+}

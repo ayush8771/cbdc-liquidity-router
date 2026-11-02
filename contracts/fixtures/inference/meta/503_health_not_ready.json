@@ -1,0 +1,36 @@
+{
+  "description": "Pool rebuilding after a failed integrity check: degraded and not ready (503).",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/v1/health",
+    "headers": {
+      "X-Request-Id": "fixture-503_health_not_ready"
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Retry-After": "5",
+      "X-Request-Id": "fixture-503_health_not_ready"
+    },
+    "body": {
+      "status": "degraded",
+      "ready": false,
+      "checks": {
+        "structured_data": "ok",
+        "daily_state": "ok",
+        "knowledge_base": "ok",
+        "engine_workers": "rebuilding",
+        "ppo_checkpoint": "disabled"
+      },
+      "engine_pool": {
+        "workers": 2,
+        "queued": 0,
+        "max_queue": 32,
+        "rebuilds_since_start": 1
+      },
+      "time": "2026-11-02T10:00:00Z"
+    }
+  }
+}

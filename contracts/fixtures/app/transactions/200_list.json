@@ -1,0 +1,148 @@
+{
+  "description": "History page with every stored fixture transaction, including a failed one.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/transactions",
+    "query": {
+      "page": "1",
+      "pageSize": "20"
+    },
+    "headers": {
+      "Authorization": "Bearer mock-viewer",
+      "X-Request-Id": "fixture-200_list"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_list"
+    },
+    "body": {
+      "items": [
+        {
+          "id": "56d0d708-62d6-59aa-aa8d-4df8d9b8d37f",
+          "createdAt": "2026-11-02T10:00:00Z",
+          "createdBy": "u-analyst-1",
+          "corridor": "GBR->PHL",
+          "amountUsd": 300000.0,
+          "simulationDate": "2024-06-14",
+          "stateMode": "historicalReplay",
+          "policy": "waterfall",
+          "policyStatus": "default",
+          "status": "routed",
+          "allowed": true,
+          "completed": true,
+          "completionRatio": 1.0,
+          "executedUsd": 300000.0,
+          "rewardAmountBased": -0.3078
+        },
+        {
+          "id": "30bfe62e-365d-533c-8da6-3cefa289f713",
+          "createdAt": "2026-11-02T10:00:00Z",
+          "createdBy": "u-analyst-1",
+          "corridor": "GBR->PHL",
+          "amountUsd": 300000.0,
+          "simulationDate": "2024-06-14",
+          "stateMode": "historicalReplay",
+          "policy": "cheapestFeasible",
+          "policyStatus": "baseline",
+          "status": "routed",
+          "allowed": true,
+          "completed": false,
+          "completionRatio": 0.5,
+          "executedUsd": 150000.0,
+          "rewardAmountBased": -0.6299
+        },
+        {
+          "id": "ab65a498-5f10-50e0-b3be-4e50d3f5b908",
+          "createdAt": "2026-11-02T10:00:00Z",
+          "createdBy": "u-analyst-1",
+          "corridor": "GBR->PHL",
+          "amountUsd": 600000.0,
+          "simulationDate": "2024-06-14",
+          "stateMode": "historicalReplay",
+          "policy": "waterfall",
+          "policyStatus": "default",
+          "status": "routed",
+          "allowed": false,
+          "completed": false,
+          "completionRatio": 0.0,
+          "executedUsd": 0.0,
+          "rewardAmountBased": -1.0
+        },
+        {
+          "id": "b4ffa6ea-812d-5748-aaee-a45483ed4866",
+          "createdAt": "2026-11-02T10:00:00Z",
+          "createdBy": "u-analyst-1",
+          "corridor": "GBR->PHL",
+          "amountUsd": 400000.0,
+          "simulationDate": "2024-06-14",
+          "stateMode": "explicit",
+          "policy": "waterfall",
+          "policyStatus": "default",
+          "status": "routed",
+          "allowed": true,
+          "completed": false,
+          "completionRatio": 0.9,
+          "executedUsd": 360000.0,
+          "rewardAmountBased": -0.46882
+        },
+        {
+          "id": "80fa54b8-7314-53de-aed4-fa530374768c",
+          "createdAt": "2026-11-02T10:00:00Z",
+          "createdBy": "u-analyst-1",
+          "corridor": "GBR->PHL",
+          "amountUsd": 300000.0,
+          "simulationDate": "2024-06-14",
+          "stateMode": "historicalReplay",
+          "policy": "ppoProjected",
+          "policyStatus": "experimental",
+          "status": "routed",
+          "allowed": true,
+          "completed": true,
+          "completionRatio": 1.0,
+          "executedUsd": 300000.0,
+          "rewardAmountBased": -0.37288
+        },
+        {
+          "id": "b4fed707-3fc7-5fbe-8bcb-018c7907bfe9",
+          "createdAt": "2026-11-02T10:00:00Z",
+          "createdBy": "u-analyst-1",
+          "corridor": "ARE->MEX",
+          "amountUsd": 100000.0,
+          "simulationDate": "2024-06-14",
+          "stateMode": "historicalReplay",
+          "policy": "waterfall",
+          "policyStatus": "default",
+          "status": "routed",
+          "allowed": true,
+          "completed": true,
+          "completionRatio": 1.0,
+          "executedUsd": 100000.0,
+          "rewardAmountBased": -0.2069
+        },
+        {
+          "id": "a121dc5c-b250-5b30-8025-f9e07e76d4e0",
+          "createdAt": "2026-11-02T10:00:00Z",
+          "createdBy": "u-analyst-1",
+          "corridor": "GBR->PHL",
+          "amountUsd": 300000.0,
+          "simulationDate": "2024-06-14",
+          "stateMode": "historicalReplay",
+          "policy": "waterfall",
+          "policyStatus": "default",
+          "status": "failed",
+          "allowed": null,
+          "completed": null,
+          "completionRatio": null,
+          "executedUsd": null,
+          "rewardAmountBased": null
+        }
+      ],
+      "page": 1,
+      "pageSize": 20,
+      "total": 7
+    }
+  }
+}

@@ -1,0 +1,274 @@
+{
+  "description": "Compare under cheapest_venue_outage. ppo_projected is disabled (no approved checkpoint), so it is skipped, not an error.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/compare",
+    "headers": {
+      "X-Request-Id": "fixture-200_scenario_outage_ppo_skipped"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "scenario",
+        "date": "2024-06-14",
+        "scenario_id": "cheapest_venue_outage"
+      },
+      "policies": [
+        "waterfall",
+        "cheapest_feasible",
+        "ppo_projected"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_scenario_outage_ppo_skipped"
+    },
+    "body": {
+      "results": [
+        {
+          "decision_id": "sha256:9455bec70782714479142448912a81acdd1399772c0f704cebf465d5211cb699",
+          "policy": "waterfall",
+          "policy_status": "default",
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000.0,
+            "corridor": "GBR->PHL",
+            "simulation_date": "2024-06-14",
+            "client_reference": null
+          },
+          "feasibility": {
+            "allowed": true,
+            "reason": null,
+            "decisive_fact_ids": [],
+            "knowledge_version": "2026-11-02.1"
+          },
+          "allocations": [
+            {
+              "slot": 0,
+              "bridge_uid": "GBR->PHL#0",
+              "data_source_tag": "real_static_bridge",
+              "fee_pct": 0.02,
+              "liquidity_usd": 412345.6,
+              "congestion": 0.31,
+              "risk": 0.087,
+              "share_requested": 0.95,
+              "amount_requested_usd": 285000.0,
+              "amount_executed_usd": 285000.0,
+              "amount_clipped_usd": 0.0,
+              "share_before_projection": null
+            },
+            {
+              "slot": 1,
+              "bridge_uid": "GBR->PHL#1",
+              "data_source_tag": "synthetic_bridge_expansion",
+              "fee_pct": 0.014,
+              "liquidity_usd": 15000.0,
+              "congestion": 0.22,
+              "risk": 0.087,
+              "share_requested": 0.05,
+              "amount_requested_usd": 15000.0,
+              "amount_executed_usd": 15000.0,
+              "amount_clipped_usd": 0.0,
+              "share_before_projection": null
+            },
+            {
+              "slot": 2,
+              "bridge_uid": "GBR->PHL#2",
+              "data_source_tag": "synthetic_bridge_expansion",
+              "fee_pct": 0.03,
+              "liquidity_usd": 85000.0,
+              "congestion": 0.48,
+              "risk": 0.087,
+              "share_requested": 0.0,
+              "amount_requested_usd": 0.0,
+              "amount_executed_usd": 0.0,
+              "amount_clipped_usd": 0.0,
+              "share_before_projection": null
+            }
+          ],
+          "totals": {
+            "amount_usd": 300000.0,
+            "requested_usd": 300000.0,
+            "executed_usd": 300000.0,
+            "unrouted_env_usd": 0.0,
+            "unrouted_amount_based_usd": 0.0,
+            "completion_ratio": 1.0,
+            "completed": true,
+            "bridges_used": 2
+          },
+          "metrics": {
+            "fee_cost_usd": 5910.0,
+            "baseline_cost_pct": 0.0612,
+            "cost_term": 0.0415,
+            "latency_term": 0.3055,
+            "risk_term": 0.087,
+            "unrouted_term_env": 0.0,
+            "unrouted_term_amount_based": 0.0,
+            "reward_env": -0.351,
+            "reward_amount_based": -0.351,
+            "reward_weights": {
+              "lambda_latency": 1.0,
+              "lambda_risk": 1.0,
+              "lambda_unrouted": 1.0,
+              "status": "placeholder"
+            }
+          },
+          "diagnostics": {
+            "regime": "splitting_needed",
+            "combined_liquidity_usd": 512345.6,
+            "projection_applied": false
+          },
+          "provenance": {
+            "state_mode": "scenario",
+            "state_date": "2024-06-14",
+            "split": "test",
+            "scenario_id": "cheapest_venue_outage",
+            "values_provenance": "synthetic_scenario",
+            "engine_version": "0.1.0",
+            "git_commit": "bc9905e",
+            "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+            "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+            "state_frame_sha256": "ecdaaf6d7039a38087fe9dd8e3cd77ad4a7d5ecfe949f3100591dfdedc137141",
+            "checkpoint": null,
+            "device": "cpu",
+            "platform": "linux-x86_64"
+          },
+          "warnings": []
+        },
+        {
+          "decision_id": "sha256:7e6841d5f97d8668dc7befd51675eceee20f48bdc840ce7eee869fc392f170fb",
+          "policy": "cheapest_feasible",
+          "policy_status": "baseline",
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000.0,
+            "corridor": "GBR->PHL",
+            "simulation_date": "2024-06-14",
+            "client_reference": null
+          },
+          "feasibility": {
+            "allowed": true,
+            "reason": null,
+            "decisive_fact_ids": [],
+            "knowledge_version": "2026-11-02.1"
+          },
+          "allocations": [
+            {
+              "slot": 0,
+              "bridge_uid": "GBR->PHL#0",
+              "data_source_tag": "real_static_bridge",
+              "fee_pct": 0.02,
+              "liquidity_usd": 412345.6,
+              "congestion": 0.31,
+              "risk": 0.087,
+              "share_requested": 0.0,
+              "amount_requested_usd": 0.0,
+              "amount_executed_usd": 0.0,
+              "amount_clipped_usd": 0.0,
+              "share_before_projection": null
+            },
+            {
+              "slot": 1,
+              "bridge_uid": "GBR->PHL#1",
+              "data_source_tag": "synthetic_bridge_expansion",
+              "fee_pct": 0.014,
+              "liquidity_usd": 15000.0,
+              "congestion": 0.22,
+              "risk": 0.087,
+              "share_requested": 1.0,
+              "amount_requested_usd": 300000.0,
+              "amount_executed_usd": 15000.0,
+              "amount_clipped_usd": 285000.0,
+              "share_before_projection": null
+            },
+            {
+              "slot": 2,
+              "bridge_uid": "GBR->PHL#2",
+              "data_source_tag": "synthetic_bridge_expansion",
+              "fee_pct": 0.03,
+              "liquidity_usd": 85000.0,
+              "congestion": 0.48,
+              "risk": 0.087,
+              "share_requested": 0.0,
+              "amount_requested_usd": 0.0,
+              "amount_executed_usd": 0.0,
+              "amount_clipped_usd": 0.0,
+              "share_before_projection": null
+            }
+          ],
+          "totals": {
+            "amount_usd": 300000.0,
+            "requested_usd": 300000.0,
+            "executed_usd": 15000.0,
+            "unrouted_env_usd": 285000.0,
+            "unrouted_amount_based_usd": 285000.0,
+            "completion_ratio": 0.05,
+            "completed": false,
+            "bridges_used": 1
+          },
+          "metrics": {
+            "fee_cost_usd": 210.0,
+            "baseline_cost_pct": 0.0612,
+            "cost_term": 0.00236,
+            "latency_term": 0.011,
+            "risk_term": 0.00435,
+            "unrouted_term_env": 0.95,
+            "unrouted_term_amount_based": 0.95,
+            "reward_env": -0.96299,
+            "reward_amount_based": -0.96299,
+            "reward_weights": {
+              "lambda_latency": 1.0,
+              "lambda_risk": 1.0,
+              "lambda_unrouted": 1.0,
+              "status": "placeholder"
+            }
+          },
+          "diagnostics": {
+            "regime": "splitting_needed",
+            "combined_liquidity_usd": 512345.6,
+            "projection_applied": false
+          },
+          "provenance": {
+            "state_mode": "scenario",
+            "state_date": "2024-06-14",
+            "split": "test",
+            "scenario_id": "cheapest_venue_outage",
+            "values_provenance": "synthetic_scenario",
+            "engine_version": "0.1.0",
+            "git_commit": "bc9905e",
+            "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+            "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+            "state_frame_sha256": "ecdaaf6d7039a38087fe9dd8e3cd77ad4a7d5ecfe949f3100591dfdedc137141",
+            "checkpoint": null,
+            "device": "cpu",
+            "platform": "linux-x86_64"
+          },
+          "warnings": [
+            {
+              "code": "PARTIAL_COMPLETION",
+              "message": "Executed 5.0% of the amount; the rest is unrouted."
+            }
+          ]
+        }
+      ],
+      "skipped": [
+        {
+          "policy": "ppo_projected",
+          "code": "POLICY_DISABLED",
+          "message": "no approved checkpoint configured"
+        }
+      ],
+      "same_state": true,
+      "note": "Single-transaction comparison under placeholder reward weights. Not evidence that one policy is better; see docs/STAGE1F_RESULTS.md."
+    }
+  }
+}

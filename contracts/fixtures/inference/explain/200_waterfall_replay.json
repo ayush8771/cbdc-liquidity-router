@@ -1,0 +1,77 @@
+{
+  "description": "Contract §2.10 example. Same request as route/200_waterfall_replay.json, so the decision_id matches; include_semantic_context does not enter it.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/explain",
+    "headers": {
+      "X-Request-Id": "fixture-200_waterfall_replay"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      },
+      "include_semantic_context": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_waterfall_replay"
+    },
+    "body": {
+      "decision_id": "sha256:d3c4bf8d044ad91f3f73e1cad651c590b89d60a5b1dc7e02c8fcd9bcfe90178e",
+      "policy": "waterfall",
+      "summary": "Routed 100% of $300,000 across 2 venues in fee order, each filled up to its simulated liquidity.",
+      "feasibility": {
+        "allowed": true,
+        "reason": null,
+        "active_facts": [
+          {
+            "fact_id": "global_max_single_transfer_usd",
+            "rule_type": "max_single_transfer_usd",
+            "value": 500000.0,
+            "provenance_tag": "project_assumption",
+            "verified": false,
+            "source": "Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation."
+          }
+        ],
+        "provider": "StaticMemoryProvider"
+      },
+      "venue_explanations": [
+        {
+          "bridge_uid": "GBR->PHL#1",
+          "outcome": "used",
+          "reason_code": "CHEAPEST_FILLED_TO_LIQUIDITY",
+          "text": "Lowest fee (1.40%). Filled to its simulated liquidity of $150,000."
+        },
+        {
+          "bridge_uid": "GBR->PHL#0",
+          "outcome": "used",
+          "reason_code": "NEXT_CHEAPEST_REMAINDER",
+          "text": "Next-lowest fee (2.00%). Took the remaining $150,000."
+        },
+        {
+          "bridge_uid": "GBR->PHL#2",
+          "outcome": "unused",
+          "reason_code": "AMOUNT_EXHAUSTED",
+          "text": "Not needed: the amount was fully routed by cheaper venues."
+        }
+      ],
+      "policy_notes": [],
+      "semantic_context": null,
+      "limitations": [
+        "Bridge liquidity and congestion are synthetic simulation values.",
+        "Reward weights are uncalibrated placeholders.",
+        "The only regulatory fact is an assumed $500K cap, not a real regulation.",
+        "Each transaction is independent; routing does not deplete liquidity for later transactions."
+      ]
+    }
+  }
+}

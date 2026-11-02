@@ -1,0 +1,24 @@
+{
+  "description": "Backend in INFERENCE_MODE=mock. No auth.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/health",
+    "headers": {
+      "X-Request-Id": "fixture-200_health_mock"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_health_mock"
+    },
+    "body": {
+      "status": "ok",
+      "database": "ok",
+      "inference": "mock",
+      "authMode": "dev",
+      "time": "2026-11-02T10:00:00Z"
+    }
+  }
+}

@@ -1,0 +1,1082 @@
+openapi: 3.1.0
+info:
+  title: CBDC Liquidity Router — Application API (public)
+  version: 0.3.0
+  description: |
+    Machine-readable form of docs/PHASE2_API_CONTRACT.md v0.3, §1, §3 and §4.
+    Producer: Dev B (Express, services/backend/). Consumer: Dev C (services/web/).
+    Field case: camelCase. Same origin through the Vite proxy; backend on port 4000.
+
+    Status: DRAFT pending approval by Dev A, B and C (arch §10). Until it is
+    approved, docs/PHASE2_API_CONTRACT.md stays normative; any difference
+    between the two is a bug in this file.
+
+    Engine → app mapping (§3.2): every key snake_case → camelCase. Only two
+    kinds of enum value are mapped: policy names (cheapest_feasible →
+    cheapestFeasible, ppo_projected → ppoProjected) and state modes
+    (historical_replay → historicalReplay). Every other value — codes, IDs,
+    tags, bridgeUid, regime, valuesProvenance, scenarioId, split — is
+    unchanged. Mappers never compute a metric.
+
+    Authentication is development-only (arch §8, contract §3.0) and is not
+    production security.
+servers:
+  - url: /api/v1
+    description: Same origin (Vite proxy → backend :4000).
+security:
+  - devBearer: []
+tags:
+  - name: system
+  - name: auth
+  - name: metadata
+  - name: transactions
+  - name: comparisons
+  - name: dashboard
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Backend, database and inference status (§3.9). No auth.
+      security: []
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Caller identity and role (§3.0)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Me'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
+  /api/v1/meta:
+    get:
+      tags: [metadata]
+      operationId: getMeta
+      summary: Versions, enabled policies, reward-weight status (§3.9)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Meta'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/InferenceError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /api/v1/network:
+    get:
+      tags: [metadata]
+      operationId: getNetwork
+      summary: Corridors and venues (§3.1)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Network'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/InferenceError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /api/v1/state:
+    get:
+      tags: [metadata]
+      operationId: getState
+      summary: Bridge monitor data (§3.7)
+      parameters:
+        - {$ref: '#/components/parameters/RequestId'}
+        - {name: corridor, in: query, required: true, schema: {$ref: '#/components/schemas/Corridor'}}
+        - {name: mode, in: query, required: true, schema: {type: string, enum: [historicalReplay, scenario]}}
+        - {name: date, in: query, required: true, schema: {type: string, format: date}}
+        - {name: scenarioId, in: query, required: false, schema: {$ref: '#/components/schemas/ScenarioId'}}
+        - {name: includeHistory, in: query, required: false, schema: {type: boolean, default: false}}
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/StateView'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/InferenceError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/EngineTimeout'}
+
+  /api/v1/replay/calendar:
+    get:
+      tags: [metadata]
+      operationId: getReplayCalendar
+      summary: Valid dates (§3.1)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ReplayCalendar'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/InferenceError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /api/v1/scenarios:
+    get:
+      tags: [metadata]
+      operationId: getScenarios
+      summary: Scenario list (§3.1)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScenarioList'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/InferenceError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /api/v1/transactions:
+    post:
+      tags: [transactions]
+      operationId: createTransaction
+      summary: Submit and route a transaction; persist the decision (§3.2)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CreateTransactionRequest'}}}
+      responses:
+        '201':
+          description: Routed (status "routed"), including regulatory rejections (feasibility.allowed=false).
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/TransactionRecord'}}}
+        '400': {$ref: '#/components/responses/Malformed'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/ForbiddenPolicy'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/InferenceError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/EngineTimeout'}
+    get:
+      tags: [transactions]
+      operationId: listTransactions
+      summary: Paginated history with filters (§3.3)
+      parameters:
+        - {$ref: '#/components/parameters/RequestId'}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: corridor, in: query, schema: {$ref: '#/components/schemas/Corridor'}}
+        - {name: policy, in: query, schema: {$ref: '#/components/schemas/Policy'}}
+        - {name: stateMode, in: query, schema: {$ref: '#/components/schemas/StateMode'}}
+        - {name: completed, in: query, schema: {type: boolean}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: sort, in: query, schema: {type: string, default: 'createdAt:desc'}}
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/TransactionPage'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
+  /api/v1/transactions/{id}:
+    get:
+      tags: [transactions]
+      operationId: getTransaction
+      summary: One transaction with its decision and allocations (§3.4)
+      parameters:
+        - {$ref: '#/components/parameters/RequestId'}
+        - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200':
+          description: Same body as the 201 of POST /transactions.
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/TransactionRecord'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
+  /api/v1/transactions/{id}/explanation:
+    get:
+      tags: [transactions]
+      operationId: getTransactionExplanation
+      summary: Explanation, stored after the first request (§3.5)
+      parameters:
+        - {$ref: '#/components/parameters/RequestId'}
+        - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Explanation'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/DecisionMismatch'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/InferenceError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/EngineTimeout'}
+
+  /api/v1/comparisons:
+    post:
+      tags: [comparisons]
+      operationId: createComparison
+      summary: Compare policies for one transaction; persisted (§3.6)
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CreateComparisonRequest'}}}
+      responses:
+        '201':
+          description: Created
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ComparisonRecord'}}}
+        '400': {$ref: '#/components/responses/Malformed'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/ForbiddenPolicy'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/InferenceError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/EngineTimeout'}
+
+  /api/v1/comparisons/{id}:
+    get:
+      tags: [comparisons]
+      operationId: getComparison
+      summary: A stored comparison (§3.1)
+      parameters:
+        - {$ref: '#/components/parameters/RequestId'}
+        - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ComparisonRecord'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
+  /api/v1/dashboard/summary:
+    get:
+      tags: [dashboard]
+      operationId: getDashboardSummary
+      summary: Aggregates over stored decisions (§3.8)
+      parameters:
+        - {$ref: '#/components/parameters/RequestId'}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: corridor, in: query, schema: {$ref: '#/components/schemas/Corridor'}}
+        - {name: policy, in: query, schema: {$ref: '#/components/schemas/Policy'}}
+      responses:
+        '200':
+          description: OK
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/DashboardSummary'}}}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
+components:
+  securitySchemes:
+    devBearer:
+      type: http
+      scheme: bearer
+      description: |
+        Development only (arch §8). A 64-hex token generated locally; the
+        backend stores only its SHA-256. MSW mock mode accepts only
+        "mock-viewer" and "mock-analyst", which the real backend rejects.
+
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 200}
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+
+  headers:
+    XRequestId:
+      schema: {type: string}
+    RetryAfter:
+      schema: {type: integer, minimum: 0}
+
+  responses:
+    Malformed:
+      description: MALFORMED_REQUEST
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Unauthenticated:
+      description: UNAUTHENTICATED — missing, malformed or unknown token.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    ForbiddenPolicy:
+      description: FORBIDDEN_POLICY — a non-analyst requested ppoProjected.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    NotFound:
+      description: NOT_FOUND
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    DecisionMismatch:
+      description: DECISION_MISMATCH — recomputed decisionId differs from the stored one (engine artefacts changed).
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Unprocessable:
+      description: VALIDATION_ERROR, or an engine 422 passed through with the same code (§3.2). Not persisted.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    InternalError:
+      description: INTERNAL_ERROR
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    InferenceError:
+      description: INFERENCE_ERROR — inference returned 5xx or an invalid body.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Unavailable:
+      description: INFERENCE_UNAVAILABLE (unreachable or 15 s timeout) or ENGINE_BUSY (passed through, with Retry-After).
+      headers: {Retry-After: {$ref: '#/components/headers/RetryAfter'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    EngineTimeout:
+      description: ENGINE_TIMEOUT, passed through from inference.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+
+  schemas:
+    # ---------- enums ----------
+    Policy:
+      type: string
+      enum: [waterfall, cheapestFeasible, ppoProjected]
+    PolicyStatus:
+      type: string
+      enum: [default, baseline, experimental]
+    StateMode:
+      type: string
+      enum: [historicalReplay, scenario, explicit]
+    ValuesProvenance:
+      type: string
+      enum: [synthetic_simulation, synthetic_scenario, user_supplied_synthetic]
+    ScenarioId:
+      type: string
+      enum: [baseline, liquidity_minus30, liquidity_minus50, cheapest_venue_outage, congestion_x2, combined_stress]
+    Corridor:
+      type: string
+      enum: ['USA->IND', 'GBR->PHL', 'ARE->MEX']
+    CountryCode:
+      type: string
+      pattern: '^[A-Z]{3}$'
+    Split:
+      type: string
+      enum: [train, validation, test]
+    Regime:
+      type: string
+      enum: [below_cheapest, near_boundary, splitting_needed, exceeds_combined]
+    DataSourceTag:
+      type: string
+      enum: [real_static_bridge, synthetic_bridge_expansion, synthetic_no_real_anchor]
+    BridgeUid:
+      type: string
+      pattern: '^[A-Z]{3}->[A-Z]{3}#[0-9]+$'
+    Sha256Hex:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+    DecisionId:
+      type: string
+      pattern: '^sha256:[0-9a-f]{64}$'
+    NonNegMoney:
+      type: number
+      minimum: 0
+    Share:
+      type: number
+      minimum: 0
+      maximum: 1
+    Date:
+      type: string
+      format: date
+    Timestamp:
+      type: string
+      format: date-time
+    Role:
+      type: string
+      enum: [viewer, analyst]
+
+    # ---------- system / auth ----------
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, database, inference, authMode, time]
+      properties:
+        status: {type: string, enum: [ok, degraded]}
+        database:
+          description: The contract shows only "ok"; "unavailable" is used by the backend (contracts/README.md, issue C1).
+          type: string
+          enum: [ok, unavailable]
+        inference: {type: string, enum: [ok, degraded, unavailable, mock]}
+        authMode: {type: string, const: dev}
+        time: {$ref: '#/components/schemas/Timestamp'}
+
+    Me:
+      type: object
+      additionalProperties: false
+      required: [userId, email, role, authMode, permissions]
+      properties:
+        userId: {type: string}
+        email: {type: string, pattern: '@example\.test$'}
+        role: {$ref: '#/components/schemas/Role'}
+        authMode: {type: string, const: dev}
+        permissions:
+          type: object
+          additionalProperties: false
+          required: [experimentalPolicies]
+          properties:
+            experimentalPolicies: {type: boolean}
+
+    # ---------- metadata (camelCase mappings of inference §2.2–§2.7) ----------
+    RewardWeights:
+      type: object
+      additionalProperties: false
+      required: [lambdaLatency, lambdaRisk, lambdaUnrouted, status]
+      properties:
+        lambdaLatency: {type: number}
+        lambdaRisk: {type: number}
+        lambdaUnrouted: {type: number}
+        status: {type: string, const: placeholder}
+
+    Checkpoint:
+      type: object
+      additionalProperties: false
+      required: [checkpointId, sha256, approvedBy, approvedOn, sourceRun]
+      properties:
+        checkpointId: {type: string}
+        sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        approvedBy: {type: string}
+        approvedOn: {$ref: '#/components/schemas/Date'}
+        sourceRun: {type: string}
+
+    DateRange:
+      type: object
+      additionalProperties: false
+      required: [start, end]
+      properties:
+        start: {$ref: '#/components/schemas/Date'}
+        end: {$ref: '#/components/schemas/Date'}
+
+    Meta:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, engineVersion, phase1BaselineTag, gitCommit, defaultPolicy, policies, checkpoint,
+                 knowledge, data, rewardWeights, runtime, backendVersion, inferenceMode]
+      properties:
+        apiVersion: {type: string, const: v1}
+        engineVersion: {type: string}
+        phase1BaselineTag: {type: string}
+        gitCommit: {type: string, pattern: '^[0-9a-f]{7,40}$'}
+        defaultPolicy: {type: string, const: waterfall}
+        policies:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [policy, status, enabled]
+            properties:
+              policy: {$ref: '#/components/schemas/Policy'}
+              status: {$ref: '#/components/schemas/PolicyStatus'}
+              enabled: {type: boolean}
+              disabledReason: {type: string}
+        checkpoint:
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Checkpoint'}]
+        knowledge:
+          type: object
+          additionalProperties: false
+          required: [knowledgeVersion, sha256]
+          properties:
+            knowledgeVersion: {type: string}
+            sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        data:
+          type: object
+          additionalProperties: false
+          required: [dailyStateSha256, bridgeNetworkSha256, normalizationStatsSha256, dateRange]
+          properties:
+            dailyStateSha256: {$ref: '#/components/schemas/Sha256Hex'}
+            bridgeNetworkSha256: {$ref: '#/components/schemas/Sha256Hex'}
+            normalizationStatsSha256: {$ref: '#/components/schemas/Sha256Hex'}
+            dateRange: {$ref: '#/components/schemas/DateRange'}
+        rewardWeights: {$ref: '#/components/schemas/RewardWeights'}
+        runtime:
+          type: object
+          additionalProperties: false
+          required: [platform, python, torch, device, lockFile]
+          properties:
+            platform: {type: string}
+            python: {type: string}
+            torch: {type: string}
+            device: {type: string, enum: [cpu, cuda]}
+            lockFile: {type: string}
+        backendVersion: {type: string}
+        inferenceMode: {type: string, enum: [live, mock]}
+
+    Network:
+      type: object
+      additionalProperties: false
+      required: [corridors, maxSingleTransferUsd, maxSingleTransferProvenance]
+      properties:
+        corridors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [corridor, senderCountry, receiverCountry, venues]
+            properties:
+              corridor: {$ref: '#/components/schemas/Corridor'}
+              senderCountry: {$ref: '#/components/schemas/CountryCode'}
+              receiverCountry: {$ref: '#/components/schemas/CountryCode'}
+              venues:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [slot, bridgeUid, feePct, baselineCapacityUsd, dataSourceTag]
+                  properties:
+                    slot: {type: integer, minimum: 0}
+                    bridgeUid: {$ref: '#/components/schemas/BridgeUid'}
+                    feePct: {type: number, minimum: 0}
+                    baselineCapacityUsd: {$ref: '#/components/schemas/NonNegMoney'}
+                    dataSourceTag: {$ref: '#/components/schemas/DataSourceTag'}
+        maxSingleTransferUsd: {$ref: '#/components/schemas/NonNegMoney'}
+        maxSingleTransferProvenance: {type: string}
+
+    StateView:
+      type: object
+      additionalProperties: false
+      required: [corridor, state, corridorRisk, baselineCostPct, venues, warnings]
+      properties:
+        corridor: {$ref: '#/components/schemas/Corridor'}
+        state:
+          type: object
+          additionalProperties: false
+          required: [mode, date, split, scenarioId]
+          properties:
+            mode: {type: string, enum: [historicalReplay, scenario]}
+            date: {$ref: '#/components/schemas/Date'}
+            split: {$ref: '#/components/schemas/Split'}
+            scenarioId:
+              oneOf: [{type: 'null'}, {$ref: '#/components/schemas/ScenarioId'}]
+        corridorRisk: {type: number, minimum: 0}
+        baselineCostPct: {type: number}
+        venues:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [slot, bridgeUid, feePct, liquidityUsd, congestion, dataSourceTag, valuesProvenance]
+            properties:
+              slot: {type: integer, minimum: 0}
+              bridgeUid: {$ref: '#/components/schemas/BridgeUid'}
+              feePct: {type: number, minimum: 0}
+              liquidityUsd: {$ref: '#/components/schemas/NonNegMoney'}
+              congestion: {type: number, minimum: 0}
+              dataSourceTag: {$ref: '#/components/schemas/DataSourceTag'}
+              valuesProvenance: {$ref: '#/components/schemas/ValuesProvenance'}
+              history:
+                type: object
+                additionalProperties: false
+                required: [dates, liquidityUsd, congestion]
+                properties:
+                  dates: {type: array, minItems: 30, maxItems: 30, items: {$ref: '#/components/schemas/Date'}}
+                  liquidityUsd: {type: array, minItems: 30, maxItems: 30, items: {type: number, minimum: 0}}
+                  congestion: {type: array, minItems: 30, maxItems: 30, items: {type: number, minimum: 0}}
+        warnings:
+          type: array
+          items: {$ref: '#/components/schemas/Warning'}
+
+    ReplayCalendar:
+      type: object
+      additionalProperties: false
+      required: [start, end, splits, gapBufferDays, excludedRanges, note]
+      properties:
+        start: {$ref: '#/components/schemas/Date'}
+        end: {$ref: '#/components/schemas/Date'}
+        splits:
+          type: object
+          additionalProperties: false
+          required: [train, validation, test]
+          properties:
+            train: {$ref: '#/components/schemas/DateRange'}
+            validation: {$ref: '#/components/schemas/DateRange'}
+            test: {$ref: '#/components/schemas/DateRange'}
+        gapBufferDays: {type: integer, minimum: 0}
+        excludedRanges:
+          type: array
+          items: {$ref: '#/components/schemas/DateRange'}
+        note: {type: string}
+
+    ScenarioList:
+      type: object
+      additionalProperties: false
+      required: [scenarios, note]
+      properties:
+        scenarios:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [scenarioId, description, liquidityMultiplier, congestionMultiplier, cheapestVenueLiquidityMultiplier]
+            properties:
+              scenarioId: {$ref: '#/components/schemas/ScenarioId'}
+              description: {type: string}
+              liquidityMultiplier: {type: number, exclusiveMinimum: 0}
+              congestionMultiplier: {type: number, exclusiveMinimum: 0}
+              cheapestVenueLiquidityMultiplier: {type: number, exclusiveMinimum: 0}
+        note: {type: string}
+
+    # ---------- requests ----------
+    StateSpec:
+      oneOf:
+        - {$ref: '#/components/schemas/ReplayState'}
+        - {$ref: '#/components/schemas/ScenarioState'}
+        - {$ref: '#/components/schemas/ExplicitState'}
+      discriminator:
+        propertyName: mode
+        mapping:
+          historicalReplay: '#/components/schemas/ReplayState'
+          scenario: '#/components/schemas/ScenarioState'
+          explicit: '#/components/schemas/ExplicitState'
+    ReplayState:
+      type: object
+      additionalProperties: false
+      required: [mode, date]
+      properties:
+        mode: {type: string, const: historicalReplay}
+        date: {$ref: '#/components/schemas/Date'}
+    ScenarioState:
+      type: object
+      additionalProperties: false
+      required: [mode, date, scenarioId]
+      properties:
+        mode: {type: string, const: scenario}
+        date: {$ref: '#/components/schemas/Date'}
+        scenarioId: {type: string}
+    ExplicitState:
+      type: object
+      additionalProperties: false
+      required: [mode, referenceDate, venues]
+      properties:
+        mode: {type: string, const: explicit}
+        referenceDate: {$ref: '#/components/schemas/Date'}
+        venues:
+          type: array
+          minItems: 1
+          items:
+            description: No risk or fee field (§2.4).
+            type: object
+            additionalProperties: false
+            required: [bridgeUid, liquidityUsd, congestion]
+            properties:
+              bridgeUid: {type: string}
+              liquidityUsd: {type: number}
+              congestion: {type: number}
+              history:
+                oneOf:
+                  - {type: 'null'}
+                  - type: object
+                    additionalProperties: false
+                    required: [liquidityUsd, congestion]
+                    properties:
+                      liquidityUsd: {type: array, items: {type: number}}
+                      congestion: {type: array, items: {type: number}}
+
+    CreateTransactionRequest:
+      type: object
+      required: [senderCountry, receiverCountry, amountUsd, state]
+      properties:
+        senderCountry: {type: string}
+        receiverCountry: {type: string}
+        amountUsd: {type: number}
+        state: {$ref: '#/components/schemas/StateSpec'}
+        policy:
+          allOf: [{$ref: '#/components/schemas/Policy'}]
+          default: waterfall
+        clientReference: {type: ['string', 'null'], maxLength: 200}
+
+    CreateComparisonRequest:
+      type: object
+      required: [senderCountry, receiverCountry, amountUsd, state]
+      properties:
+        senderCountry: {type: string}
+        receiverCountry: {type: string}
+        amountUsd: {type: number}
+        state: {$ref: '#/components/schemas/StateSpec'}
+        policies:
+          description: A viewer who omits it gets only the non-experimental policies.
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Policy'}
+        clientReference: {type: ['string', 'null'], maxLength: 200}
+
+    # ---------- decision (camelCase of inference RouteResponse minus `transaction`) ----------
+    Transaction:
+      type: object
+      additionalProperties: false
+      required: [senderCountry, receiverCountry, corridor, amountUsd, simulationDate, clientReference]
+      properties:
+        senderCountry: {$ref: '#/components/schemas/CountryCode'}
+        receiverCountry: {$ref: '#/components/schemas/CountryCode'}
+        corridor: {$ref: '#/components/schemas/Corridor'}
+        amountUsd: {type: number, exclusiveMinimum: 0}
+        simulationDate: {$ref: '#/components/schemas/Date'}
+        clientReference: {type: ['string', 'null']}
+
+    Warning:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [EXPERIMENTAL_POLICY, DATE_IN_TRAINING_SPLIT, STATE_OUTSIDE_TRAINING_RANGE, RISK_FALLBACK_USED,
+                 COST_BASELINE_FALLBACK_USED, SYNTHETIC_COST_ANCHOR, PARTIAL_COMPLETION]
+        message: {type: string}
+
+    Decision:
+      type: object
+      additionalProperties: false
+      required: [decisionId, policy, policyStatus, feasibility, allocations, totals, metrics, diagnostics,
+                 provenance, warnings]
+      properties:
+        decisionId: {$ref: '#/components/schemas/DecisionId'}
+        policy: {$ref: '#/components/schemas/Policy'}
+        policyStatus: {$ref: '#/components/schemas/PolicyStatus'}
+        feasibility:
+          type: object
+          additionalProperties: false
+          required: [allowed, reason, decisiveFactIds, knowledgeVersion]
+          properties:
+            allowed: {type: boolean}
+            reason: {type: ['string', 'null']}
+            decisiveFactIds: {type: array, items: {type: string}}
+            knowledgeVersion: {type: string}
+        allocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [slot, bridgeUid, dataSourceTag, feePct, liquidityUsd, congestion, risk, shareRequested,
+                       amountRequestedUsd, amountExecutedUsd, amountClippedUsd, shareBeforeProjection]
+            properties:
+              slot: {type: integer, minimum: 0}
+              bridgeUid: {$ref: '#/components/schemas/BridgeUid'}
+              dataSourceTag: {$ref: '#/components/schemas/DataSourceTag'}
+              feePct: {type: number, minimum: 0}
+              liquidityUsd: {$ref: '#/components/schemas/NonNegMoney'}
+              congestion: {type: number, minimum: 0}
+              risk: {type: number, minimum: 0}
+              shareRequested: {$ref: '#/components/schemas/Share'}
+              amountRequestedUsd: {$ref: '#/components/schemas/NonNegMoney'}
+              amountExecutedUsd: {$ref: '#/components/schemas/NonNegMoney'}
+              amountClippedUsd: {$ref: '#/components/schemas/NonNegMoney'}
+              shareBeforeProjection:
+                oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Share'}]
+        totals:
+          type: object
+          additionalProperties: false
+          required: [amountUsd, requestedUsd, executedUsd, unroutedEnvUsd, unroutedAmountBasedUsd, completionRatio,
+                     completed, bridgesUsed]
+          properties:
+            amountUsd: {type: number, exclusiveMinimum: 0}
+            requestedUsd: {$ref: '#/components/schemas/NonNegMoney'}
+            executedUsd: {$ref: '#/components/schemas/NonNegMoney'}
+            unroutedEnvUsd: {$ref: '#/components/schemas/NonNegMoney'}
+            unroutedAmountBasedUsd: {$ref: '#/components/schemas/NonNegMoney'}
+            completionRatio: {$ref: '#/components/schemas/Share'}
+            completed: {type: boolean}
+            bridgesUsed: {type: integer, minimum: 0}
+        metrics:
+          type: object
+          additionalProperties: false
+          required: [feeCostUsd, baselineCostPct, costTerm, latencyTerm, riskTerm, unroutedTermEnv,
+                     unroutedTermAmountBased, rewardEnv, rewardAmountBased, rewardWeights]
+          properties:
+            feeCostUsd: {$ref: '#/components/schemas/NonNegMoney'}
+            baselineCostPct: {type: number}
+            costTerm: {type: number}
+            latencyTerm: {type: number}
+            riskTerm: {type: number}
+            unroutedTermEnv: {type: number}
+            unroutedTermAmountBased: {type: number}
+            rewardEnv: {type: number}
+            rewardAmountBased: {type: number}
+            rewardWeights: {$ref: '#/components/schemas/RewardWeights'}
+        diagnostics:
+          type: object
+          additionalProperties: false
+          required: [regime, combinedLiquidityUsd, projectionApplied]
+          properties:
+            regime: {$ref: '#/components/schemas/Regime'}
+            combinedLiquidityUsd: {$ref: '#/components/schemas/NonNegMoney'}
+            projectionApplied: {type: boolean}
+        provenance:
+          type: object
+          additionalProperties: false
+          required: [stateMode, stateDate, split, scenarioId, valuesProvenance, engineVersion, gitCommit,
+                     knowledgeSha256, dailyStateSha256, stateFrameSha256, checkpoint, device, platform]
+          properties:
+            stateMode: {$ref: '#/components/schemas/StateMode'}
+            stateDate: {$ref: '#/components/schemas/Date'}
+            split: {$ref: '#/components/schemas/Split'}
+            scenarioId:
+              oneOf: [{type: 'null'}, {$ref: '#/components/schemas/ScenarioId'}]
+            valuesProvenance: {$ref: '#/components/schemas/ValuesProvenance'}
+            engineVersion: {type: string}
+            gitCommit: {type: string, pattern: '^[0-9a-f]{7,40}$'}
+            knowledgeSha256: {$ref: '#/components/schemas/Sha256Hex'}
+            dailyStateSha256: {$ref: '#/components/schemas/Sha256Hex'}
+            stateFrameSha256: {$ref: '#/components/schemas/Sha256Hex'}
+            checkpoint:
+              oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Checkpoint'}]
+            device: {type: string, enum: [cpu, cuda]}
+            platform: {type: string}
+        warnings:
+          type: array
+          items: {$ref: '#/components/schemas/Warning'}
+
+    TransactionRecord:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt, createdBy, status, transaction, decision]
+      properties:
+        id: {type: string, format: uuid}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        createdBy: {type: string}
+        status: {type: string, enum: [routed, failed]}
+        transaction: {$ref: '#/components/schemas/Transaction'}
+        decision:
+          description: Null when status is "failed" (contracts/README.md, issue C4).
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Decision'}]
+
+    TransactionSummary:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt, createdBy, corridor, amountUsd, simulationDate, stateMode, policy, policyStatus,
+                 status, allowed, completed, completionRatio, executedUsd, rewardAmountBased]
+      properties:
+        id: {type: string, format: uuid}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        createdBy: {type: string}
+        corridor: {$ref: '#/components/schemas/Corridor'}
+        amountUsd: {type: number}
+        simulationDate: {$ref: '#/components/schemas/Date'}
+        stateMode: {$ref: '#/components/schemas/StateMode'}
+        policy: {$ref: '#/components/schemas/Policy'}
+        policyStatus: {$ref: '#/components/schemas/PolicyStatus'}
+        status: {type: string, enum: [routed, failed]}
+        allowed: {type: ['boolean', 'null']}
+        completed: {type: ['boolean', 'null']}
+        completionRatio: {type: ['number', 'null']}
+        executedUsd: {type: ['number', 'null']}
+        rewardAmountBased: {type: ['number', 'null']}
+
+    TransactionPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/TransactionSummary'}}
+        page: {type: integer, minimum: 1}
+        pageSize: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0}
+
+    Explanation:
+      type: object
+      additionalProperties: false
+      required: [transactionId, decisionId, policy, summary, feasibility, venueExplanations, policyNotes,
+                 semanticContext, limitations]
+      properties:
+        transactionId: {type: string, format: uuid}
+        decisionId: {$ref: '#/components/schemas/DecisionId'}
+        policy: {$ref: '#/components/schemas/Policy'}
+        summary: {type: string}
+        feasibility:
+          type: object
+          additionalProperties: false
+          required: [allowed, reason, activeFacts, provider]
+          properties:
+            allowed: {type: boolean}
+            reason: {type: ['string', 'null']}
+            activeFacts:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [factId, ruleType, value, provenanceTag, verified, source]
+                properties:
+                  factId: {type: string}
+                  ruleType: {type: string}
+                  value: {}
+                  provenanceTag: {type: string}
+                  verified: {type: boolean}
+                  source: {type: string}
+            provider: {type: string, const: StaticMemoryProvider}
+        venueExplanations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [bridgeUid, outcome, reasonCode, text]
+            properties:
+              bridgeUid: {$ref: '#/components/schemas/BridgeUid'}
+              outcome: {type: string, enum: [used, unused]}
+              reasonCode:
+                type: string
+                enum: [CHEAPEST_FILLED_TO_LIQUIDITY, NEXT_CHEAPEST_REMAINDER, FILLED_TO_LIQUIDITY, AMOUNT_EXHAUSTED,
+                       NO_LIQUIDITY, CHEAPEST_SELECTED, NOT_CHEAPEST, CLIPPED_AT_LIQUIDITY, PPO_SHARE,
+                       PROJECTION_REDUCED_TO_CAPACITY, PROJECTION_INCREASED, INFEASIBLE_REGULATORY]
+              text: {type: string}
+        policyNotes: {type: array, items: {type: string}}
+        semanticContext:
+          oneOf: [{type: 'null'}, {type: object}]
+        limitations: {type: array, minItems: 1, items: {type: string}}
+
+    ComparisonRecord:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt, createdBy, transaction, results, skipped, sameState, note]
+      properties:
+        id: {type: string, format: uuid}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        createdBy: {type: string}
+        transaction: {$ref: '#/components/schemas/Transaction'}
+        results: {type: array, items: {$ref: '#/components/schemas/Decision'}}
+        skipped:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [policy, code, message]
+            properties:
+              policy: {$ref: '#/components/schemas/Policy'}
+              code: {type: string, enum: [POLICY_DISABLED, POLICY_UNAVAILABLE_FOR_STATE]}
+              message: {type: string}
+        sameState: {type: boolean, const: true}
+        note: {type: string}
+
+    DashboardSummary:
+      type: object
+      additionalProperties: false
+      required: [window, totals, byPolicy, byCorridor, note]
+      properties:
+        window:
+          type: object
+          additionalProperties: false
+          required: [from, to]
+          properties:
+            from: {$ref: '#/components/schemas/Timestamp'}
+            to: {$ref: '#/components/schemas/Timestamp'}
+        totals:
+          type: object
+          additionalProperties: false
+          required: [transactions, routed, failed, rejectedByFeasibility]
+          properties:
+            transactions: {type: integer, minimum: 0}
+            routed: {type: integer, minimum: 0}
+            failed: {type: integer, minimum: 0}
+            rejectedByFeasibility: {type: integer, minimum: 0}
+        byPolicy:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [policy, count, completionRate, meanRewardAmountBased, meanFeeCostPct, meanLatencyTerm, meanRiskTerm]
+            properties:
+              policy: {$ref: '#/components/schemas/Policy'}
+              count: {type: integer, minimum: 0}
+              completionRate: {type: ['number', 'null'], minimum: 0, maximum: 1}
+              meanRewardAmountBased: {type: ['number', 'null']}
+              meanFeeCostPct: {type: ['number', 'null']}
+              meanLatencyTerm: {type: ['number', 'null']}
+              meanRiskTerm: {type: ['number', 'null']}
+        byCorridor:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [corridor, count, completionRate]
+            properties:
+              corridor: {$ref: '#/components/schemas/Corridor'}
+              count: {type: integer, minimum: 0}
+              completionRate: {type: ['number', 'null'], minimum: 0, maximum: 1}
+        note: {type: string}
+
+    # ---------- errors (§4) ----------
+    ErrorCode:
+      type: string
+      enum: [MALFORMED_REQUEST, UNAUTHENTICATED, FORBIDDEN_POLICY, NOT_FOUND, DECISION_MISMATCH, VALIDATION_ERROR,
+             UNSUPPORTED_CORRIDOR, INVALID_AMOUNT, DATE_OUT_OF_RANGE, DATE_IN_GAP_BUFFER, UNKNOWN_SCENARIO,
+             STATE_VENUE_MISMATCH, INVALID_STATE_VALUE, POLICY_UNAVAILABLE_FOR_STATE, INTERNAL_ERROR,
+             INFERENCE_ERROR, INFERENCE_UNAVAILABLE, ENGINE_BUSY, ENGINE_TIMEOUT]
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, details, requestId]
+          properties:
+            code: {$ref: '#/components/schemas/ErrorCode'}
+            message: {type: string}
+            details:
+              type: object
+              properties:
+                field: {type: string}
+                transactionId: {type: string, format: uuid, description: 'Set on inference failures of POST /transactions (§3.2).'}
+                errors:
+                  type: array
+                  items:
+                    type: object
+                    required: [field, message]
+                    properties:
+                      field: {type: string}
+                      message: {type: string}
+            requestId: {type: string}
+
+# Engine 422 codes the backend passes through unchanged (§3.2). Their inference
+# fixtures cover them; one app passthrough fixture (DATE_IN_GAP_BUFFER) covers the mechanism.
+x-passthrough-codes: [UNSUPPORTED_CORRIDOR, INVALID_AMOUNT, DATE_OUT_OF_RANGE, DATE_IN_GAP_BUFFER, UNKNOWN_SCENARIO,
+                      STATE_VENUE_MISMATCH, INVALID_STATE_VALUE, POLICY_UNAVAILABLE_FOR_STATE]
+
+# HTTP status for each error code (contract §4). Read by infra/scripts/check_contracts.py.
+x-error-status:
+  MALFORMED_REQUEST: 400
+  UNAUTHENTICATED: 401
+  FORBIDDEN_POLICY: 403
+  NOT_FOUND: 404
+  DECISION_MISMATCH: 409
+  VALIDATION_ERROR: 422
+  UNSUPPORTED_CORRIDOR: 422
+  INVALID_AMOUNT: 422
+  DATE_OUT_OF_RANGE: 422
+  DATE_IN_GAP_BUFFER: 422
+  UNKNOWN_SCENARIO: 422
+  STATE_VENUE_MISMATCH: 422
+  INVALID_STATE_VALUE: 422
+  POLICY_UNAVAILABLE_FOR_STATE: 422
+  INTERNAL_ERROR: 500
+  INFERENCE_ERROR: 502
+  INFERENCE_UNAVAILABLE: 503
+  ENGINE_BUSY: 503
+  ENGINE_TIMEOUT: 504

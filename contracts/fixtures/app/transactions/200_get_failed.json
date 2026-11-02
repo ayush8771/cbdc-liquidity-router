@@ -1,0 +1,33 @@
+{
+  "description": "GET a transaction persisted with status failed (inference was busy). decision is null (issue C4).",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/transactions/a121dc5c-b250-5b30-8025-f9e07e76d4e0",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-200_get_failed"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_get_failed"
+    },
+    "body": {
+      "id": "a121dc5c-b250-5b30-8025-f9e07e76d4e0",
+      "createdAt": "2026-11-02T10:00:00Z",
+      "createdBy": "u-analyst-1",
+      "status": "failed",
+      "transaction": {
+        "senderCountry": "GBR",
+        "receiverCountry": "PHL",
+        "corridor": "GBR->PHL",
+        "amountUsd": 300000.0,
+        "simulationDate": "2024-06-14",
+        "clientReference": null
+      },
+      "decision": null
+    }
+  }
+}

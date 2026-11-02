@@ -1,0 +1,53 @@
+{
+  "description": "Contract §3.8 example values (illustrative; not computed from the other fixtures).",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/dashboard/summary",
+    "query": {
+      "from": "2026-11-01T00:00:00Z",
+      "to": "2026-11-02T23:59:59Z"
+    },
+    "headers": {
+      "Authorization": "Bearer mock-viewer",
+      "X-Request-Id": "fixture-200_summary"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_summary"
+    },
+    "body": {
+      "window": {
+        "from": "2026-11-01T00:00:00Z",
+        "to": "2026-11-02T23:59:59Z"
+      },
+      "totals": {
+        "transactions": 42,
+        "routed": 41,
+        "failed": 1,
+        "rejectedByFeasibility": 2
+      },
+      "byPolicy": [
+        {
+          "policy": "waterfall",
+          "count": 35,
+          "completionRate": 0.971,
+          "meanRewardAmountBased": 0.874,
+          "meanFeeCostPct": 0.0139,
+          "meanLatencyTerm": 0.271,
+          "meanRiskTerm": 0.083
+        }
+      ],
+      "byCorridor": [
+        {
+          "corridor": "GBR->PHL",
+          "count": 15,
+          "completionRate": 0.933
+        }
+      ],
+      "note": "Aggregates of independent what-if decisions on synthetic states, under placeholder reward weights. Transactions do not consume liquidity. Not a backtest."
+    }
+  }
+}
