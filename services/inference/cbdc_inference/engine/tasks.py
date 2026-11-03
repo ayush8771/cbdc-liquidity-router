@@ -21,6 +21,35 @@ def ping_task(worker):
     return {"pid": os.getpid(), "tasks_run": worker.tasks_run, "daily_state_sha256": worker.daily_state_sha256}
 
 
+def metadata_task(worker):
+    """Static engine metadata for /v1/version, read from the Phase 1 objects the worker loaded."""
+    p = worker._p
+    start = min(b[0] for b in p.split.SPLIT_BOUNDARIES.values())
+    end = max(b[1] for b in p.split.SPLIT_BOUNDARIES.values())
+    return {
+        "knowledge_version": worker.knowledge.knowledge_version,
+        "knowledge_sha256": worker.knowledge.sha256,  # Phase 1 KnowledgeBase.sha256 (raw file bytes; C5 open)
+        "daily_state_sha256": worker.daily_state_sha256,
+        "date_range": {"start": start.date().isoformat(), "end": end.date().isoformat()},
+        "reward_weights": {"lambda_latency": p.reward.DEFAULT_LAMBDA_LATENCY_PLACEHOLDER,
+                           "lambda_risk": p.reward.DEFAULT_LAMBDA_RISK_PLACEHOLDER,
+                           "lambda_unrouted": p.reward.DEFAULT_LAMBDA_UNROUTED_PLACEHOLDER,
+                           "status": "placeholder"},
+        "torch": p.torch.__version__,
+        # answered by the FastAPI process from startup metadata (contract §2): /v1/replay/calendar, /v1/scenarios
+        "replay_calendar": worker.replay_calendar(),
+        "scenarios": worker.scenario_list(),
+    }
+
+
+def network_task(worker):
+    return worker.network()
+
+
+def state_task(worker, corridor, state, include_history):
+    return worker.state_view(corridor, state, include_history)
+
+
 # ---------------------------------------------------------------- fault injection (tests only)
 def fault_sleep(worker, seconds: float):
     time.sleep(seconds)

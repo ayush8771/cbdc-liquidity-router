@@ -10,9 +10,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from ..engine.errors import EngineError
+
 logger = logging.getLogger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-Id"
+# Contract §4 requires Retry-After on these codes but does not fix the values.
+RETRY_AFTER_S = {"ENGINE_BUSY": 1, "NOT_READY": 5}
 
 
 class EngineAPIError(Exception):
@@ -51,6 +55,19 @@ def install_error_handling(app: FastAPI) -> None:
     @app.exception_handler(EngineAPIError)
     async def _engine_error(request: Request, exc: EngineAPIError):
         return error_response(request, exc.status_code, exc.code, exc.message, exc.details, exc.headers)
+
+    @app.exception_handler(EngineError)
+    async def _engine_side_error(request: Request, exc: EngineError):
+        """Engine errors carry their contract §4 code and HTTP status."""
+        headers = {}
+        if exc.code in RETRY_AFTER_S:
+            headers["Retry-After"] = str(RETRY_AFTER_S[exc.code])
+        if exc.code == "INTERNAL_ERROR":
+            # integrity failures, worker crashes, unexpected errors: log the detail, return none of it
+            logger.error("engine INTERNAL_ERROR (request_id=%s): %s %s", request_id_of(request), exc.message,
+                         exc.details)
+            return error_response(request, 500, "INTERNAL_ERROR", "Unexpected internal error.")
+        return error_response(request, exc.http_status, exc.code, exc.message, exc.details, headers)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError):

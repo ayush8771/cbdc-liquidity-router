@@ -2,37 +2,76 @@
 
 Run:  uvicorn cbdc_inference.api.app:create_app --factory --host 127.0.0.1 --port 8000
 
-At this stage the app has no /v1 endpoints: they are added only once they are
-backed by the engine (no stub returns invented values). Startup resolves the
-settings and the ppo_projected checkpoint gate; it does not import Phase 1.
+Lifecycle: startup resolves the settings and the ppo_projected checkpoint gate,
+computes file metadata, and starts the EnginePool without blocking (workers
+warm up in the background; /v1/health reports 503 until one is ready). Engine
+metadata for /v1/version is fetched from the first ready worker. Shutdown
+closes the pool (fails queued tasks, stops the worker processes).
+
+The FastAPI process imports no Phase 1 module (arch §5.1, §6.2).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import FastAPI
 
 from .. import API_VERSION, ENGINE_VERSION
 from ..checkpoints import resolve_gate
+from ..engine.errors import EngineError
+from ..engine.pool import EnginePool
+from ..engine.tasks import metadata_task
 from ..settings import Settings, get_settings
 from .errors import install_error_handling
+from .metadata import static_metadata
+from .routers import meta, reference
 
 logger = logging.getLogger(__name__)
+METADATA_RETRY_S = 1.0
 
 
-def create_app(settings: Optional[Settings] = None) -> FastAPI:
+async def _load_engine_metadata(app: FastAPI) -> None:
+    while True:
+        try:
+            app.state.engine_metadata = await asyncio.wrap_future(app.state.pool.submit(metadata_task))
+            logger.info("engine metadata loaded")
+            return
+        except EngineError as exc:
+            logger.warning("engine metadata not available yet: %s", exc.message)
+            await asyncio.sleep(METADATA_RETRY_S)
+
+
+def create_app(settings: Optional[Settings] = None,
+               pool_factory: Optional[Callable[[Settings], EnginePool]] = None) -> FastAPI:
     settings = settings or get_settings()
+    pool_factory = pool_factory or EnginePool.from_settings
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        gate = resolve_gate(settings.ppo_checkpoint_id, settings.approved_checkpoints_path, settings.repo_root_resolved)
+        repo_root = settings.repo_root_resolved
+        gate = resolve_gate(settings.ppo_checkpoint_id, settings.approved_checkpoints_path, repo_root)
         app.state.checkpoint_gate = gate
+        app.state.static_metadata = static_metadata(repo_root)
+        app.state.engine_metadata = None
+        pool = pool_factory(settings)
+        app.state.pool = pool.start(wait=False)
+        loader = asyncio.create_task(_load_engine_metadata(app))
         logger.info("inference service %s starting: device=%s engine_workers=%d ppo_projected=%s%s",
                     ENGINE_VERSION, settings.device, settings.engine_workers, gate.status,
                     f" ({gate.reason})" if gate.reason else "")
-        yield
+        try:
+            yield
+        finally:
+            loader.cancel()
+            try:
+                await loader
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+            await asyncio.to_thread(pool.close)
+            logger.info("inference service stopped")
 
     app = FastAPI(
         title="CBDC Liquidity Router — Inference API",
@@ -42,4 +81,6 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     )
     app.state.settings = settings
     install_error_handling(app)
+    app.include_router(meta.router)
+    app.include_router(reference.router)
     return app

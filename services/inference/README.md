@@ -17,8 +17,11 @@ The FastAPI service and engine that wrap the Phase 1 routing code. It's internal
 | Error envelope and `X-Request-Id` (contract §1, §4) | Done |
 | `EngineWorker.route(transaction, state, policy)` (`engine/worker.py`) | Done for `waterfall` (default) and `cheapest_feasible`, in `historical_replay` and `scenario` modes. Parity with Phase 1 is exact. |
 | Explicit state mode, `ppo_projected`, `decision_id` | Not started. `ppo_projected` raises `POLICY_DISABLED`; `decision_id` waits for C7. |
-| `EnginePool` (`engine/pool.py`) | Done: spawned worker processes, one task each, a bounded queue (`ENGINE_BUSY`), a per-task timeout (`ENGINE_TIMEOUT`), and automatic rebuild after a timeout, crash or failed integrity check. Health reports `engine_workers` and the `engine_pool` block. Not yet wired to FastAPI. |
-| `/v1/*` endpoints | Not started |
+| `EnginePool` (`engine/pool.py`) | Done: spawned worker processes, one task each, a bounded queue (`ENGINE_BUSY`), a per-task timeout (`ENGINE_TIMEOUT`), and automatic rebuild after a timeout, crash or failed integrity check. Health reports `engine_workers` and the `engine_pool` block. Started and stopped with the FastAPI app. |
+| `/v1/health`, `/v1/version` (`api/routers/meta.py`) | Done. Answered from startup metadata and the pool's in-memory health, without queuing a worker task. |
+| `/v1/network`, `/v1/state` (`api/routers/reference.py`) | Done. Each request runs as a task in an engine worker; `/v1/state` uses the same request-scoped frame and integrity check as routing. |
+| `/v1/replay/calendar`, `/v1/scenarios` | Done. Answered from startup metadata, which a worker computes from Phase 1 `split.py` and `scenarios.py`. |
+| `/v1/route`, `/v1/compare`, `/v1/explain` | Not started |
 | Dockerfile, `Dockerfile.dockerignore` | Not started |
 | Platform locks `requirements/*.txt` | Dev D generates them from `requirements/*.in` |
 
@@ -78,7 +81,9 @@ uvicorn cbdc_inference.api.app:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
 - Bind it to `127.0.0.1` only (contract §5).
-- The service currently serves only the OpenAPI docs: `http://127.0.0.1:8000/docs`. Every other path returns the contract's `NOT_FOUND` envelope.
+- Startup doesn't wait for the engine workers. They warm up in the background (a few seconds each), and until one is ready `GET /v1/health` returns 503 with `ready: false` and `GET /v1/version` returns 503 `NOT_READY`.
+- Check readiness: `Invoke-RestMethod http://127.0.0.1:8000/v1/health`, then `Invoke-RestMethod http://127.0.0.1:8000/v1/version`.
+- Ctrl+C shuts down cleanly: queued tasks fail with `NOT_READY`, and the worker processes are stopped.
 
 Configuration (contract §8; all optional):
 

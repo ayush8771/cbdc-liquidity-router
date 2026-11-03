@@ -28,6 +28,73 @@ def default_settings() -> Settings:
     return Settings()
 
 
+@pytest.fixture
+def repo_settings() -> Settings:
+    """Contract defaults, but pointing at this repository regardless of the current directory."""
+    return Settings(repo_root=REPO_ROOT)
+
+
+FAKE_ENGINE_METADATA = {
+    "knowledge_version": "kv-test", "knowledge_sha256": "a" * 64, "daily_state_sha256": "b" * 64,
+    "date_range": {"start": "2011-01-01", "end": "2025-09-30"},
+    "reward_weights": {"lambda_latency": 1.0, "lambda_risk": 1.0, "lambda_unrouted": 1.0, "status": "placeholder"},
+    "torch": "2.13.0+cpu",
+    "replay_calendar": {"start": "2011-01-01", "end": "2025-09-30", "splits": {}, "gap_buffer_days": 30,
+                        "excluded_ranges": [], "note": "fake"},
+    "scenarios": {"scenarios": [], "note": "fake"},
+}
+
+
+class FakePool:
+    """Stand-in for EnginePool in API tests: no processes, health set directly."""
+
+    def __init__(self, slot_states=("ready", "ready"), engine_workers="ok", rebuilds=0, queued=0,
+                 metadata=FAKE_ENGINE_METADATA, submit_error=None, results=None):
+        self.slot_states, self.engine_workers = list(slot_states), engine_workers
+        self.rebuilds, self.queued, self.metadata, self.submit_error = rebuilds, queued, metadata, submit_error
+        self.results = results or {}  # task function name -> return value, or an exception to raise from the task
+        self.calls = []
+        self.started = self.closed = False
+
+    def start(self, wait=True):
+        self.started = True
+        return self
+
+    def close(self):
+        self.closed = True
+
+    def submit(self, fn, *args):
+        from concurrent.futures import Future
+        if self.submit_error is not None:
+            raise self.submit_error
+        self.calls.append((fn.__name__, args))
+        f = Future()
+        if fn.__name__ == "metadata_task":
+            f.set_result(self.metadata)
+            return f
+        outcome = self.results.get(fn.__name__)
+        if isinstance(outcome, BaseException):
+            f.set_exception(outcome)
+        else:
+            f.set_result(outcome)
+        return f
+
+    def health(self):
+        return {"engine_workers": self.engine_workers,
+                "engine_pool": {"workers": len(self.slot_states), "queued": self.queued, "max_queue": 32,
+                                "rebuilds_since_start": self.rebuilds},
+                "slots": [{"index": i, "state": s, "busy": False, "pid": None} for i, s in enumerate(self.slot_states)]}
+
+
+@pytest.fixture
+def fake_pool_factory():
+    """Returns make(**FakePool kwargs) -> (pool, factory_for_create_app)."""
+    def make(**kw):
+        pool = FakePool(**kw)
+        return pool, (lambda settings: pool)
+    return make
+
+
 def _phase1_hashes() -> dict:
     out = {}
     for rel in PHASE1_WATCHED:

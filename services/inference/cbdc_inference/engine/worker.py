@@ -292,6 +292,134 @@ class EngineWorker:
         return risk is None or (isinstance(risk, float) and risk != risk)
 
 
+    # ------------------------------------------------------------------ reference data (§2.3, §2.5–2.7)
+    def parse_corridor(self, corridor) -> tuple:
+        if not isinstance(corridor, str) or corridor.count("->") != 1:
+            raise ValidationFailed("corridor must look like 'GBR->PHL'", {"field": "corridor"})
+        sender, receiver = corridor.split("->")
+        if (sender, receiver) not in self.corridors:
+            raise UnsupportedCorridor(f"corridor {corridor} is not in the network", {"field": "corridor"})
+        return sender, receiver
+
+    def network(self) -> dict:
+        """Static corridor and venue metadata: bridge_network.csv and the knowledge base, unmodified."""
+        caps = [f for f in self.knowledge.facts if f.rule_type == "max_single_transfer_usd"]
+        enforced = self.env.memory_layer.constraints["max_single_transfer_usd"]  # what feasibility uses
+        binding = min(caps, key=lambda f: (f.value, f.fact_id)) if caps else None
+        corridors = []
+        for (s, r), bridges in self.corridors.items():
+            corridors.append({
+                "corridor": f"{s}->{r}", "sender_country": s, "receiver_country": r,
+                "venues": [{"slot": i, "bridge_uid": b["bridge_id"], "fee_pct": float(b["fee"]),
+                            "baseline_capacity_usd": float(b["capacity"]), "data_source_tag": b.get("data_source_tag")}
+                           for i, b in enumerate(bridges)],
+            })
+        return {"corridors": corridors, "max_single_transfer_usd": float(enforced),
+                "max_single_transfer_provenance": binding.provenance_tag if binding else None}
+
+    def state_view(self, corridor: str, state, include_history: bool = False) -> dict:
+        """Bridge state for a corridor on a date, under replay or a scenario (§2.5)."""
+        if not self.healthy:
+            raise EngineNotReady("engine worker is unhealthy and must be rebuilt")
+        sender, receiver = self.parse_corridor(corridor)
+        if not isinstance(state, (ReplayState, ScenarioState)):
+            raise ValidationFailed("mode must be historical_replay or scenario; explicit states are not looked up",
+                                   {"field": "mode"})
+        date_str, split = self._validate_date(state.date, "date")
+        frame, _sha, scenario_id, values_provenance = self._frame_for(state)
+        try:
+            with self._p.scenarios.injected_daily_state(frame):
+                body = self._state_on_installed_frame(frame, sender, receiver, date_str, values_provenance,
+                                                      include_history)
+        finally:
+            self.tasks_run += 1
+            self.check_integrity()
+        body["state"] = {"mode": state.mode, "date": date_str, "split": split, "scenario_id": scenario_id}
+        return body
+
+    def _state_on_installed_frame(self, frame, sender, receiver, date_str, values_provenance, include_history):
+        p, env = self._p, self.env
+        bridges = self.corridors[(sender, receiver)]
+        venues, risks = [], set()
+        for i, b in enumerate(bridges):
+            # the same lookup execution and reward use (CBDCLiquidityEnv._resolve_dynamic_state)
+            liquidity, congestion, risk = env._resolve_dynamic_state(b, sender, receiver, date_str)
+            risks.add(float(risk))
+            venue = {"slot": i, "bridge_uid": b["bridge_id"], "fee_pct": float(b["fee"]),
+                     "liquidity_usd": float(liquidity), "congestion": float(congestion),
+                     "data_source_tag": b.get("data_source_tag"), "values_provenance": values_provenance}
+            if include_history:
+                venue["history"] = self._history(frame, b["bridge_id"], date_str)
+            venues.append(venue)
+        if len(risks) != 1:
+            raise EngineIntegrityError("corridor risk differs across venues", {"risks": sorted(risks)})
+
+        warnings = []
+        if self._risk_fell_back(sender, receiver, date_str):
+            warnings.append({"code": "RISK_FALLBACK_USED",
+                             "message": "Corridor risk proxy unavailable; static placeholder used."})
+        looked_up = p.cost_baseline.lagged_real_cost_baseline_pct(sender, receiver, date_str)
+        if looked_up is None:
+            warnings.append({"code": "COST_BASELINE_FALLBACK_USED",
+                             "message": "No lagged RPW cost baseline for this quarter; reward default used."})
+        if (sender, receiver) == ("ARE", "MEX"):
+            warnings.append({"code": "SYNTHETIC_COST_ANCHOR",
+                             "message": "ARE->MEX has no real RPW anchor; the documented USA->MEX fallback is used."})
+        baseline_cost_pct = looked_up if looked_up is not None else p.reward.DEFAULT_BASELINE_COST_PCT_PLACEHOLDER
+        return {"corridor": f"{sender}->{receiver}", "corridor_risk": risks.pop(),
+                "baseline_cost_pct": float(baseline_cost_pct), "venues": venues, "warnings": warnings}
+
+    def _history(self, frame, bridge_uid, date_str) -> dict:
+        """30 raw daily values ending on the date, oldest first (§2.5), from the request's frame."""
+        pd = self._p.pd
+        end = pd.Timestamp(date_str)
+        start = end - pd.Timedelta(days=29)
+        pid = self._p.dbs._parquet_bridge_id(bridge_uid)  # Phase 1's uid -> parquet id mapping
+        rows = frame[(frame["bridge_id"] == pid) & (frame["date"] >= start) & (frame["date"] <= end)] \
+            .sort_values("date")
+        if len(rows) != 30:
+            raise EngineIntegrityError("daily state has a gap in the 30-day window",
+                                       {"bridge_uid": bridge_uid, "rows": int(len(rows))})
+        return {"dates": [d.date().isoformat() for d in rows["date"]],
+                "liquidity_usd": [float(x) for x in rows["liquidity_level"]],
+                "congestion": [float(x) for x in rows["congestion_level"]]}
+
+    def replay_calendar(self) -> dict:
+        """Valid dates and every range validate_simulation_date() rejects (§2.6), from Phase 1 split.py."""
+        p = self._p
+        bounds = p.split.SPLIT_BOUNDARIES
+        start, end = min(b[0] for b in bounds.values()), max(b[1] for b in bounds.values())
+        excluded, run_start, prev = [], None, None
+        for day in p.pd.date_range(start, end, freq="D"):
+            if p.split.in_gap_buffer(day):
+                if run_start is None:
+                    run_start = day
+                prev = day
+            elif run_start is not None:
+                excluded.append({"start": run_start.date().isoformat(), "end": prev.date().isoformat()})
+                run_start = None
+        if run_start is not None:
+            excluded.append({"start": run_start.date().isoformat(), "end": prev.date().isoformat()})
+        return {
+            "start": start.date().isoformat(), "end": end.date().isoformat(),
+            "splits": {name: {"start": s.date().isoformat(), "end": e.date().isoformat()}
+                       for name, (s, e) in bounds.items()},
+            "gap_buffer_days": int(p.split.GAP_BUFFER_DAYS),
+            "excluded_ranges": excluded,
+            "note": "Synthetic daily bridge state. Not real CBDC telemetry. No data after 2025-09-30.",
+        }
+
+    def scenario_list(self) -> dict:
+        return {
+            "scenarios": [{"scenario_id": s.name, "description": s.description,
+                           "liquidity_multiplier": float(s.liquidity_multiplier),
+                           "congestion_multiplier": float(s.congestion_multiplier),
+                           "cheapest_venue_liquidity_multiplier": float(s.cheapest_venue_liquidity_multiplier)}
+                          for s in self._p.scenarios.SCENARIOS.values()],
+            "note": "Uniform multipliers from Stage 1F, applied to the whole series. Not calibrated historical shocks.",
+        }
+
+
 # ---------------------------------------------------------------------- pool entry points
 _WORKER: Optional[EngineWorker] = None
 
