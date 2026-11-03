@@ -349,3 +349,102 @@ def test_non_positive_amount_is_invalid_amount_not_schema_error(root):
     schema = checker.specs["app"]["components"]["schemas"]["CreateTransactionRequest"]
     assert checker.schema_errors("app", schema, fx["request"]["body"]) == []
     assert fx["response"]["body"]["error"]["code"] == "INVALID_AMOUNT"
+
+
+# ---------------------------------------------------------------- decision_id (§2.11, R3)
+
+def _vector(name):
+    data = json.loads((REPO / "contracts/test-vectors/decision_id.v1.json").read_text(encoding="utf-8"))
+    return next(v for v in data["vectors"] if v["name"] == name)
+
+
+@pytest.mark.parametrize("change", [
+    lambda i: i.update(engine_version="0.1.1"),
+    lambda i: i["reward_weights"].update(lambda_latency=2.0),
+    lambda i: i["reward_weights"].update(lambda_risk=0.5),
+    lambda i: i["reward_weights"].update(lambda_unrouted=3.0),
+    lambda i: i["scenario"].update(liquidity_multiplier=0.9),
+    lambda i: i["scenario"].update(congestion_multiplier=2.0),
+    lambda i: i["scenario"].update(cheapest_venue_liquidity_multiplier=0.2),
+    lambda i: i["artefacts"].update(macro_risk_proxy_sha256="0" * 64),
+    lambda i: i["artefacts"].update(rpw_corridor_quarterly_sha256="0" * 64),
+    lambda i: i["artefacts"].update(knowledge_sha256="0" * 64),
+    lambda i: i["request"]["transaction"].update(amount_usd=300000.5),
+    lambda i: i["request"].update(policy="waterfall"),
+])
+def test_every_hashed_input_changes_the_decision_id(change):
+    vec = _vector("scenario_cheapest_feasible")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    change(inputs)
+    assert check_contracts.decision_id(inputs) != vec["decision_id"]
+
+
+@pytest.mark.parametrize("change", [
+    lambda i: i["request"]["transaction"].update(client_reference="other"),
+    lambda i: i["scenario"].update(description="Reworded."),
+    lambda i: i["reward_weights"].update(status="calibrated"),
+    lambda i: i.update(api_version="v2", git_commit="abc1234"),
+    lambda i: i.update(checkpoint_sha256="f" * 64),  # a baseline ignores the checkpoint
+])
+def test_excluded_inputs_do_not_change_the_decision_id(change):
+    vec = _vector("scenario_cheapest_feasible")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    change(inputs)
+    assert check_contracts.decision_id(inputs) == vec["decision_id"]
+
+
+def test_ppo_decision_id_depends_on_the_checkpoint():
+    vec = _vector("explicit_ppo_projected")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    inputs["checkpoint_sha256"] = "f" * 64
+    assert check_contracts.decision_id(inputs) != vec["decision_id"]
+
+
+def test_tampered_test_vector_is_reported(root):
+    path = root / "contracts/test-vectors/decision_id.v1.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["vectors"][0]["decision_id"] = "sha256:" + "0" * 64
+    data["vectors"][2]["canonical"] = data["vectors"][2]["canonical"].replace('"id_scheme":1', '"id_scheme":2')
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    found = problems(root)
+    assert_reported(found, "replay_waterfall_default_policy", "decision_id is not sha256")
+    assert_reported(found, "scenario_cheapest_feasible", "canonical is not the RFC 8785")
+    assert_reported(found, "replay_waterfall_integer_amount", "same decision_id as")
+
+
+def test_version_reports_risk_and_rpw_fingerprints(root):
+    edit(root, "inference/meta/200_version.json",
+         lambda d: d["response"]["body"]["data"].pop("rpw_corridor_quarterly_sha256"))
+    assert_reported(problems(root), "200_version", "rpw_corridor_quarterly_sha256")
+
+
+# ---------------------------------------------------------------- risk fallback (Q13)
+
+def test_missing_risk_fallback_warning_is_reported(root):
+    # GBR->PHL in 2024-06 falls back (proxy NaN), so the warning is required.
+    edit(root, "inference/route/200_waterfall_replay.json", lambda d: d["response"]["body"].update(
+        warnings=[w for w in d["response"]["body"]["warnings"] if w["code"] != "RISK_FALLBACK_USED"]))
+    assert_reported(problems(root), "200_waterfall_replay", "RISK_FALLBACK_USED required")
+
+
+def test_zero_risk_alone_does_not_require_the_warning(root):
+    # A fallback is known from the data table, never inferred from a risk of 0.0.
+    def change(d):
+        b = d["response"]["body"]
+        b["state"]["date"] = "2023-06-14"  # a month not in RISK_FALLBACK_MONTHS
+        b["warnings"] = [w for w in b["warnings"] if w["code"] != "RISK_FALLBACK_USED"]
+    edit(root, "inference/state/200_replay_gbr_phl.json", change)
+    assert not [p for p in problems(root) if "200_replay_gbr_phl" in p and "RISK_FALLBACK" in p]
+
+
+def test_state_view_missing_fallback_warning_is_reported(root):
+    edit(root, "inference/state/200_replay_gbr_phl.json", lambda d: d["response"]["body"].update(warnings=[]))
+    assert_reported(problems(root), "200_replay_gbr_phl", "RISK_FALLBACK_USED required")
+
+
+def test_fixture_line_endings_do_not_matter(root):
+    # Windows checkouts may convert contracts/ files to CRLF; the checker must give the same result.
+    for path in list((root / "contracts").rglob("*.json")) + list((root / "contracts").rglob("*.yaml")):
+        text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+        path.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
+    assert problems(root) == []

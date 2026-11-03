@@ -13,6 +13,7 @@ Owner: Dev D. Changes need approval from every consumer (arch §4.1).
 | `openapi/app.v1.yaml` | Application API (`/api/v1`, camelCase). Producer B, consumer C. |
 | `fixtures/inference/` | `meta/ state/ route/ compare/ explain/ errors/`. Used by the backend's mock mode and by Prism. |
 | `fixtures/app/` | `meta/ auth/ transactions/ comparisons/ dashboard/ errors/`. Used by MSW in the web app. |
+| `test-vectors/decision_id.v1.json` | Exact `decision_id` canonical strings and IDs (contract §2.11). Dev A's implementation must reproduce them. |
 
 ## Fixture format
 
@@ -72,7 +73,9 @@ The checker:
   - `failure` repeats the code and message of the `POST` error that created it;
 - checks that a 405 sends an `Allow` header listing the path's methods;
 - checks health readiness: `unavailable` exactly when the database is, otherwise `ok` or `degraded` by inference, including on the 503 body;
-- checks the risk fallback: `RISK_FALLBACK_USED` only with risk 0.0, and `/v1/state` never emits `STATE_OUTSIDE_TRAINING_RANGE`;
+- checks the risk fallback: `RISK_FALLBACK_USED` is required where the Phase 1 lookup actually falls back. That is a recorded table of (corridor, month) pairs read from `macro_risk_proxy.parquet`, not an inference from risk 0.0. It also means risk 0.0, and never appears on a regulatory rejection. `/v1/state` never emits `STATE_OUTSIDE_TRAINING_RANGE`;
+- verifies the `decision_id` test vectors in `test-vectors/decision_id.v1.json`: each RFC 8785 canonical string and ID is rebuilt from its inputs (contract §2.11). This needs `rfc8785`, pinned in `infra/scripts/requirements.txt`;
+- gives the same result when `contracts/` files have CRLF line endings, as a Windows checkout may (tested);
 - checks that the dashboard totals and `completionRate` follow from the stored transactions in the list fixture;
 - checks the app ↔ engine mapping. Error messages are free text: a passthrough must keep the code and status only;
 - checks coverage: every operation has a success fixture, and every error code has a fixture.

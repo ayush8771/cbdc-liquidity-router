@@ -1,0 +1,527 @@
+{
+  "description": "decision_id test vectors (contract §2.11, id_scheme 1). Inputs are illustrative but the canonical strings and IDs are exact: Dev A's implementation must reproduce them byte for byte on Windows and Linux. Generated with rfc8785==0.1.4; verified by infra/scripts/check_contracts.py.",
+  "id_scheme": 1,
+  "vectors": [
+    {
+      "name": "replay_waterfall_default_policy",
+      "description": "Replay; policy omitted, so the default waterfall is hashed; client_reference is excluded; checkpoint_sha256 is null.",
+      "inputs": {
+        "engine_version": "0.1.0",
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        },
+        "artefacts": {
+          "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "bridge_network_sha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+          "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+          "macro_risk_proxy_sha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
+          "rpw_corridor_quarterly_sha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e"
+        },
+        "request": {
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000.0,
+            "client_reference": "demo-001"
+          },
+          "state": {
+            "mode": "historical_replay",
+            "date": "2024-06-14"
+          }
+        }
+      },
+      "canonical": "{\"artefacts\":{\"bridge_network_sha256\":\"99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f\",\"daily_state_sha256\":\"d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0\",\"knowledge_sha256\":\"b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2\",\"macro_risk_proxy_sha256\":\"6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683\",\"normalization_stats_sha256\":\"bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123\",\"rpw_corridor_quarterly_sha256\":\"2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e\"},\"checkpoint_sha256\":null,\"engine_version\":\"0.1.0\",\"id_scheme\":1,\"policy\":\"waterfall\",\"reward_weights\":{\"lambda_latency\":1,\"lambda_risk\":1,\"lambda_unrouted\":1},\"scenario\":null,\"state\":{\"date\":\"2024-06-14\",\"mode\":\"historical_replay\"},\"transaction\":{\"amount_usd\":300000,\"receiver_country\":\"PHL\",\"sender_country\":\"GBR\"}}",
+      "decision_id": "sha256:01cea10082f5888e60bf062173491221d6d83692f2b4607b6fce85dc8b3ea4b6"
+    },
+    {
+      "name": "replay_waterfall_integer_amount",
+      "description": "Same as the first vector, sent as 300000 (no decimal point), with policy explicit and no client_reference: same decision_id.",
+      "inputs": {
+        "engine_version": "0.1.0",
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        },
+        "artefacts": {
+          "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "bridge_network_sha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+          "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+          "macro_risk_proxy_sha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
+          "rpw_corridor_quarterly_sha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e"
+        },
+        "request": {
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000
+          },
+          "state": {
+            "mode": "historical_replay",
+            "date": "2024-06-14"
+          },
+          "policy": "waterfall"
+        }
+      },
+      "canonical": "{\"artefacts\":{\"bridge_network_sha256\":\"99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f\",\"daily_state_sha256\":\"d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0\",\"knowledge_sha256\":\"b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2\",\"macro_risk_proxy_sha256\":\"6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683\",\"normalization_stats_sha256\":\"bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123\",\"rpw_corridor_quarterly_sha256\":\"2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e\"},\"checkpoint_sha256\":null,\"engine_version\":\"0.1.0\",\"id_scheme\":1,\"policy\":\"waterfall\",\"reward_weights\":{\"lambda_latency\":1,\"lambda_risk\":1,\"lambda_unrouted\":1},\"scenario\":null,\"state\":{\"date\":\"2024-06-14\",\"mode\":\"historical_replay\"},\"transaction\":{\"amount_usd\":300000,\"receiver_country\":\"PHL\",\"sender_country\":\"GBR\"}}",
+      "decision_id": "sha256:01cea10082f5888e60bf062173491221d6d83692f2b4607b6fce85dc8b3ea4b6",
+      "same_as": "replay_waterfall_default_policy"
+    },
+    {
+      "name": "scenario_cheapest_feasible",
+      "description": "Scenario: scenario_id and its three multipliers are hashed; the description is excluded.",
+      "inputs": {
+        "engine_version": "0.1.0",
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        },
+        "artefacts": {
+          "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "bridge_network_sha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+          "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+          "macro_risk_proxy_sha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
+          "rpw_corridor_quarterly_sha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e"
+        },
+        "scenario": {
+          "scenario_id": "cheapest_venue_outage",
+          "description": "Fee-cheapest venue of each corridor at 10% liquidity.",
+          "liquidity_multiplier": 1.0,
+          "congestion_multiplier": 1.0,
+          "cheapest_venue_liquidity_multiplier": 0.1
+        },
+        "request": {
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000.0
+          },
+          "state": {
+            "mode": "scenario",
+            "date": "2024-06-14",
+            "scenario_id": "cheapest_venue_outage"
+          },
+          "policy": "cheapest_feasible"
+        }
+      },
+      "canonical": "{\"artefacts\":{\"bridge_network_sha256\":\"99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f\",\"daily_state_sha256\":\"d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0\",\"knowledge_sha256\":\"b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2\",\"macro_risk_proxy_sha256\":\"6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683\",\"normalization_stats_sha256\":\"bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123\",\"rpw_corridor_quarterly_sha256\":\"2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e\"},\"checkpoint_sha256\":null,\"engine_version\":\"0.1.0\",\"id_scheme\":1,\"policy\":\"cheapest_feasible\",\"reward_weights\":{\"lambda_latency\":1,\"lambda_risk\":1,\"lambda_unrouted\":1},\"scenario\":{\"cheapest_venue_liquidity_multiplier\":0.1,\"congestion_multiplier\":1,\"liquidity_multiplier\":1,\"scenario_id\":\"cheapest_venue_outage\"},\"state\":{\"date\":\"2024-06-14\",\"mode\":\"scenario\",\"scenario_id\":\"cheapest_venue_outage\"},\"transaction\":{\"amount_usd\":300000,\"receiver_country\":\"PHL\",\"sender_country\":\"GBR\"}}",
+      "decision_id": "sha256:c850168c5fc8ef2c0825d967e0529c7af38857cfe8f1c431c8c5835a2f8a72cb"
+    },
+    {
+      "name": "compare_entry_cheapest_feasible",
+      "description": "The cheapest_feasible entry of a /v1/compare with policies [waterfall, cheapest_feasible]: hashed per policy, never over the list, so it equals the route vector.",
+      "inputs": {
+        "engine_version": "0.1.0",
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        },
+        "artefacts": {
+          "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "bridge_network_sha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+          "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+          "macro_risk_proxy_sha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
+          "rpw_corridor_quarterly_sha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e"
+        },
+        "scenario": {
+          "scenario_id": "cheapest_venue_outage",
+          "description": "Fee-cheapest venue of each corridor at 10% liquidity.",
+          "liquidity_multiplier": 1.0,
+          "congestion_multiplier": 1.0,
+          "cheapest_venue_liquidity_multiplier": 0.1
+        },
+        "policy": "cheapest_feasible",
+        "request": {
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000.0
+          },
+          "state": {
+            "mode": "scenario",
+            "date": "2024-06-14",
+            "scenario_id": "cheapest_venue_outage"
+          },
+          "policies": [
+            "waterfall",
+            "cheapest_feasible"
+          ]
+        }
+      },
+      "canonical": "{\"artefacts\":{\"bridge_network_sha256\":\"99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f\",\"daily_state_sha256\":\"d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0\",\"knowledge_sha256\":\"b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2\",\"macro_risk_proxy_sha256\":\"6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683\",\"normalization_stats_sha256\":\"bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123\",\"rpw_corridor_quarterly_sha256\":\"2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e\"},\"checkpoint_sha256\":null,\"engine_version\":\"0.1.0\",\"id_scheme\":1,\"policy\":\"cheapest_feasible\",\"reward_weights\":{\"lambda_latency\":1,\"lambda_risk\":1,\"lambda_unrouted\":1},\"scenario\":{\"cheapest_venue_liquidity_multiplier\":0.1,\"congestion_multiplier\":1,\"liquidity_multiplier\":1,\"scenario_id\":\"cheapest_venue_outage\"},\"state\":{\"date\":\"2024-06-14\",\"mode\":\"scenario\",\"scenario_id\":\"cheapest_venue_outage\"},\"transaction\":{\"amount_usd\":300000,\"receiver_country\":\"PHL\",\"sender_country\":\"GBR\"}}",
+      "decision_id": "sha256:c850168c5fc8ef2c0825d967e0529c7af38857cfe8f1c431c8c5835a2f8a72cb",
+      "same_as": "scenario_cheapest_feasible"
+    },
+    {
+      "name": "explicit_ppo_projected",
+      "description": "Explicit state, ppo_projected: venues sorted by bridge_uid, and checkpoint_sha256 is the checkpoint's hash.",
+      "inputs": {
+        "engine_version": "0.1.0",
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        },
+        "artefacts": {
+          "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "bridge_network_sha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+          "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+          "macro_risk_proxy_sha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
+          "rpw_corridor_quarterly_sha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e"
+        },
+        "checkpoint_sha256": "0fd441744e610e3356e8f64ea85cc4b6e5ecfc1f4f136eba18e960f4109891c9",
+        "request": {
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000.0
+          },
+          "state": {
+            "mode": "explicit",
+            "reference_date": "2024-06-14",
+            "venues": [
+              {
+                "bridge_uid": "GBR->PHL#2",
+                "liquidity_usd": 90000.0,
+                "congestion": 0.5,
+                "history": {
+                  "liquidity_usd": [
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0
+                  ],
+                  "congestion": [
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35
+                  ]
+                }
+              },
+              {
+                "bridge_uid": "GBR->PHL#0",
+                "liquidity_usd": 210000.0,
+                "congestion": 0.35,
+                "history": {
+                  "liquidity_usd": [
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0
+                  ],
+                  "congestion": [
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35
+                  ]
+                }
+              },
+              {
+                "bridge_uid": "GBR->PHL#1",
+                "liquidity_usd": 60000.0,
+                "congestion": 0.2,
+                "history": {
+                  "liquidity_usd": [
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0,
+                    210000.0
+                  ],
+                  "congestion": [
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35,
+                    0.35
+                  ]
+                }
+              }
+            ]
+          },
+          "policy": "ppo_projected"
+        }
+      },
+      "canonical": "{\"artefacts\":{\"bridge_network_sha256\":\"99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f\",\"daily_state_sha256\":\"d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0\",\"knowledge_sha256\":\"b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2\",\"macro_risk_proxy_sha256\":\"6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683\",\"normalization_stats_sha256\":\"bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123\",\"rpw_corridor_quarterly_sha256\":\"2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e\"},\"checkpoint_sha256\":\"0fd441744e610e3356e8f64ea85cc4b6e5ecfc1f4f136eba18e960f4109891c9\",\"engine_version\":\"0.1.0\",\"id_scheme\":1,\"policy\":\"ppo_projected\",\"reward_weights\":{\"lambda_latency\":1,\"lambda_risk\":1,\"lambda_unrouted\":1},\"scenario\":null,\"state\":{\"mode\":\"explicit\",\"reference_date\":\"2024-06-14\",\"venues\":[{\"bridge_uid\":\"GBR->PHL#0\",\"congestion\":0.35,\"history\":{\"congestion\":[0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35],\"liquidity_usd\":[210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000]},\"liquidity_usd\":210000},{\"bridge_uid\":\"GBR->PHL#1\",\"congestion\":0.2,\"history\":{\"congestion\":[0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35],\"liquidity_usd\":[210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000]},\"liquidity_usd\":60000},{\"bridge_uid\":\"GBR->PHL#2\",\"congestion\":0.5,\"history\":{\"congestion\":[0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35,0.35],\"liquidity_usd\":[210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000,210000]},\"liquidity_usd\":90000}]},\"transaction\":{\"amount_usd\":300000,\"receiver_country\":\"PHL\",\"sender_country\":\"GBR\"}}",
+      "decision_id": "sha256:b4cdc9479a7ced84be1031c26a8af1b52b1ba6f0cde30c6d706bebaf6829e473"
+    },
+    {
+      "name": "explicit_waterfall_history_null_equals_missing",
+      "description": "Explicit state, waterfall: history null and history omitted hash the same; the checkpoint is ignored for a baseline.",
+      "inputs": {
+        "engine_version": "0.1.0",
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        },
+        "artefacts": {
+          "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "bridge_network_sha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+          "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+          "macro_risk_proxy_sha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
+          "rpw_corridor_quarterly_sha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e"
+        },
+        "checkpoint_sha256": "0fd441744e610e3356e8f64ea85cc4b6e5ecfc1f4f136eba18e960f4109891c9",
+        "request": {
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000.0
+          },
+          "state": {
+            "mode": "explicit",
+            "reference_date": "2024-06-14",
+            "venues": [
+              {
+                "bridge_uid": "GBR->PHL#0",
+                "liquidity_usd": 210000.0,
+                "congestion": 0.35,
+                "history": null
+              },
+              {
+                "bridge_uid": "GBR->PHL#1",
+                "liquidity_usd": 60000.0,
+                "congestion": 0.2
+              },
+              {
+                "bridge_uid": "GBR->PHL#2",
+                "liquidity_usd": 90000.0,
+                "congestion": 0.5,
+                "history": null
+              }
+            ]
+          },
+          "policy": "waterfall"
+        }
+      },
+      "canonical": "{\"artefacts\":{\"bridge_network_sha256\":\"99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f\",\"daily_state_sha256\":\"d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0\",\"knowledge_sha256\":\"b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2\",\"macro_risk_proxy_sha256\":\"6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683\",\"normalization_stats_sha256\":\"bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123\",\"rpw_corridor_quarterly_sha256\":\"2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e\"},\"checkpoint_sha256\":null,\"engine_version\":\"0.1.0\",\"id_scheme\":1,\"policy\":\"waterfall\",\"reward_weights\":{\"lambda_latency\":1,\"lambda_risk\":1,\"lambda_unrouted\":1},\"scenario\":null,\"state\":{\"mode\":\"explicit\",\"reference_date\":\"2024-06-14\",\"venues\":[{\"bridge_uid\":\"GBR->PHL#0\",\"congestion\":0.35,\"history\":null,\"liquidity_usd\":210000},{\"bridge_uid\":\"GBR->PHL#1\",\"congestion\":0.2,\"history\":null,\"liquidity_usd\":60000},{\"bridge_uid\":\"GBR->PHL#2\",\"congestion\":0.5,\"history\":null,\"liquidity_usd\":90000}]},\"transaction\":{\"amount_usd\":300000,\"receiver_country\":\"PHL\",\"sender_country\":\"GBR\"}}",
+      "decision_id": "sha256:4e55d3c4ce27cb26640e76f0a4a4700de4ba16399ccb762ffdcf7b2a64412442"
+    },
+    {
+      "name": "explicit_waterfall_history_missing",
+      "description": "The previous vector with every history omitted, venues in another order and no checkpoint: same decision_id.",
+      "inputs": {
+        "engine_version": "0.1.0",
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        },
+        "artefacts": {
+          "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "bridge_network_sha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+          "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+          "macro_risk_proxy_sha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
+          "rpw_corridor_quarterly_sha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e"
+        },
+        "request": {
+          "transaction": {
+            "sender_country": "GBR",
+            "receiver_country": "PHL",
+            "amount_usd": 300000.0
+          },
+          "state": {
+            "mode": "explicit",
+            "reference_date": "2024-06-14",
+            "venues": [
+              {
+                "bridge_uid": "GBR->PHL#2",
+                "liquidity_usd": 90000.0,
+                "congestion": 0.5
+              },
+              {
+                "bridge_uid": "GBR->PHL#0",
+                "liquidity_usd": 210000.0,
+                "congestion": 0.35
+              },
+              {
+                "bridge_uid": "GBR->PHL#1",
+                "liquidity_usd": 60000.0,
+                "congestion": 0.2
+              }
+            ]
+          },
+          "policy": "waterfall"
+        }
+      },
+      "canonical": "{\"artefacts\":{\"bridge_network_sha256\":\"99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f\",\"daily_state_sha256\":\"d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0\",\"knowledge_sha256\":\"b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2\",\"macro_risk_proxy_sha256\":\"6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683\",\"normalization_stats_sha256\":\"bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123\",\"rpw_corridor_quarterly_sha256\":\"2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e\"},\"checkpoint_sha256\":null,\"engine_version\":\"0.1.0\",\"id_scheme\":1,\"policy\":\"waterfall\",\"reward_weights\":{\"lambda_latency\":1,\"lambda_risk\":1,\"lambda_unrouted\":1},\"scenario\":null,\"state\":{\"mode\":\"explicit\",\"reference_date\":\"2024-06-14\",\"venues\":[{\"bridge_uid\":\"GBR->PHL#0\",\"congestion\":0.35,\"history\":null,\"liquidity_usd\":210000},{\"bridge_uid\":\"GBR->PHL#1\",\"congestion\":0.2,\"history\":null,\"liquidity_usd\":60000},{\"bridge_uid\":\"GBR->PHL#2\",\"congestion\":0.5,\"history\":null,\"liquidity_usd\":90000}]},\"transaction\":{\"amount_usd\":300000,\"receiver_country\":\"PHL\",\"sender_country\":\"GBR\"}}",
+      "decision_id": "sha256:4e55d3c4ce27cb26640e76f0a4a4700de4ba16399ccb762ffdcf7b2a64412442",
+      "same_as": "explicit_waterfall_history_null_equals_missing"
+    }
+  ]
+}

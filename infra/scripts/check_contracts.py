@@ -18,6 +18,8 @@ Checks, in order:
   5. Coverage: every operation has a success fixture, and every error code the
      API raises has at least one fixture.
   6. No real-looking bearer token appears in any fixture.
+  7. The decision_id test vectors in contracts/test-vectors/ match the §2.11
+     canonical document, serialised with RFC 8785 and hashed with SHA-256.
 
 Usage:  python infra/scripts/check_contracts.py [--root REPO_ROOT]
 Exit status 0 when everything conforms, 1 otherwise. Needs only the packages
@@ -26,12 +28,14 @@ in infra/scripts/requirements.txt; it never imports Phase 1 code.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
 import sys
 from pathlib import Path
 
+import rfc8785
 import yaml
 from jsonschema import Draft202012Validator, FormatChecker
 from openapi_spec_validator import validate as validate_openapi
@@ -50,10 +54,75 @@ VALUES_PROVENANCE = {"historical_replay": "synthetic_simulation", "scenario": "s
 RELATIVE_UNROUTED_TOLERANCE = 1e-4  # Stage 1F amount-based completed (src/backtesting/evaluation.py)
 MEANINGFUL_ALLOCATION_THRESHOLD = 1e-6  # bridges_used counts shares above this
 RISK_FALLBACK = 0.0  # Phase 1 DEFAULT_RISK_PLACEHOLDER (src/envs/bridge_network.py)
+# (corridor, month) pairs used by fixtures where the Phase 1 risk lookup falls back, because the
+# macro-risk proxy of either country is missing or NaN (src/envs/cbdc_env.py). Read from
+# data/processed/macro_risk_proxy.parquet on 2026-11-04: for 2024-06 the proxy is NaN for PHL, USA and ARE.
+# A fallback is known from this table, never inferred from a risk of 0.0. Add a row for any new fixture month.
+RISK_FALLBACK_MONTHS = {("USA->IND", "2024-06"), ("GBR->PHL", "2024-06"), ("ARE->MEX", "2024-06")}
 FAILURE_CODES = ("INFERENCE_ERROR", "INFERENCE_UNAVAILABLE", "ENGINE_BUSY", "ENGINE_TIMEOUT")
 NEAR_BOUNDARY_TOLERANCE = 0.15  # src/training/transaction_generator.py true_regime_for_row()
 
 HEX64_TOKEN = re.compile(r"Bearer\s+[0-9a-fA-F]{64}\b")
+
+# §2.11: the artefact fingerprints that enter decision_id (id_scheme 1).
+ID_SCHEME = 1
+ID_ARTEFACTS = ("knowledge_sha256", "daily_state_sha256", "bridge_network_sha256", "normalization_stats_sha256",
+                "macro_risk_proxy_sha256", "rpw_corridor_quarterly_sha256")
+SCENARIO_FIELDS = ("liquidity_multiplier", "congestion_multiplier", "cheapest_venue_liquidity_multiplier")
+REWARD_FIELDS = ("lambda_latency", "lambda_risk", "lambda_unrouted")
+
+
+def decision_document(inputs: dict) -> dict:
+    """The §2.11 canonical document (id_scheme 1) for one policy, from a raw engine request and its context.
+
+    inputs: request (a /v1/route or /v1/compare body), policy (required for compare), engine_version,
+    reward_weights, artefacts, scenario (the /v1/scenarios entry, scenario mode only) and
+    checkpoint_sha256 (ppo_projected only). Every other field is excluded.
+    """
+    req = inputs["request"]
+    policy = inputs.get("policy") or req.get("policy") or "waterfall"
+    tx, raw = req["transaction"], req["state"]
+    if raw["mode"] == "explicit":
+        venues = []
+        for v in sorted(raw["venues"], key=lambda v: v["bridge_uid"]):
+            h = v.get("history")
+            venues.append({"bridge_uid": v["bridge_uid"], "liquidity_usd": float(v["liquidity_usd"]),
+                           "congestion": float(v["congestion"]),
+                           "history": None if h is None else {k: [float(x) for x in h[k]]
+                                                              for k in ("liquidity_usd", "congestion")}})
+        state = {"mode": "explicit", "reference_date": raw["reference_date"], "venues": venues}
+    elif raw["mode"] == "scenario":
+        state = {"mode": "scenario", "date": raw["date"], "scenario_id": raw["scenario_id"]}
+    else:
+        state = {"mode": "historical_replay", "date": raw["date"]}
+    scenario = None
+    if raw["mode"] == "scenario":
+        definition = inputs["scenario"]
+        if definition["scenario_id"] != raw["scenario_id"]:
+            raise ValueError("scenario definition does not match state.scenario_id")
+        scenario = {"scenario_id": definition["scenario_id"], **{k: float(definition[k]) for k in SCENARIO_FIELDS}}
+    if policy == "ppo_projected" and not inputs.get("checkpoint_sha256"):
+        raise ValueError("ppo_projected needs checkpoint_sha256")
+    return {
+        "id_scheme": ID_SCHEME,
+        "engine_version": inputs["engine_version"],
+        "transaction": {"sender_country": tx["sender_country"], "receiver_country": tx["receiver_country"],
+                        "amount_usd": float(tx["amount_usd"])},
+        "state": state,
+        "policy": policy,
+        "scenario": scenario,
+        "reward_weights": {k: float(inputs["reward_weights"][k]) for k in REWARD_FIELDS},
+        "artefacts": {k: inputs["artefacts"][k] for k in ID_ARTEFACTS},
+        "checkpoint_sha256": inputs["checkpoint_sha256"] if policy == "ppo_projected" else None,
+    }
+
+
+def canonical(doc: dict) -> str:
+    return rfc8785.dumps(doc).decode("utf-8")
+
+
+def decision_id(inputs: dict) -> str:
+    return "sha256:" + hashlib.sha256(rfc8785.dumps(decision_document(inputs))).hexdigest()
 
 
 def camel(key: str) -> str:
@@ -298,8 +367,11 @@ class Checker:
             codes = [w["code"] for w in body["warnings"]]
             if "STATE_OUTSIDE_TRAINING_RANGE" in codes:
                 self.fail(rel, "/v1/state never emits STATE_OUTSIDE_TRAINING_RANGE; it depends on the policy (§2.5)")
-            if ("RISK_FALLBACK_USED" in codes) != (body["corridor_risk"] == RISK_FALLBACK):
-                self.fail(rel, "RISK_FALLBACK_USED must be present exactly when corridor_risk is the 0.0 fallback")
+            month = body["state"]["date"][:7]
+            if (body["corridor"], month) in RISK_FALLBACK_MONTHS and "RISK_FALLBACK_USED" not in codes:
+                self.fail(rel, f"the risk lookup falls back for {body['corridor']} in {month}: RISK_FALLBACK_USED required")
+            if "RISK_FALLBACK_USED" in codes and body["corridor_risk"] != RISK_FALLBACK:
+                self.fail(rel, "RISK_FALLBACK_USED means corridor_risk is the 0.0 fallback")
         elif template == "/v1/route":
             self.check_route(rel, req["body"], body)
         elif template == "/v1/compare":
@@ -436,8 +508,11 @@ class Checker:
             self.fail(at, "provenance.scenario_id does not match the request")
         if state["mode"] == "historical_replay" and prov["state_frame_sha256"] != prov["daily_state_sha256"]:
             self.fail(at, "replay: state_frame_sha256 must equal daily_state_sha256 (§2.8)")
-        if not r["feasibility"]["allowed"] and "RISK_FALLBACK_USED" in [wn["code"] for wn in r["warnings"]]:
+        warned = "RISK_FALLBACK_USED" in [wn["code"] for wn in r["warnings"]]
+        if not r["feasibility"]["allowed"] and warned:
             self.fail(at, "a regulatory rejection does no risk lookup, so it never carries RISK_FALLBACK_USED")
+        if r["feasibility"]["allowed"] and (corridor, state_date[:7]) in RISK_FALLBACK_MONTHS and not warned:
+            self.fail(at, f"the risk lookup falls back for {corridor} in {state_date[:7]}: RISK_FALLBACK_USED required")
         if "RISK_FALLBACK_USED" in [wn["code"] for wn in r["warnings"]] and \
                 any(a["risk"] != RISK_FALLBACK for a in r["allocations"]):
             self.fail(at, "RISK_FALLBACK_USED means every venue's risk is the 0.0 fallback")
@@ -656,6 +731,31 @@ class Checker:
             if HEX64_TOKEN.search(json.dumps(fx)):
                 self.fail(rel, "contains a 64-hex bearer token; fixtures may only use mock-viewer / mock-analyst")
 
+    def check_vectors(self) -> None:
+        """§2.11 test vectors: each canonical string and decision_id follows from its inputs."""
+        path = self.contracts / "test-vectors" / "decision_id.v1.json"
+        if not path.exists():
+            self.fail("test-vectors", "decision_id.v1.json is missing")
+            return
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("id_scheme") != ID_SCHEME:
+            self.fail("test-vectors", f"id_scheme must be {ID_SCHEME}")
+        seen = {}
+        for vec in data["vectors"]:
+            where = f"test-vectors/{vec['name']}"
+            try:
+                doc = decision_document(vec["inputs"])
+            except (KeyError, ValueError) as exc:
+                self.fail(where, f"inputs do not build a §2.11 document: {exc}")
+                continue
+            if canonical(doc) != vec["canonical"]:
+                self.fail(where, "canonical is not the RFC 8785 serialisation of the §2.11 document")
+            if decision_id(vec["inputs"]) != vec["decision_id"]:
+                self.fail(where, "decision_id is not sha256 of the canonical document")
+            if "same_as" in vec and seen.get(vec["same_as"]) != vec["decision_id"]:
+                self.fail(where, f"must have the same decision_id as {vec['same_as']}")
+            seen[vec["name"]] = vec["decision_id"]
+
     def run(self) -> list[str]:
         self.load()
         for rel, fx in self.fixtures.items():
@@ -663,6 +763,7 @@ class Checker:
         for rel, fx in self.fixtures.items():
             self.check_derived(rel, fx)
         self.check_failures()
+        self.check_vectors()
         self.check_coverage()
         self.check_secrets()
         return self.problems

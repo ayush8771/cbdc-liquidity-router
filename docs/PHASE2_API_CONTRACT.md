@@ -159,7 +159,7 @@ The FastAPI process answers `/v1/health`, `/v1/version`, `/v1/replay/calendar` a
   - `rebuilds_since_start` counts individual worker replacements.
   - `ready_workers` (required) is the number of workers that have finished warming up and can take a task.
 - `ppo_checkpoint` is `ok`, `disabled` (none approved or configured) or `error` (hash mismatch). A `disabled` checkpoint doesn't make the service `degraded`.
-- The non-`ok` values of `structured_data`, `daily_state` and `knowledge_base` are not yet defined (§10, Q12).
+- `structured_data`, `daily_state` and `knowledge_base` are exactly `"ok"` or `"error"` (R5; Q12 closed).
 - HTTP 200 when `ready`, otherwise 503. `ready` is false until at least one engine worker has finished warming up. Warm-up is limited by `CBDC_ENGINE_STARTUP_TIMEOUT_S` (default 180 s, §8).
 
 ### 2.2 `GET /v1/version`
@@ -183,6 +183,8 @@ The FastAPI process answers `/v1/health`, `/v1/version`, `/v1/replay/calendar` a
     "daily_state_sha256": "<hex>",
     "bridge_network_sha256": "<hex>",
     "normalization_stats_sha256": "<hex>",
+    "macro_risk_proxy_sha256": "<hex>",
+    "rpw_corridor_quarterly_sha256": "<hex>",
     "date_range": {"start": "2011-01-01", "end": "2025-09-30"}
   },
   "reward_weights": {"lambda_latency": 1.0, "lambda_risk": 1.0, "lambda_unrouted": 1.0, "status": "placeholder"},
@@ -196,7 +198,7 @@ When a checkpoint is enabled, `checkpoint` is `{"checkpoint_id": "...", "sha256"
 - `git_commit` is provenance only. It is read at build time, never hard-coded, and does **not** enter `decision_id` (§2.11).
 - `engine_version` is the semantic version of the inference logic that can change routing outputs. It must be bumped whenever a code change can change any output for the same request and artefacts, and it enters `decision_id` (§2.11). A change that can't affect outputs, such as logging or error text, needn't bump it.
 - `api_version` does **not** enter `decision_id`.
-- The hashes in `knowledge` and `data` are computed as §2.11 describes.
+- The hashes in `knowledge` and `data` are computed as §2.11 describes. They include `macro_risk_proxy_sha256` (`data/processed/macro_risk_proxy.parquet`) and `rpw_corridor_quarterly_sha256` (`data/processed/rpw_corridor_quarterly.parquet`). Both are binary, so they are hashed as committed, and both enter `decision_id` (R4).
 
 ### 2.3 `GET /v1/network`
 
@@ -304,13 +306,13 @@ Query: `corridor=GBR->PHL&mode=historical_replay&date=2024-06-14`, or `&mode=sce
 {
   "corridor": "GBR->PHL",
   "state": {"mode": "historical_replay", "date": "2024-06-14", "split": "test", "scenario_id": null},
-  "corridor_risk": 0.087,
+  "corridor_risk": 0.0,
   "baseline_cost_pct": 0.0612,
   "venues": [
     {"slot": 0, "bridge_uid": "GBR->PHL#0", "fee_pct": 0.02, "liquidity_usd": 412345.6, "congestion": 0.31,
      "data_source_tag": "real_static_bridge", "values_provenance": "synthetic_simulation"}
   ],
-  "warnings": []
+  "warnings": [{"code": "RISK_FALLBACK_USED", "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."}]
 }
 ```
 
@@ -384,15 +386,15 @@ With `include_history=true`, each venue also has `"history": {"dates": [30 dates
   },
   "allocations": [
     {"slot": 0, "bridge_uid": "GBR->PHL#0", "data_source_tag": "real_static_bridge", "fee_pct": 0.02,
-     "liquidity_usd": 412345.6, "congestion": 0.31, "risk": 0.087,
+     "liquidity_usd": 412345.6, "congestion": 0.31, "risk": 0.0,
      "share_requested": 0.5, "amount_requested_usd": 150000.0, "amount_executed_usd": 150000.0, "amount_clipped_usd": 0.0,
      "share_before_projection": null},
     {"slot": 1, "bridge_uid": "GBR->PHL#1", "data_source_tag": "synthetic_bridge_expansion", "fee_pct": 0.014,
-     "liquidity_usd": 150000.0, "congestion": 0.22, "risk": 0.087,
+     "liquidity_usd": 150000.0, "congestion": 0.22, "risk": 0.0,
      "share_requested": 0.5, "amount_requested_usd": 150000.0, "amount_executed_usd": 150000.0, "amount_clipped_usd": 0.0,
      "share_before_projection": null},
     {"slot": 2, "bridge_uid": "GBR->PHL#2", "data_source_tag": "synthetic_bridge_expansion", "fee_pct": 0.03,
-     "liquidity_usd": 85000.0, "congestion": 0.48, "risk": 0.087,
+     "liquidity_usd": 85000.0, "congestion": 0.48, "risk": 0.0,
      "share_requested": 0.0, "amount_requested_usd": 0.0, "amount_executed_usd": 0.0, "amount_clipped_usd": 0.0,
      "share_before_projection": null}
   ],
@@ -411,11 +413,11 @@ With `include_history=true`, each venue also has `"history": {"dates": [30 dates
     "baseline_cost_pct": 0.0612,
     "cost_term": 0.0442,
     "latency_term": 0.265,
-    "risk_term": 0.087,
+    "risk_term": 0.0,
     "unrouted_term_env": 0.0,
     "unrouted_term_amount_based": 0.0,
-    "reward_env": -0.3078,
-    "reward_amount_based": -0.3078,
+    "reward_env": -0.2208,
+    "reward_amount_based": -0.2208,
     "reward_weights": {"lambda_latency": 1.0, "lambda_risk": 1.0, "lambda_unrouted": 1.0, "status": "placeholder"}
   },
   "diagnostics": {
@@ -438,7 +440,7 @@ With `include_history=true`, each venue also has `"history": {"dates": [30 dates
     "device": "cpu",
     "platform": "linux-x86_64"
   },
-  "warnings": []
+  "warnings": [{"code": "RISK_FALLBACK_USED", "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."}]
 }
 ```
 
@@ -476,7 +478,7 @@ Field definitions:
 | `EXPERIMENTAL_POLICY` | Always present for `ppo_projected` |
 | `DATE_IN_TRAINING_SPLIT` | `ppo_projected` on a train-split date |
 | `STATE_OUTSIDE_TRAINING_RANGE` | An effective value read by the selected policy is outside the venue's training-window bounds, in any state mode (§2.4). A warning only. |
-| `RISK_FALLBACK_USED` | The corridor risk proxy is missing or NaN for the date's month, so Phase 1's static placeholder `0.0` (`DEFAULT_RISK_PLACEHOLDER`) is used, as Phase 1 does. Every venue's `risk` is then 0.0. Example: in June 2024 the proxy is NaN for PHL, USA and ARE, so all three corridors fall back. |
+| `RISK_FALLBACK_USED` | The corridor risk proxy is missing or NaN for the date's month, so Phase 1's static placeholder `0.0` (`DEFAULT_RISK_PLACEHOLDER`) is used, as Phase 1 does. Every venue's `risk` is then 0.0. The warning is emitted **only when that fallback actually happens**. A risk of 0.0 alone doesn't imply it, and a regulatory rejection, which does no risk lookup, never carries it. Example: in June 2024 the proxy is NaN for PHL, USA and ARE, so all three corridors fall back. |
 | `COST_BASELINE_FALLBACK_USED` | No lagged RPW baseline exists, so the reward default was used |
 | `SYNTHETIC_COST_ANCHOR` | Corridor ARE→MEX: the cost baseline uses the synthetic USA→MEX fallback |
 | `PARTIAL_COMPLETION` | `completed` is false **and** `feasibility.allowed` is true. A regulatory rejection never carries it (C14). |
@@ -573,26 +575,29 @@ Each result's `decision_id` is computed for that one policy (§2.11), never over
 
   pandas stays pinned. Dev A fixes the exact byte layout in code, and a golden-hash test pins it (§9).
 
-**Hashed document** (owner decision):
-- `id_scheme`: `1`. It identifies this canonical form, so a future change to the form gets a new scheme number instead of silently changing IDs.
-- `engine_version` (§2.2).
-- The request: `transaction` (`sender_country`, `receiver_country`, `amount_usd`), `state`, and the one `policy`.
-- `reward_weights`: the λ values used (`lambda_latency`, `lambda_risk`, `lambda_unrouted`). They are hashed explicitly, not left to `engine_version`, because they change every reward output and may be recalibrated without a code change.
-- In `scenario` mode, the **scenario definition** used: its `scenario_id` and every multiplier, exactly as `/v1/scenarios` reports them. A redefined scenario therefore gets new IDs even under the same `scenario_id`.
-- **Testable rule.** Dev A's `decision_id` tests must show that changing any one hashed input changes the ID, and that changing an excluded input does not. The hashed inputs include each λ, each scenario multiplier, `engine_version` and each artefact fingerprint. The excluded inputs include `client_reference`, `git_commit` and `api_version`.
-- The fingerprints of **every artefact that can affect the output**: the knowledge base, the daily state, the bridge network, the normalisation stats, and the risk-proxy and cost-baseline tables the engine reads. Dev A fixes the exact list in code, and the golden-hash test pins it.
-- The checkpoint's SHA-256, **for `ppo_projected` only**. A checkpoint change never changes the ID of a baseline decision.
+**The canonical document (`id_scheme` 1)** (owner decision, A1/R3). It is a JSON object with exactly these members. Every member is always present, so `null` is written out, never omitted:
 
-**Never hashed:** `api_version`, `git_commit` (provenance only), `client_reference`, and every output field.
+| Member | Value |
+|---|---|
+| `id_scheme` | `1` |
+| `engine_version` | The `/v1/version` `engine_version` string (§2.2) |
+| `transaction` | `{"sender_country", "receiver_country", "amount_usd"}`. `amount_usd` is the parsed number, so `300000` and `300000.0` both serialise as `300000` |
+| `state` | Replay: `{"mode": "historical_replay", "date"}`. Scenario: `{"mode": "scenario", "date", "scenario_id"}`. Explicit: `{"mode": "explicit", "reference_date", "venues"}`, with each venue `{"bridge_uid", "liquidity_usd", "congestion", "history"}`. `history` is `{"liquidity_usd": [30], "congestion": [30]}` or `null`; an omitted history is written as `null`. `venues` are sorted by `bridge_uid` |
+| `policy` | The one policy, after defaulting (`waterfall` when omitted). In `/v1/compare`, each result's own policy; never the `policies` list |
+| `scenario` | Scenario mode: `{"scenario_id", "liquidity_multiplier", "congestion_multiplier", "cheapest_venue_liquidity_multiplier"}`, as `/v1/scenarios` defines them. The `description` is excluded. Other modes: `null` |
+| `reward_weights` | `{"lambda_latency", "lambda_risk", "lambda_unrouted"}`. The `status` label is excluded |
+| `artefacts` | `{"knowledge_sha256", "daily_state_sha256", "bridge_network_sha256", "normalization_stats_sha256", "macro_risk_proxy_sha256", "rpw_corridor_quarterly_sha256"}`: exactly the fingerprints `/v1/version` reports (§2.2) |
+| `checkpoint_sha256` | For `ppo_projected`: the enabled checkpoint's SHA-256. A `ppo_projected` request without one is `POLICY_DISABLED` and gets no ID. For every other policy: `null`, so a checkpoint change never changes a baseline ID |
 
-**Canonicalisation details** (agreed by Dev B and Dev D). Ayush's decision is consistent with them but doesn't restate them, so Dev A confirms them when implementing:
-- The *validated, parsed* request model is hashed, never the raw body. So a client sending `300000` and one sending `300000.0` get the same ID; JCS writes both as `300000`.
-- The default policy is applied before hashing.
-- `history: null` and a missing `history` are the same.
-- Explicit `venues` are sorted by `bridge_uid`.
-- **One ID per policy.** Each ID is computed for one policy, so `/v1/compare` IDs equal `/v1/route` IDs (§2.9).
+- **Serialisation and hash.** The document is serialised with RFC 8785 (JCS: sorted keys, no whitespace, ECMAScript number formatting) and hashed as UTF-8 bytes. `decision_id` = `"sha256:"` + the lowercase hex SHA-256.
+- **Never hashed:** `api_version`, `git_commit`, `client_reference`, the scenario `description`, the reward-weight `status`, `request_id`, `device`, `platform`, and every output field.
+- **A new input means a new scheme.** Adding or removing a member, or changing how one is written, requires `id_scheme` 2. Any other change that can alter outputs must bump `engine_version`.
+- **Test vectors.** `contracts/test-vectors/decision_id.v1.json` holds exact canonical strings and IDs:
+  - for replay, scenario, compare and explicit modes;
+  - two equivalence pairs: `300000` vs `300000.0`, and a null vs missing `history` with venues reordered;
+  - a baseline that ignores a supplied checkpoint.
 
-The fixture IDs are illustrative strings: the checker tests only that they are consistent across route, compare and explain. Real values will come from Dev A's engine-generated fixtures.
+  The contract checker rebuilds each document from its inputs and verifies the string and the hash. Its tests show that changing any hashed member changes the ID, and changing an excluded one doesn't. Dev A's implementation must reproduce every vector byte for byte, on Windows and Linux (§9.1).
 
 ---
 
@@ -683,20 +688,20 @@ History, comparisons and the dashboard return every user's records to any authen
     "feasibility": {"allowed": true, "reason": null, "decisiveFactIds": [], "knowledgeVersion": "2026-11-02.1"},
     "allocations": [
       {"slot": 0, "bridgeUid": "GBR->PHL#0", "dataSourceTag": "real_static_bridge", "feePct": 0.02,
-       "liquidityUsd": 412345.6, "congestion": 0.31, "risk": 0.087, "shareRequested": 0.5,
+       "liquidityUsd": 412345.6, "congestion": 0.31, "risk": 0.0, "shareRequested": 0.5,
        "amountRequestedUsd": 150000.0, "amountExecutedUsd": 150000.0, "amountClippedUsd": 0.0, "shareBeforeProjection": null}
     ],
     "totals": {"amountUsd": 300000.0, "requestedUsd": 300000.0, "executedUsd": 300000.0, "unroutedEnvUsd": 0.0,
                "unroutedAmountBasedUsd": 0.0, "completionRatio": 1.0, "completed": true, "bridgesUsed": 2},
-    "metrics": {"feeCostUsd": 5100.0, "baselineCostPct": 0.0612, "costTerm": 0.0442, "latencyTerm": 0.265, "riskTerm": 0.087,
-                "unroutedTermEnv": 0.0, "unroutedTermAmountBased": 0.0, "rewardEnv": -0.3078, "rewardAmountBased": -0.3078,
+    "metrics": {"feeCostUsd": 5100.0, "baselineCostPct": 0.0612, "costTerm": 0.0442, "latencyTerm": 0.265, "riskTerm": 0.0,
+                "unroutedTermEnv": 0.0, "unroutedTermAmountBased": 0.0, "rewardEnv": -0.2208, "rewardAmountBased": -0.2208,
                 "rewardWeights": {"lambdaLatency": 1.0, "lambdaRisk": 1.0, "lambdaUnrouted": 1.0, "status": "placeholder"}},
     "diagnostics": {"regime": "splitting_needed", "combinedLiquidityUsd": 647345.6, "projectionApplied": false},
     "provenance": {"stateMode": "historicalReplay", "stateDate": "2024-06-14", "split": "test", "scenarioId": null,
                    "valuesProvenance": "synthetic_simulation", "engineVersion": "0.1.0", "gitCommit": "bc9905e",
                    "knowledgeSha256": "<hex>", "dailyStateSha256": "<hex>", "stateFrameSha256": "<hex>",
                    "checkpoint": null, "device": "cpu", "platform": "linux-x86_64"},
-    "warnings": []
+    "warnings": [{"code": "RISK_FALLBACK_USED", "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."}]
   }
 }
 ```
@@ -738,7 +743,7 @@ Query parameters: `page` (default 1), `pageSize` (default 20, max 100), `corrido
     {"id": "c0a8012e-…", "createdAt": "2026-11-02T10:00:00Z", "createdBy": "u-analyst-1", "corridor": "GBR->PHL",
      "amountUsd": 300000.0, "simulationDate": "2024-06-14", "stateMode": "historicalReplay", "policy": "waterfall",
      "policyStatus": "default", "status": "routed", "allowed": true, "completed": true, "completionRatio": 1.0,
-     "executedUsd": 300000.0, "rewardAmountBased": -0.3078}
+     "executedUsd": 300000.0, "rewardAmountBased": -0.2208}
   ],
   "page": 1, "pageSize": 20, "total": 1
 }
@@ -802,12 +807,12 @@ Query: `from`, `to`, `corridor`, `policy`.
 ```json
 {
   "window": {"from": "2026-11-01T00:00:00Z", "to": "2026-11-02T23:59:59Z"},
-  "totals": {"transactions": 42, "routed": 41, "failed": 1, "rejectedByFeasibility": 2},
+  "totals": {"transactions": 7, "routed": 6, "failed": 1, "rejectedByFeasibility": 1},
   "byPolicy": [
-    {"policy": "waterfall", "count": 35, "completionRate": 0.971, "meanRewardAmountBased": 0.874,
-     "meanFeeCostPct": 0.0139, "meanLatencyTerm": 0.271, "meanRiskTerm": 0.083}
+    {"policy": "waterfall", "count": 5, "allowedRouted": 3, "completionRate": 0.666667,
+     "meanRewardAmountBased": -0.251407, "meanFeeCostPct": 1.563333, "meanLatencyTerm": 0.257083, "meanRiskTerm": 0.0}
   ],
-  "byCorridor": [{"corridor": "GBR->PHL", "count": 15, "completionRate": 0.933}],
+  "byCorridor": [{"corridor": "GBR->PHL", "routed": 5, "allowedRouted": 4, "completionRate": 0.5}],
   "note": "Aggregates of independent what-if decisions on synthetic states, under placeholder reward weights. Transactions do not consume liquidity. Not a backtest."
 }
 ```
@@ -817,7 +822,7 @@ The aggregates are computed from stored decision fields only, never recomputed f
 - `totals.failed` counts transactions with `status: "failed"`. `totals.rejectedByFeasibility` counts routed decisions with `allowed = false`.
 - **`completionRate`** (owner decision) = completed allowed routed decisions ÷ all allowed routed decisions. Rejected and failed transactions are excluded from both, and counted separately in `totals`. It is **null** when the denominator is zero. The same rule applies in `byPolicy` and `byCorridor`.
   - This changes the v0.3 definition (the mean of every stored `completed` value, under which a rejection pulled the rate down). The change is deliberate and documented here, not silent.
-- `window.from` and `window.to` echo the query, and are **null** when the query didn't supply them.
+- **Window** (owner decision, A3): an omitted `from` or `to` means that side is **unbounded**: no lower or upper limit on `createdAt`. `window.from` and `window.to` echo the query, and are **null** for an omitted bound. `from` is inclusive and `to` exclusive, as in §3.3.
 - **Groups and denominators** (owner decision):
   - `byPolicy` groups by the requested policy. `count` is every transaction with that policy, failed and rejected included.
   - `allowedRouted` is the number of routed decisions with `allowed = true`: the denominator of `completionRate` and of every mean.
@@ -826,7 +831,6 @@ The aggregates are computed from stored decision fields only, never recomputed f
 - **`meanFeeCostPct`** (owner decision) = **100 × AVG(`feeCostUsd` / `executedUsd`)** over the allowed routed decisions with `executedUsd > 0`, and null when there are none. It is a percentage: 1.4 means 1.4 %.
   - **Dependency:** the backend has no `feeCostUsd` column today. Dev B must add it to `RoutingDecision` with a Prisma migration, copied from `metrics.fee_cost_usd`.
   - That migration is **not part of this contracts change** and has not been made. Until it lands, the backend can't compute this field from stored columns.
-- **Still open** (§10, Q11): the window's defaults when `from` or `to` is omitted.
 - The dashboard fixture is derived from the stored transactions and their records. The checker recomputes `allowedRouted`, `routed`, `completionRate`, every mean and `meanFeeCostPct` from them.
 
 ### 3.9 `GET /api/v1/health`, `GET /api/v1/meta`
@@ -925,15 +929,15 @@ The optional `details.cause: "NOT_READY"` is described above.
   - **Request deadline:** configurable, default **12 s**, counted from when the inference service accepts the request. Set with `CBDC_ENGINE_REQUEST_DEADLINE_S` (owner decision, §8).
     - If it expires while the request is still **queued**, the task is removed without running and the request fails with `503 ENGINE_BUSY` and `Retry-After`.
     - If it expires while the task is **running**, the request fails with `504 ENGINE_TIMEOUT`. The worker is **not** killed because the caller's deadline passed: the task runs on, its result is discarded, and the worker then takes the next task.
-  - **Minimum start budget** (proposed, needs Ayush's approval, §10 Q21).
-    - A worker takes a queued task only if at least `CBDC_ENGINE_MIN_START_BUDGET_S` (proposed default **1 s**, to be confirmed by measurement) is left on the request deadline. Otherwise the task is treated as expired while queued: `503 ENGINE_BUSY` with `Retry-After`, never run.
+  - **Minimum start budget** (owner decision, A2).
+    - A worker takes a queued task only if at least `CBDC_ENGINE_MIN_START_BUDGET_S` (provisional default **1 s**, to be confirmed by measurement) is left on the request deadline. Otherwise the task is treated as expired while queued: `503 ENGINE_BUSY` with `Retry-After`, never run.
     - Reason: the execution timeout is never shortened, so a task dispatched with almost no time left would be certain to return `ENGINE_TIMEOUT`, while still holding a worker for up to 10 s.
     - This doesn't conflict with the decisions above. It only changes *when* the queued-expiry rule applies; it never kills a worker and never shortens the execution timeout. With a budget of 0, the behaviour is exactly the approved rule.
   - **Worker execution timeout:** `CBDC_ENGINE_TASK_TIMEOUT_S`, **10 s**, counted from when the worker starts the task. It is not shortened to the time left on the request deadline. A task that runs past it is stopped: its worker process is terminated and replaced (worker recycling, arch §6.2). The request, if still waiting, gets `504 ENGINE_TIMEOUT`.
   - The 12 s default leaves 3 s for transport inside the backend's 15 s timeout, so the engine normally answers before the backend gives up. A configured deadline must stay below `INFERENCE_TIMEOUT_MS`.
   - One consequence: a task the caller has already been told timed out may keep a worker busy for up to 10 s, so `ENGINE_BUSY` can rise under load. That is accepted at development scale.
 - **Health checks.** The backend's check of `/v1/health` uses its own short timeout (set by Dev B; 3 s, like the database probe, was proposed), not the 15 s routing timeout.
-- **Caching:** cached `GET` results (`version`, `network`, `calendar`, `scenarios`) are invalidated when `/v1/version` reports a different `git_commit`, `knowledge.sha256` or `checkpoint.sha256`.
+- **Caching:** cached `GET` results (`version`, `network`, `calendar`, `scenarios`) are invalidated when `/v1/version` reports a different `git_commit`, `engine_version`, `knowledge.sha256`, `data.daily_state_sha256`, `data.bridge_network_sha256`, `data.normalization_stats_sha256`, `data.macro_risk_proxy_sha256`, `data.rpw_corridor_quarterly_sha256` or `checkpoint.sha256` (R4). That covers every input of `decision_id` that `/v1/version` reports.
 - **Network exposure:** the inference service listens on the internal Compose network only and must not be published to the host in the `full` profile of `infra/compose.yaml`. For local debugging, Dev A may publish it on `127.0.0.1:8000`.
 
 ---
@@ -1000,7 +1004,7 @@ Each transaction request (including the full state spec, so explicit states can 
 | `CBDC_ENGINE_WORKERS` | inference | `2` | Engine worker processes per server process |
 | `CBDC_ENGINE_TASK_TIMEOUT_S` | inference | `10` | Worker execution timeout, counted from when the task starts. Independent of the request deadline and never shortened to it (§5). Exceeding it recycles **that worker**: its process is terminated and replaced; the other workers keep serving. |
 | `CBDC_ENGINE_REQUEST_DEADLINE_S` | inference | `12` | Request deadline from acceptance (§5). Expiry while queued → `ENGINE_BUSY`; while running → `ENGINE_TIMEOUT`, without killing the worker. Must stay below `INFERENCE_TIMEOUT_MS`. |
-| `CBDC_ENGINE_MIN_START_BUDGET_S` (proposed) | inference | `1` (proposed) | A queued task is not dispatched if less than this is left on its request deadline; it gets `ENGINE_BUSY` instead (§5). 0 disables it. |
+| `CBDC_ENGINE_MIN_START_BUDGET_S` | inference | `1` (provisional) | A queued task is not dispatched if less than this is left on its request deadline; it gets `ENGINE_BUSY` instead (§5). 0 disables it. |
 | `CBDC_ENGINE_STARTUP_TIMEOUT_S` | inference | `180` | Maximum time for one engine worker to finish warming up: loading the tables, the knowledge base and the CNN (arch §6.2). |
 | `CBDC_ENGINE_MAX_QUEUE` | inference | `32` | Waiting tasks before `ENGINE_BUSY` |
 | `CBDC_ENABLE_COGNEE` | inference | `false` | Optional Cognee support (needs local Ollama and the `services/inference/requirements/cognee-<platform>.txt` lock; see `docs/STAGE1E_MEMORY.md`). In v1, `semantic_context` is always null whatever this is set to (§2.10). |
@@ -1032,13 +1036,30 @@ Each suite lives in its owner's folder and runs in that owner's path-filtered CI
 | A (`services/inference/tests/concurrency/`) | **Deadlines and workers:** a request whose deadline expires while queued gets `503 ENGINE_BUSY` and never runs; one that expires while running gets `504 ENGINE_TIMEOUT` and its worker is **not** killed; a task past the 10 s execution timeout recycles only its worker. `ENGINE_BUSY` while a worker is rebuilding. Workers start within `CBDC_ENGINE_STARTUP_TIMEOUT_S`; `ready_workers` reports them. |
 | B (`services/backend/test/` · `phase2-backend.yml`) | Mapping completeness (every engine field maps to an app field, unknown engine fields included), persistence round trip, error passthrough, timeout → 503, mock mode. **Also:**<br>• failed transactions: `failureCode` and `failure`, the null fields, `409 TRANSACTION_FAILED`;<br>• `POLICY_DISABLED` and 4xx message forwarding (capped at 500), the field-path mapping table, `NOT_READY` → `INFERENCE_UNAVAILABLE`, and `Retry-After` forwarding;<br>• strict request bodies, the 200-character `clientReference`, `policy: null` → 422, and 405 with `Allow`.<br>**Auth:** startup refusal in each forbidden configuration; 401 for missing, malformed or unknown tokens; 403 for a viewer requesting `ppoProjected`; `Authorization` never logged or persisted. |
 | C (`services/web/test/` · `phase2-web.yml`) | Rendering from every fixture, including rejection, partial completion, the disabled experimental policy, an explicit state, a failed transaction (null fields, `failure`), 401, 403, 409 and 503 with `Retry-After`. Mandatory labels and the dev-auth banner present. Token absent from `localStorage`, URLs and the built bundle; cleared on 401 and sign-out. |
-| D (`e2e/`, `infra/scripts/` · `phase2-integration.yml`) | Every fixture in `contracts/fixtures/` validates against `contracts/openapi/`, and `infra/scripts/check_contracts.py` applies the §2.8, §3.2 and §4 rules the schemas can't express. Lock drift and install checks on Linux and Windows, including the dependency checks of arch §7.2. Docker images build. The `infra/compose.yaml` `full` profile end to end: sign in → submit → route → persist → read back → explain. |
+| D (`e2e/`, `infra/scripts/` · `phase2-integration.yml`) | Every fixture in `contracts/fixtures/` validates against `contracts/openapi/`, and `infra/scripts/check_contracts.py` applies the §2.8, §3.2 and §4 rules the schemas can't express. It also verifies the `decision_id` test vectors (§2.11). Lock drift and install checks on Linux and Windows, including the dependency checks of arch §7.2. Docker images build. The `infra/compose.yaml` `full` profile end to end: sign in → submit → route → persist → read back → explain. |
+
+### 9.1 Requirements for Dev A's implementation
+
+These are **requirements** that Dev A's inference service and its tests must meet. They are specified here; this contracts change implements none of them. Each needs a test in `services/inference/tests/` before it is called done.
+
+| # | Requirement | Contract | Test that shows it |
+|---|---|---|---|
+| A-1 | Deterministic `decision_id`: RFC 8785 over the §2.11 document, covering every output-affecting input | §2.11 | Reproduce every vector in `contracts/test-vectors/decision_id.v1.json` byte for byte |
+| A-2 | Cross-platform artefact and daily-state hashing (text files CRLF→LF, binaries raw, little-endian row hashes with column names and dtypes) | §2.11; arch §6.2, §7.4 | Golden-hash test, identical on Windows and Linux CI |
+| A-3 | 10 s worker execution timeout; 12 s request deadline (`CBDC_ENGINE_REQUEST_DEADLINE_S`); 1 s minimum start budget (`CBDC_ENGINE_MIN_START_BUDGET_S`) | §5, §8 | Queued expiry and under-budget → `ENGINE_BUSY`, never run; deadline while running → `ENGINE_TIMEOUT` with the worker kept; past 10 s → only that worker recycled |
+| A-4 | Configurable worker startup timeout, default 180 s (`CBDC_ENGINE_STARTUP_TIMEOUT_S`) | §8; arch §6.2 | Before readiness, `NOT_READY` and `ready: false` |
+| A-5 | Strict request validation and the agreed error formats (`details.errors[]`, `field` omitted for form-level errors, sanitised 4xx messages, `VALIDATION_ERROR` for wrong-length history) | §1, §2.4, §4 | Every inference error fixture |
+| A-5b | `405 METHOD_NOT_ALLOWED` with an `Allow` header listing the path's methods | §4 | `inference/errors/405_method_not_allowed.json` |
+| A-6 | `ready_workers` in health | §2.1 | Health fixtures; changes during warm-up and recycling |
+| A-7 | `STATE_OUTSIDE_TRAINING_RANGE`: a warning only, from route and compare only, on the policy-consumed values | §2.4 | One case per state mode; never from `/v1/state`; never blocks a baseline |
+| A-8 | Regulatory rejection: `requested_usd = 0`, `allocations = []`, no `PARTIAL_COMPLETION`, and no `RISK_FALLBACK_USED`, because the rejection prevents the risk lookup. On allowed decisions, `RISK_FALLBACK_USED` appears exactly when the proxy lookup falls back | §2.8 | Rejection fixtures; a fallback month and a non-fallback month |
+| A-9 | Consistent `decision_id` across route, compare and explain | §2.9–§2.11 | The same request gives the same ID on all three; a compare entry equals its route |
 
 ---
 
 ## 10. Open decisions (v0.4 revision)
 
-Ayush's owner decisions of 4 November resolved Q1–Q5, Q6, Q7, Q8, Q9, Q10, Q13 and Q15, and the `completionRate` part of Q11. His final decisions then resolved the rest of Q11 except the window defaults, plus Q17, Q3a and Q9a. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
+Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A3), Q12 (R5), Q13, Q15, Q17, Q21 (A2), Q3a and Q9a, and the corrections R1–R6. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
 
 **Blocking: needed before the dependent implementation lands**
 
@@ -1052,11 +1073,7 @@ Ayush's owner decisions of 4 November resolved Q1–Q5, Q6, Q7, Q8, Q9, Q10, Q13
 
 | # | Question | Notes | Decides |
 |---|---|---|---|
-| Q11 | Dashboard window defaults when `from` or `to` is omitted | The window echoes null today | Ayush, with Anvesh |
 | Q11a | A non-UUID `:id`: `404 NOT_FOUND` or `422 VALIDATION_ERROR`? | Not implemented yet | Anvesh |
-| Q12 | Non-`ok` values of the health checks `structured_data`, `daily_state` and `knowledge_base` (C10) | Schema keeps `[ok, error]` | Ayush |
 | Q14 | Is `405` checked before or after authentication in the app? | The fixtures send a token, so they don't depend on it | Anvesh |
 | Q18 | Comparisons: the analyst default for an omitted `policies`, the order of `results`, and whether the record echoes `state` and `policies` | Both are already persisted (§6.3) | Anvesh and Varshini |
 | Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback | Nisarga, Anvesh, Varshini |
-| Q21 | The minimum start budget (§5): adopt it, and its default | Proposed by Dev D, 1 s, as a placeholder until measured | Ayush |
-| R1–R6 | The owner asked for corrections R1–R6 to be resolved. No definition of R1–R6 exists in this repository, on any remote branch, or in the material Dev D received, so they are **not addressed**. | Need the source text | Ayush |

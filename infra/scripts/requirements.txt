@@ -20,6 +20,7 @@ packaging==26.3
 pathable==0.4.4
 pluggy==1.7.0
 pytest==8.3.3
+rfc8785==0.1.4
 PyYAML==6.0.2
 referencing==0.36.2
 requests==2.34.2

@@ -188,6 +188,7 @@ cbdc-liquidity-router/
 │   ├── fixtures/
 │   │   ├── inference/   meta/ route/ compare/ explain/ state/ errors/
 │   │   └── app/         meta/ transactions/ comparisons/ auth/ dashboard/ errors/
+│   ├── test-vectors/      decision_id.v1.json (exact RFC 8785 canonical strings and IDs, contract §2.11)
 │   └── README.md
 │
 ├── services/
@@ -426,7 +427,7 @@ A single worker that handles one request at a time avoids interleaving, but it i
 
    Separately, before returning a result the worker checks the **allocation invariant** (API contract §2.8): `requested_usd` equals the sum of the per-venue requested amounts, and no infeasible venue or padding slot carries weight. A violation returns `INTERNAL_ERROR` with no result.
 6. **Deadlines and worker recycling** (owner decision, revised after review). Two independent limits apply.
-   - **Request deadline:** configurable, default **12 s**, counted from when the request is accepted. Set with `CBDC_ENGINE_REQUEST_DEADLINE_S` (owner decision). A proposed minimum start budget (`CBDC_ENGINE_MIN_START_BUDGET_S`, 1 s, awaiting approval) stops a worker taking a queued task with less time than that left; such a task gets `ENGINE_BUSY` (API contract §5).
+   - **Request deadline:** configurable, default **12 s**, counted from when the request is accepted. Set with `CBDC_ENGINE_REQUEST_DEADLINE_S` (owner decision). A minimum start budget (`CBDC_ENGINE_MIN_START_BUDGET_S`, provisional default 1 s, owner decision) stops a worker taking a queued task with less time than that left. Such a task gets `ENGINE_BUSY` and never runs (API contract §5). The 10 s execution timeout stays independent.
      - Expiry while the task is still **queued**: the task is dropped without running, and the request fails with `503 ENGINE_BUSY` and `Retry-After`.
      - Expiry while it is **running**: the request fails with `504 ENGINE_TIMEOUT`, but the worker is **not** killed. The task finishes, its result is discarded, and the worker takes the next task.
    - **Worker execution timeout:** `CBDC_ENGINE_TASK_TIMEOUT_S`, **10 s**, counted from when the worker starts the task, and never shortened to the time left on the request deadline. A task past it is stopped by terminating and replacing **that worker process** ("worker recycling"), because a running task can't be cancelled. The request, if still waiting, gets `504 ENGINE_TIMEOUT`.
@@ -505,7 +506,7 @@ The root `requirements-lock.txt` is a `pip freeze` of the Windows development ve
 - **Golden-hash test (required).** Fixed inputs must give identical results on Windows and Linux CI:
   - artefact fingerprints;
   - the daily-state fingerprint (§6.2);
-  - `decision_id`s.
+  - `decision_id`s, including every vector in `contracts/test-vectors/decision_id.v1.json`.
 
   Until it passes on both, documents and responses don't claim cross-platform determinism.
 - **Case and length.** Use lower-case folder and file names; Linux CI catches imports with the wrong case. Set `git config core.longpaths true` on Windows to handle deep `node_modules` paths.
@@ -654,7 +655,7 @@ The UI must say so. Modelling depletion would be a new simulator feature and nee
 5. **Whether to fix the root lock now** (platform markers) or leave it frozen as the Phase 1 record (draft: leave it; Phase 2 uses `services/inference/requirements/`).
 6. **Engine pool defaults.** The 10 s execution limit, the 12 s end-to-end deadline and the 180 s startup timeout are decided. `CBDC_ENGINE_WORKERS=2` and a queue of 32 are still to be confirmed after measurement.
 7. **Who administers GitHub branch protection or rulesets** (§3.1), and the real GitHub handles for CODEOWNERS.
-8. **Remaining open questions** are in API contract §10. The blocking ones are Q16 and Q19, plus the Dev B `feeCostUsd` migration that `meanFeeCostPct` depends on (Q11-dep). The rest are non-blocking. R1–R6 could not be addressed: their definitions were not found. `docs/TEAM_REVIEW_RESOLUTION.md` lists the implementation follow-ups for each developer.
+8. **Remaining open questions** are in API contract §10. The blocking ones are Q16 and Q19, plus the Dev B `feeCostUsd` migration that `meanFeeCostPct` depends on (Q11-dep). The rest are non-blocking. R1–R6 are resolved (see `docs/TEAM_REVIEW_RESOLUTION.md` §8). Dev A's implementation requirements are listed in API contract §9.1. `docs/TEAM_REVIEW_RESOLUTION.md` lists the implementation follow-ups for each developer.
 
 **Resolved in v0.4 (approved by Ayush as project owner and Dev A):**
 - the individual worker-process pool (§6.2);

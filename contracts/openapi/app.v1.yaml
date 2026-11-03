@@ -581,11 +581,14 @@ components:
         data:
           type: object
           additionalProperties: false
-          required: [dailyStateSha256, bridgeNetworkSha256, normalizationStatsSha256, dateRange]
+          required: [dailyStateSha256, bridgeNetworkSha256, normalizationStatsSha256, macroRiskProxySha256,
+                     rpwCorridorQuarterlySha256, dateRange]
           properties:
             dailyStateSha256: {$ref: '#/components/schemas/Sha256Hex'}
             bridgeNetworkSha256: {$ref: '#/components/schemas/Sha256Hex'}
             normalizationStatsSha256: {$ref: '#/components/schemas/Sha256Hex'}
+            macroRiskProxySha256: {$ref: '#/components/schemas/Sha256Hex'}
+            rpwCorridorQuarterlySha256: {$ref: '#/components/schemas/Sha256Hex'}
             dateRange: {$ref: '#/components/schemas/DateRange'}
         rewardWeights: {$ref: '#/components/schemas/RewardWeights'}
         runtime:
@@ -1085,7 +1088,7 @@ components:
         window:
           type: object
           additionalProperties: false
-          description: Echoes the query; null when the query did not supply that bound (defaults are open).
+          description: Echoes the query. An omitted bound is unbounded and echoed as null (owner decision, §3.8).
           required: [from, to]
           properties:
             from:

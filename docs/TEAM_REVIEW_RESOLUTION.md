@@ -6,7 +6,7 @@
 
 **Revision 2 (owner's final decisions)** is in §7.
 
-**Source note.** This revision was prepared from a written summary of the three reviews, not from the full review texts. The summary asks for "B4 and B5" to stay documented as follow-up implementation blockers, but doesn't say what they are. They are listed as placeholders in §6. Anvesh, please confirm what they refer to.
+**Source note.** This revision was prepared from a written summary of the three reviews, not from the full review texts. The summary's section "B. Reconcile Anvesh's backend findings" numbers his findings 1–14, and it asks for B4 and B5 to stay documented as follow-up implementation blockers. **B4 and B5 are items 4 and 5 of that list** (§2 below). The first revision wrongly said their text was missing (corrected under R2, §8).
 
 ---
 
@@ -100,7 +100,6 @@ Anvesh's open points, kept explicit:
 - **Q16:** does the app forward the sanitised engine 4xx message (capped at 500) or use a fixed message? *Anvesh and Varshini.*
 - **Q19:** audit rows for rejected requests. *Anvesh.*
 - **Q11-dep:** the `feeCostUsd` Prisma migration that `meanFeeCostPct` needs (see §7). *Anvesh.*
-- **R1–R6:** not found anywhere (see §7). *Ayush to supply.*
 
 **Non-blocking:**
 - Q11: the dashboard window defaults. *Ayush, with Anvesh.*
@@ -131,7 +130,8 @@ Anvesh's open points, kept explicit:
 - The `scenarioId` rules on `/state`; a 405 middleware.
 - Comparison persistence only on 200.
 - Define the behaviour when a database write fails after inference succeeds. The contract doesn't define it.
-- **B4 and B5:** follow-up implementation blockers named in the review summary. Their text was not provided to Dev D; Anvesh to restate them.
+- **B4** (Anvesh's finding 4: dashboard `window.from`/`to` nullable when the query omits them). The contract part is done (§3.8, app OpenAPI); the owner then made an omitted bound mean unbounded (A3). Backend work remaining: treat an omitted bound as unbounded and echo it as `null`.
+- **B5** (Anvesh's finding 5: close the top-level `CreateTransactionRequest` and `CreateComparisonRequest`, because the backend rejects unknown top-level fields). The contract part is done (both schemas have `additionalProperties: false`). Anvesh's first review says the backend already rejects them (C8a, "Already implemented"), and his `transactionRequest.ts` does so. Backend work remaining: keep it, and add `CreateComparisonRequest`'s validator when comparisons are implemented.
 
 **Dev C (web):**
 - Handle `failure`, the null fields, `details.cause`, the 503 Health body, and unknown enum values as in contract §1.
@@ -155,7 +155,7 @@ Anvesh's open points, kept explicit:
 | Three-letter country codes; `amount > 0`; `INVALID_AMOUNT` preserved | Country codes stay a schema rule (`VALIDATION_ERROR`). `amountUsd` ≤ 0 is checked by the backend and returns `INVALID_AMOUNT`, so the app schema no longer has `exclusiveMinimum` (which would have made it a `VALIDATION_ERROR`). New fixture | Contract §3.2, §4; app OpenAPI; `app/errors/422_invalid_amount.json`; test |
 | `CBDC_ENGINE_REQUEST_DEADLINE_S`, default 12 s | The "proposed name" labels removed | Contract §5, §8; arch §6.2 |
 | `GET /api/v1/health/live` approved, public | Approved and public. The body `{"status":"ok"}` is for Anvesh to confirm when implementing | Contract §3.1, §3.9; app OpenAPI; `app/meta/200_health_live.json` |
-| R1–R6 | **Not addressed.** I searched every file on every remote branch (`git grep` for R1–R6 across `docs/`, `contracts/` and `services/`) and the review material I was given, and found no definition. Inventing them was ruled out | — |
+| R1–R6 | Not addressed in revision 2: their definitions arrived later, with the owner's final review. **Resolved in revision 3** (§8) | — |
 
 **Additional checks requested:**
 - **Reward weights and scenario definitions in `decision_id`.** Both are now **hashed explicitly**: the λ values, and in scenario mode the scenario's id and every multiplier. Relying on `engine_version` would mean remembering to bump it when weights are recalibrated, and nothing enforces that.
@@ -168,3 +168,31 @@ Anvesh's open points, kept explicit:
   - Not yet approved.
 
 **Other prior decisions:** unchanged.
+
+## 8. Owner's and Dev A's final review (revision 3)
+
+| Item | Resolution | Where |
+|---|---|---|
+| **R1** | Every outdated GBR→PHL example is corrected. In June 2024 the risk lookup falls back (the proxy is NaN for PHL), so the examples now show: `risk` 0.0 on every venue, `risk_term` 0.0, rewards −0.3078 → **−0.2208** (the 0.087 risk term removed), and the `RISK_FALLBACK_USED` warning. That covers the §2.5 state example (`corridor_risk` 0.0), the §2.8 route example, the §3.2 app example and the §3.3 list example. The §3.8 dashboard example now shows the fixture's derived values, with `routed` and `allowedRouted`. The fixtures were already corrected in revision 1 | Contract §2.5, §2.8, §3.2, §3.3, §3.8 |
+| **R2** | B4/B5 attribution corrected from the review evidence: they are items 4 and 5 of Anvesh's findings in the 4 November review summary (§2). Each now names its contract change and the backend work that remains | §6 (Dev B), source note |
+| **R3** | Exact canonical document: a table of members, `null` handling, numeric normalisation, exclusions, `checkpoint_sha256` (the hash for `ppo_projected`, `null` otherwise), and the `id_scheme` and `engine_version` rules. Seven test vectors with exact RFC 8785 strings and IDs. The checker rebuilds and verifies them, and 19 tests check that each hashed input changes the ID and each excluded input doesn't | Contract §2.11; `contracts/test-vectors/decision_id.v1.json`; checker `decision_document`, `check_vectors`; tests |
+| **R4** | `macro_risk_proxy_sha256` and `rpw_corridor_quarterly_sha256` added to `/v1/version` `data`, the app `meta`, the cache-invalidation keys (which now cover every `decision_id` input that `/v1/version` reports) and the hashed `artefacts`. The fixture values are the SHA-256 of the committed binary blobs | Contract §2.2, §2.11, §5; both OpenAPI files; version and meta fixtures; test |
+| **R5** | Q12 closed: `structured_data`, `daily_state` and `knowledge_base` are exactly `ok` or `error` | Contract §2.1, §10; inference OpenAPI |
+| **R6** | `byCorridor.routed` and `allowedRouted` kept as approved; nothing changed | — |
+| A1 | Reward weights and scenario fields hashed: `scenario_id` and its three multipliers, with the description excluded | Contract §2.11 |
+| A2 / Q21 | `CBDC_ENGINE_MIN_START_BUDGET_S`, provisional 1 s; under budget → `ENGINE_BUSY`; the 10 s execution timeout stays independent | Contract §5, §8; arch §6.2 |
+| A3 | An omitted dashboard bound is unbounded and echoed as `null` | Contract §3.8; app OpenAPI |
+| Q13 | `RISK_FALLBACK_USED` is required exactly where the lookup falls back. The checker knows that from a recorded (corridor, month) table read from the data, **not** from a risk value of 0.0. Rejections are exempt | Checker `RISK_FALLBACK_MONTHS`; 3 tests; contract §2.8 |
+
+**Dev A requirements** are in contract §9.1 (A-1 to A-9). They are *specified* there, with the test that will show each one done. **No inference service work is part of this change**, and none of A-1 to A-9 is implemented yet.
+
+**Compatibility checks:**
+- The checker and the vectors gave the same results with every `contracts/` JSON and YAML file converted to CRLF (test `test_fixture_line_endings_do_not_matter`, run on Windows).
+- `.gitattributes` stores `contracts/**` and `infra/**` with LF line endings.
+- The vector hashes are computed from parsed JSON, never from file bytes, so line endings can't change them.
+- **Not run on Linux:** no Linux environment was available here. The CI workflow `phase2-integration.yml` runs the checker on Ubuntu.
+
+**Still open:**
+- Q16 (Anvesh and Varshini) and Q19 (Anvesh).
+- The `feeCostUsd` Prisma migration (Anvesh; not done, outside this change).
+- The non-blocking items in contract §10.

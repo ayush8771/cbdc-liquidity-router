@@ -324,9 +324,9 @@ components:
           additionalProperties: false
           required: [structured_data, daily_state, knowledge_base, engine_workers, ppo_checkpoint]
           properties:
-            structured_data: {type: string, enum: [ok, error]}
-            daily_state: {type: string, enum: [ok, error]}
-            knowledge_base: {type: string, enum: [ok, error]}
+            structured_data: {type: string, enum: [ok, error], description: 'Exactly ok or error (Q12 closed).'}
+            daily_state: {type: string, enum: [ok, error], description: 'Exactly ok or error (Q12 closed).'}
+            knowledge_base: {type: string, enum: [ok, error], description: 'Exactly ok or error (Q12 closed).'}
             engine_workers: {type: string, enum: [ok, rebuilding, error]}
             ppo_checkpoint: {type: string, enum: [ok, disabled, error]}
         engine_pool:
@@ -402,11 +402,18 @@ components:
         data:
           type: object
           additionalProperties: false
-          required: [daily_state_sha256, bridge_network_sha256, normalization_stats_sha256, date_range]
+          required: [daily_state_sha256, bridge_network_sha256, normalization_stats_sha256, macro_risk_proxy_sha256,
+                     rpw_corridor_quarterly_sha256, date_range]
           properties:
             daily_state_sha256: {$ref: '#/components/schemas/Sha256Hex'}
             bridge_network_sha256: {$ref: '#/components/schemas/Sha256Hex'}
             normalization_stats_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+            macro_risk_proxy_sha256:
+              description: data/processed/macro_risk_proxy.parquet, hashed as committed (binary, §2.11). Enters decision_id.
+              allOf: [{$ref: '#/components/schemas/Sha256Hex'}]
+            rpw_corridor_quarterly_sha256:
+              description: data/processed/rpw_corridor_quarterly.parquet, hashed as committed (binary, §2.11). Enters decision_id.
+              allOf: [{$ref: '#/components/schemas/Sha256Hex'}]
             date_range: {$ref: '#/components/schemas/DateRange'}
         reward_weights: {$ref: '#/components/schemas/RewardWeights'}
         runtime:
