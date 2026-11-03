@@ -12,12 +12,11 @@ info:
     between the two is a bug in this file. Questions the contract leaves open
     (contract §10) are left open here too: the schema accepts every proposed form.
 
-    Requests are strict: every request object has additionalProperties: false
-    (§1). Responses are tolerant at run time: consumers ignore unknown fields.
-    The Decision schema and the engine-derived schemas it uses (Warning,
-    RewardWeights, Checkpoint) are open, so new engine fields pass through.
-    The other response schemas stay closed for fixture conformance checks
-    (contract §10, Q7).
+    CI rules (owner decision): request schemas are strict, and response schemas
+    are closed (additionalProperties: false), so the conformance check catches
+    undocumented fields. At run time the consumer ignores unknown response
+    fields and unknown enum values (§1); the closure is a CI rule, not a
+    run-time rejection rule.
 
     405 METHOD_NOT_ALLOWED (with an Allow header) is returned for any method a
     documented path doesn't define. It is not listed per operation, because
@@ -50,14 +49,43 @@ paths:
     get:
       tags: [system]
       operationId: getHealth
-      summary: Backend, database and inference status (§3.9). No auth.
+      summary: Readiness — backend, database and inference status (§3.9). No auth.
       security: []
       parameters: [{$ref: '#/components/parameters/RequestId'}]
       responses:
         '200':
-          description: OK
+          description: Ready. status is "ok" or "degraded" (inference degraded or unavailable).
           headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
           content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}
+        '503':
+          description: |
+            Not ready: the database is unavailable. The body is the Health object (not the error
+            envelope), with status "unavailable" and the failing component's field set to
+            "unavailable".
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}
+
+  /api/v1/health/live:
+    get:
+      tags: [system]
+      operationId: getLiveness
+      summary: |
+        Liveness (§3.9): the backend process is running. Checks no dependency, so it stays 200 while
+        the database or inference is down. Path and body are a proposal (see TEAM_REVIEW_RESOLUTION.md).
+      security: []
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses:
+        '200':
+          description: Alive.
+          headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties:
+                  status: {type: string, const: ok}
 
   /api/v1/auth/me:
     get:
@@ -115,7 +143,14 @@ paths:
         - {name: corridor, in: query, required: true, schema: {$ref: '#/components/schemas/Corridor'}}
         - {name: mode, in: query, required: true, schema: {type: string, enum: [historicalReplay, scenario]}}
         - {name: date, in: query, required: true, schema: {type: string, format: date}}
-        - {name: scenarioId, in: query, required: false, schema: {$ref: '#/components/schemas/ScenarioId'}}
+        - name: scenarioId
+          in: query
+          required: false
+          description: |
+            Required when mode=scenario and rejected otherwise (VALIDATION_ERROR). Any string is
+            accepted here; an unknown value is passed to inference and returns UNKNOWN_SCENARIO,
+            as on POST /transactions.
+          schema: {type: string}
         - {name: includeHistory, in: query, required: false, schema: {type: boolean, default: false}}
       responses:
         '200':
@@ -196,9 +231,9 @@ paths:
         - {name: policy, in: query, schema: {$ref: '#/components/schemas/Policy'}}
         - {name: stateMode, in: query, schema: {$ref: '#/components/schemas/StateMode'}}
         - {name: completed, in: query, schema: {type: boolean}}
-        - {name: from, in: query, schema: {type: string, format: date-time}}
-        - {name: to, in: query, schema: {type: string, format: date-time}}
-        - {name: sort, in: query, schema: {type: string, default: 'createdAt:desc'}}
+        - {name: from, in: query, description: 'createdAt >= from (inclusive).', schema: {type: string, format: date-time}}
+        - {name: to, in: query, description: 'createdAt < to (exclusive). from must not be later than to.', schema: {type: string, format: date-time}}
+        - {name: sort, in: query, schema: {type: string, enum: ['createdAt:desc'], default: 'createdAt:desc'}}
       responses:
         '200':
           description: OK
@@ -452,11 +487,11 @@ components:
       properties:
         status:
           description: |
-            With the database ok: "ok" when inference is ok or mock, "degraded" when inference is
-            degraded or unavailable (HTTP 200). The status and HTTP code when the database is
-            unavailable are open (contract §10, Q3); no value or 503 is added until it is decided.
+            Readiness (owner decision, §3.9): "unavailable" with HTTP 503 when the database is
+            unavailable; otherwise HTTP 200 with "ok" (inference ok or mock) or "degraded" (inference
+            degraded or unavailable). The component fields name the failing component.
           type: string
-          enum: [ok, degraded]
+          enum: [ok, degraded, unavailable]
         database: {type: string, enum: [ok, unavailable]}
         inference:
           description: '"mock" means INFERENCE_MODE=mock; inference is not called.'
@@ -484,6 +519,7 @@ components:
     # ---------- metadata (camelCase mappings of inference §2.2–§2.7) ----------
     RewardWeights:
       type: object
+      additionalProperties: false
       required: [lambdaLatency, lambdaRisk, lambdaUnrouted, status]
       properties:
         lambdaLatency: {type: number}
@@ -493,6 +529,7 @@ components:
 
     Checkpoint:
       type: object
+      additionalProperties: false
       required: [checkpointId, sha256, approvedBy, approvedOn, sourceRun]
       properties:
         checkpointId: {type: string}
@@ -730,8 +767,8 @@ components:
                     additionalProperties: false
                     required: [liquidityUsd, congestion]
                     properties:
-                      liquidityUsd: {type: array, items: {type: number}}
-                      congestion: {type: array, items: {type: number}}
+                      liquidityUsd: {type: array, minItems: 30, maxItems: 30, items: {type: number}}
+                      congestion: {type: array, minItems: 30, maxItems: 30, items: {type: number}}
 
     CreateTransactionRequest:
       description: Strict (§1). policy null is rejected; clientReference null means not given.
@@ -739,9 +776,9 @@ components:
       additionalProperties: false
       required: [senderCountry, receiverCountry, amountUsd, state]
       properties:
-        senderCountry: {type: string}
-        receiverCountry: {type: string}
-        amountUsd: {type: number}
+        senderCountry: {$ref: '#/components/schemas/CountryCode'}
+        receiverCountry: {$ref: '#/components/schemas/CountryCode'}
+        amountUsd: {type: number, exclusiveMinimum: 0}
         state: {$ref: '#/components/schemas/StateSpec'}
         policy:
           allOf: [{$ref: '#/components/schemas/Policy'}]
@@ -757,9 +794,9 @@ components:
       additionalProperties: false
       required: [senderCountry, receiverCountry, amountUsd, state]
       properties:
-        senderCountry: {type: string}
-        receiverCountry: {type: string}
-        amountUsd: {type: number}
+        senderCountry: {$ref: '#/components/schemas/CountryCode'}
+        receiverCountry: {$ref: '#/components/schemas/CountryCode'}
+        amountUsd: {type: number, exclusiveMinimum: 0}
         state: {$ref: '#/components/schemas/StateSpec'}
         policies:
           description: A viewer who omits it gets only the non-experimental policies.
@@ -788,6 +825,7 @@ components:
 
     Warning:
       type: object
+      additionalProperties: false
       required: [code, message]
       properties:
         code:
@@ -798,6 +836,7 @@ components:
 
     Decision:
       type: object
+      additionalProperties: false
       required: [decisionId, policy, policyStatus, feasibility, allocations, totals, metrics, diagnostics,
                  provenance, warnings]
       properties:
@@ -806,6 +845,7 @@ components:
         policyStatus: {$ref: '#/components/schemas/PolicyStatus'}
         feasibility:
           type: object
+          additionalProperties: false
           required: [allowed, reason, decisiveFactIds, knowledgeVersion]
           properties:
             allowed: {type: boolean}
@@ -816,6 +856,7 @@ components:
           type: array
           items:
             type: object
+            additionalProperties: false
             required: [slot, bridgeUid, dataSourceTag, feePct, liquidityUsd, congestion, risk, shareRequested,
                        amountRequestedUsd, amountExecutedUsd, amountClippedUsd, shareBeforeProjection]
             properties:
@@ -834,6 +875,7 @@ components:
                 oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Share'}]
         totals:
           type: object
+          additionalProperties: false
           required: [amountUsd, requestedUsd, executedUsd, unroutedEnvUsd, unroutedAmountBasedUsd, completionRatio,
                      completed, bridgesUsed]
           properties:
@@ -847,6 +889,7 @@ components:
             bridgesUsed: {type: integer, minimum: 0}
         metrics:
           type: object
+          additionalProperties: false
           required: [feeCostUsd, baselineCostPct, costTerm, latencyTerm, riskTerm, unroutedTermEnv,
                      unroutedTermAmountBased, rewardEnv, rewardAmountBased, rewardWeights]
           properties:
@@ -862,6 +905,7 @@ components:
             rewardWeights: {$ref: '#/components/schemas/RewardWeights'}
         diagnostics:
           type: object
+          additionalProperties: false
           required: [regime, combinedLiquidityUsd, projectionApplied]
           properties:
             regime: {$ref: '#/components/schemas/Regime'}
@@ -869,6 +913,7 @@ components:
             projectionApplied: {type: boolean}
         provenance:
           type: object
+          additionalProperties: false
           required: [stateMode, stateDate, split, scenarioId, valuesProvenance, engineVersion, gitCommit,
                      knowledgeSha256, dailyStateSha256, stateFrameSha256, checkpoint, device, platform]
           properties:
@@ -1035,10 +1080,13 @@ components:
         window:
           type: object
           additionalProperties: false
+          description: Echoes the query; null when the query did not supply that bound (defaults are open).
           required: [from, to]
           properties:
-            from: {$ref: '#/components/schemas/Timestamp'}
-            to: {$ref: '#/components/schemas/Timestamp'}
+            from:
+              oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Timestamp'}]
+            to:
+              oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Timestamp'}]
         totals:
           type: object
           additionalProperties: false
@@ -1056,18 +1104,18 @@ components:
             required: [policy, count, completionRate, meanRewardAmountBased, meanFeeCostPct, meanLatencyTerm, meanRiskTerm]
             properties:
               policy: {$ref: '#/components/schemas/Policy'}
-              count: {type: integer, minimum: 0, description: 'What it counts is open (contract §10, Q11).'}
+              count: {type: integer, minimum: 0, description: 'Proposed: every transaction with this requested policy, failed and rejected included (§3.8; awaits owner approval).'}
               completionRate:
                 description: |
-                  Share of completed=true among routed decisions with allowed=true; rejected and failed
-                  transactions excluded; null when there are none (§3.8, pending the owner's sign-off).
+                  Completed allowed routed decisions / all allowed routed decisions (owner decision, §3.8).
+                  Rejected and failed transactions excluded; null when the denominator is zero.
                 type: ['number', 'null']
                 minimum: 0
                 maximum: 1
-              meanRewardAmountBased: {type: ['number', 'null']}
-              meanFeeCostPct: {type: ['number', 'null']}
-              meanLatencyTerm: {type: ['number', 'null']}
-              meanRiskTerm: {type: ['number', 'null']}
+              meanRewardAmountBased: {type: ['number', 'null'], description: 'Proposed: mean over the completionRate denominator; null when it is zero (§3.8).'}
+              meanFeeCostPct: {type: ['number', 'null'], description: 'Source and formula are open (contract §10, Q11); fixtures send null.'}
+              meanLatencyTerm: {type: ['number', 'null'], description: 'Proposed: as meanRewardAmountBased.'}
+              meanRiskTerm: {type: ['number', 'null'], description: 'Proposed: as meanRewardAmountBased.'}
         byCorridor:
           type: array
           items:
@@ -1101,12 +1149,16 @@ components:
           properties:
             code: {$ref: '#/components/schemas/ErrorCode'}
             message:
-              description: For a passed-through 4xx, the engine message truncated to 500 characters; for 5xx, the backend's fixed message (§4).
+              description: Free text for people. Consumers key behaviour on code, never on message (§4). Whether a passed-through engine 4xx message is forwarded is open (contract §10, Q16).
               type: string
             details:
               type: object
               properties:
-                field: {type: string, description: 'Whether a domain 422 forwards it is open (contract §10, Q6).'}
+                field: {type: string, description: 'App path of a domain 422, mapped from the engine path by the explicit table (§4); omitted when it cannot be mapped.'}
+                cause:
+                  description: Optional, on 503 INFERENCE_UNAVAILABLE only, when inference returned NOT_READY (§4).
+                  type: string
+                  enum: [NOT_READY]
                 transactionId: {type: string, format: uuid, description: 'Set on inference failures of POST /transactions (§3.2).'}
                 errors:
                   type: array
@@ -1115,7 +1167,8 @@ components:
                     type: object
                     description: |
                       field: the app path, camelCase, dot/bracket form (e.g. state.venues[1].history.liquidityUsd).
-                      A form-level error is written as "" or by omitting field; which one is open (contract §10, Q4).
+                      A form-level error (not about one field, or an engine path the table can't map) omits field.
+                      An empty string is never used (owner decision).
                     required: [message]
                     properties:
                       field: {type: string}

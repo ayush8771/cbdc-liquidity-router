@@ -242,10 +242,17 @@ def test_failed_list_item_with_decision_field_is_reported(root):
     assert_reported(problems(root), "200_list", "policyStatus must be null")
 
 
-def test_passthrough_4xx_must_forward_engine_message(root):
+def test_passthrough_must_keep_the_engine_code(root):
+    edit(root, "app/errors/409_policy_disabled_passthrough.json",
+         lambda d: d["response"]["body"]["error"].update(code="DECISION_MISMATCH"))
+    assert_reported(problems(root), "409_policy_disabled_passthrough", "keep the engine's code")
+
+
+def test_passthrough_message_is_free_text(root):
+    # Backend review: the backend may use its own message; only code and status are stable.
     edit(root, "app/errors/409_policy_disabled_passthrough.json",
          lambda d: d["response"]["body"]["error"].update(message="Rewritten by the backend."))
-    assert_reported(problems(root), "409_policy_disabled_passthrough", "forwards the engine message")
+    assert not [p for p in problems(root) if "409_policy_disabled_passthrough" in p]
 
 
 def test_unknown_app_request_field_is_rejected(root):
@@ -260,3 +267,46 @@ def test_semantic_context_must_be_null(root):
     edit(root, "inference/explain/200_waterfall_replay.json",
          lambda d: d["response"]["body"].update(semantic_context={"facts": []}))
     assert_reported(problems(root), "200_waterfall_replay", "semantic_context")
+
+
+def test_state_view_with_range_warning_is_reported(root):
+    edit(root, "inference/state/200_replay_gbr_phl.json", lambda d: d["response"]["body"]["warnings"].append(
+        {"code": "STATE_OUTSIDE_TRAINING_RANGE", "message": "x"}))
+    assert_reported(problems(root), "200_replay_gbr_phl", "never emits STATE_OUTSIDE_TRAINING_RANGE")
+
+
+def test_risk_fallback_warning_with_real_risk_is_reported(root):
+    def change(d):
+        for a in d["response"]["body"]["allocations"]:
+            a["risk"] = 0.087
+    edit(root, "inference/route/200_waterfall_replay.json", change)
+    assert_reported(problems(root), "200_waterfall_replay", "RISK_FALLBACK_USED")
+
+
+def test_health_with_database_down_must_be_unavailable(root):
+    edit(root, "app/meta/503_health_database_unavailable.json",
+         lambda d: d["response"]["body"].update(status="degraded"))
+    assert_reported(problems(root), "503_health_database_unavailable", "must be 'unavailable'")
+
+
+def test_dashboard_not_derived_from_transactions_is_reported(root):
+    edit(root, "app/dashboard/200_summary.json",
+         lambda d: d["response"]["body"]["totals"].update(transactions=42))
+    assert_reported(problems(root), "200_summary", "do not match the stored transactions")
+
+
+def test_dashboard_completion_rate_counts_only_allowed(root):
+    edit(root, "app/dashboard/200_summary.json",
+         lambda d: d["response"]["body"]["byPolicy"][0].update(completionRate=0.123))
+    assert_reported(problems(root), "200_summary", "completionRate must be")
+
+
+def test_include_semantic_context_is_rejected(root):
+    edit(root, "inference/explain/200_waterfall_replay.json",
+         lambda d: d["request"]["body"].update(include_semantic_context=False))
+    assert_reported(problems(root), "200_waterfall_replay", "include_semantic_context")
+
+
+def test_wrong_length_history_must_fail_the_schema(root):
+    edit(root, "inference/errors/422_validation_error_history_length.json", lambda d: d.pop("request_valid"))
+    assert_reported(problems(root), "422_validation_error_history_length", "request schema")

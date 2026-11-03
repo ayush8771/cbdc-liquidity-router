@@ -1,8 +1,9 @@
 # Phase 2 contracts
 
 **Status: DRAFT v0.4.0, pending approval by Dev A, B and C** (arch §10). Until it is approved, `docs/PHASE2_API_CONTRACT.md` is normative. Any difference between that document and these files is a bug here.
-- Rules the contract marks **Pending: <name>** are included and labelled `PENDING` in the OpenAPI descriptions.
-- Questions the contract leaves open (contract §10, Q1–Q15) are left open here: the schemas accept every proposed form.
+- Revised on 4 November 2026 after the team reviews. Ayush's owner decisions are applied; `docs/TEAM_REVIEW_RESOLUTION.md` lists what changed.
+- Questions the contract still leaves open (contract §10) are left open here.
+- **CI rule:** request schemas strict, response schemas closed, in both APIs. At run time, consumers ignore unknown response fields and enum values (contract §1).
 
 Owner: Dev D. Changes need approval from every consumer (arch §4.1).
 
@@ -70,7 +71,10 @@ The checker:
   - the list's decision-derived fields are null;
   - `failure` repeats the code and message of the `POST` error that created it;
 - checks that a 405 sends an `Allow` header listing the path's methods;
-- checks the app ↔ engine mapping, including that a passed-through 4xx keeps the engine message (at most 500 characters);
+- checks health readiness: `unavailable` exactly when the database is, otherwise `ok` or `degraded` by inference, including on the 503 body;
+- checks the risk fallback: `RISK_FALLBACK_USED` only with risk 0.0, and `/v1/state` never emits `STATE_OUTSIDE_TRAINING_RANGE`;
+- checks that the dashboard totals and `completionRate` follow from the stored transactions in the list fixture;
+- checks the app ↔ engine mapping. Error messages are free text: a passthrough must keep the code and status only;
 - checks coverage: every operation has a success fixture, and every error code has a fixture.
 
 CI runs it in `.github/workflows/phase2-integration.yml`.
@@ -79,15 +83,15 @@ CI runs it in `.github/workflows/phase2-integration.yml`.
 
 | # | Issue | v0.4 outcome |
 |---|---|---|
-| C1 | App health `database` values | **Resolved:** `[ok, unavailable]`; mock mode reports `ok`. Still open: HTTP status and `status` when the database is down (contract §10, Q3). |
+| C1 | App health `database` values | **Resolved:** `[ok, unavailable]`; mock mode reports `ok`; database down → 503 with the Health body and `status: "unavailable"` (Ayush). The liveness path is a proposal (Q3a). |
 | C2 | `ENGINE_TIMEOUT` listed with the 503s in §3.2 | **Resolved:** 504 everywhere; §3.2 rewritten. |
 | C3 | `POLICY_DISABLED` through the app | **Resolved:** passed through as 409, not persisted; a viewer gets 403 first. |
 | C4 | `GET /transactions/:id` for a failed transaction | **Resolved:** `decision: null`, `corridor: null`, `failure: {code, message}`; `409 TRANSACTION_FAILED` for its explanation. |
 | C5 | `decision_id` and CRLF checkouts | **Resolved (Ayush):** text artefacts are hashed after CRLF→LF; binaries raw; no `.gitattributes` for `data/`. A golden-hash test on Windows and Linux is required. |
 | C6 | `semantic_context` inner shape | **Resolved (Ayush):** reserved, always null in v1. |
-| C7 | `decision_id` canonical form | **Partly resolved:** RFC 8785, `git_commit` excluded (Ayush). The composition rules are **Pending: Ayush** (contract §2.11). `api_version` and `engine_version` are open (Q1, Q2). |
-| C8 | Unknown fields outside `state` | **Resolved for the app:** requests strict at every level. Inference top level and `transaction`: **Pending: Ayush**. |
-| C9 | `details.errors[]` item shape | **Resolved:** `{field, message}` with camelCase app paths. Still open: how a non-field error is written (Q4). |
+| C7 | `decision_id` canonical form | **Resolved (Ayush):** RFC 8785, `id_scheme: 1`, `engine_version` and every output-affecting artefact included; the checkpoint only for `ppo_projected`; `api_version` and `git_commit` excluded (contract §2.11). |
+| C8 | Unknown fields outside `state` | **Resolved (Ayush):** requests strict at every level in both APIs, enforced in CI. |
+| C9 | `details.errors[]` item shape | **Resolved:** `{field, message}` with camelCase app paths; a form-level error omits `field` (Ayush). |
 | C10 | Non-ok values of three health checks | Open (Q12). Schema keeps `[ok, error]`. |
 | C11 | Explain `outcome` values | **Resolved (Ayush):** `used`/`unused`; a rejection uses `unused` + `INFEASIBLE_REGULATORY`. |
 | C12 | No fixture folder for metadata | **Resolved:** `meta/` added to arch §4. |

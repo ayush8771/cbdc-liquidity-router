@@ -1,7 +1,7 @@
 # Major Phase 2 — Team Architecture
 
-**Status:** v0.4 (3 November 2026), proposed for team review. Parts of the inference service and backend are implemented on their feature branches. This document describes the agreed design, not their current state.
-**Companion document:** `docs/PHASE2_API_CONTRACT.md`, which defines the endpoints, schemas and error codes. Its "How to read v0.4" note applies here too: **Pending: <name>** marks an agreed rule awaiting that person's sign-off, and open questions are listed in §11 and in contract §10.
+**Status:** v0.4, revised on 4 November 2026 after the team reviews (see `docs/TEAM_REVIEW_RESOLUTION.md`), proposed for a second team review. Parts of the inference service and backend are implemented on their feature branches. This document describes the agreed design, not their current state.
+**Companion document:** `docs/PHASE2_API_CONTRACT.md`, which defines the endpoints, schemas and error codes. Its "How to read v0.4" note applies here too: **proposed** marks a rule awaiting the named person's approval, and open questions are listed in §11 and in contract §10.
 **Baseline:** tag `phase1-complete` (`bc9905e`). Phase 1 code, data, checkpoints and results are read-only for Phase 2.
 
 > **Scope rule.** Phase 2 turns the validated Phase 1 engine into a web application. It supports **historical replay** and **synthetic simulation** only. It does not use live bridge data, live FX feeds or streaming; those belong to Major Phase 3. Simulated values must always be labelled as simulated.
@@ -10,7 +10,7 @@
 - **Engine pool (§6.2):**
   - individual worker processes, started with spawn and connected by pipes, instead of `ProcessPoolExecutor`;
   - a timed-out, crashed or corrupted worker is replaced on its own ("worker recycling"), not the whole pool;
-  - a 10 s execution limit inside a 12 s end-to-end deadline;
+  - a 10 s worker execution timeout and a separate, configurable 12 s request deadline (revised after review);
   - a configurable startup timeout (`CBDC_ENGINE_STARTUP_TIMEOUT_S`, 180 s).
 - **Fingerprints (§6.2, §7.4):**
   - daily-state fingerprint from little-endian `uint64` row hashes plus column names and dtypes;
@@ -425,20 +425,20 @@ A single worker that handles one request at a time avoids interleaving, but it i
    If any check fails, the task returns `INTERNAL_ERROR` with no result. **That worker** is terminated and replaced, and the other workers keep serving. `/v1/health` reports `engine_workers: "rebuilding"` and `status: "degraded"` until the replacement is ready. A crashed worker process (no reply) is handled the same way.
 
    Separately, before returning a result the worker checks the **allocation invariant** (API contract §2.8): `requested_usd` equals the sum of the per-venue requested amounts, and no infeasible venue or padding slot carries weight. A violation returns `INTERNAL_ERROR` with no result.
-6. **Deadlines and worker recycling.**
-   - Each task has a **12 s end-to-end deadline**, counted from when the request is accepted, and a **10 s execution limit** (`CBDC_ENGINE_TASK_TIMEOUT_S`) counted from when a worker starts the task.
-   - The task may run for min(10 s, 12 s − time queued).
-   - On expiry the request fails with `504 ENGINE_TIMEOUT`, and **that worker process is terminated and replaced** ("worker recycling"). The kill is needed because a running task can't be cancelled.
+6. **Deadlines and worker recycling** (owner decision, revised after review). Two independent limits apply.
+   - **Request deadline:** configurable, default **12 s**, counted from when the request is accepted. The proposed variable name is `CBDC_ENGINE_REQUEST_DEADLINE_S`.
+     - Expiry while the task is still **queued**: the task is dropped without running, and the request fails with `503 ENGINE_BUSY` and `Retry-After`.
+     - Expiry while it is **running**: the request fails with `504 ENGINE_TIMEOUT`, but the worker is **not** killed. The task finishes, its result is discarded, and the worker takes the next task.
+   - **Worker execution timeout:** `CBDC_ENGINE_TASK_TIMEOUT_S`, **10 s**, counted from when the worker starts the task, and never shortened to the time left on the request deadline. A task past it is stopped by terminating and replacing **that worker process** ("worker recycling"), because a running task can't be cancelled. The request, if still waiting, gets `504 ENGINE_TIMEOUT`.
    - Workers are replaced one at a time; the pool as a whole is never recycled.
-   - Expect more `ENGINE_BUSY` responses while a worker is being replaced.
-   - **Pending: Ayush.** A task whose deadline expires while still queued is dropped without running, and fails with `503 ENGINE_BUSY` and `Retry-After`.
-   - The 12 s deadline sits inside the backend's 15 s timeout, so the backend always receives the engine's answer.
+   - Expect more `ENGINE_BUSY` responses while a worker is being replaced, and while a worker finishes a task whose caller has already timed out.
+   - The 12 s default sits inside the backend's 15 s timeout, so the backend normally receives the engine's answer.
 7. **Backpressure.** At most `CBDC_ENGINE_MAX_QUEUE` tasks wait (default 32). Beyond that, the service returns `503 ENGINE_BUSY` immediately rather than queueing without limit.
 8. **Server workers.** Engine state lives only in the worker processes, so the FastAPI layer can use any number of async workers. Each uvicorn worker owns its own pool. The default is one uvicorn worker with 2 engine workers.
 9. **Health.** `/v1/health` reports:
    - `engine_workers`: `ok`, `rebuilding` while any worker is being replaced, or `error`;
    - `engine_pool`: `workers`, `queued`, `max_queue`, and `rebuilds_since_start`, which counts individual worker replacements;
-   - **Pending: Ayush:** `ready_workers`.
+   - `ready_workers`: workers that have finished warming up (required).
 
 ### 6.3 Why not the alternatives
 
@@ -456,8 +456,8 @@ A single worker that handles one request at a time avoids interleaving, but it i
 - **Fault injection:** a task that raises inside the injected-state block leaves the cache restored, and the next request is correct.
 - **Integrity failure:** a deliberately corrupted cache triggers `INTERNAL_ERROR`, the replacement of that one worker, and `degraded` health; the other workers keep answering.
 - **Timeout, deadline and backpressure:**
-  - a started task past its limit returns `ENGINE_TIMEOUT` and recycles only its worker;
-  - a task queued past the 12 s deadline never runs (its error code is pending, item 6);
+  - a task past the 10 s execution timeout recycles only its worker;
+  - a request queued past its deadline never runs and gets `ENGINE_BUSY`; one that passes its deadline while running gets `ENGINE_TIMEOUT` and its worker is not killed;
   - `ENGINE_BUSY` when the queue is full and while a worker is being replaced.
 - **Startup:** workers become ready within `CBDC_ENGINE_STARTUP_TIMEOUT_S`, and `NOT_READY` is returned before that.
 - **Allocation invariant:** a violating result is replaced by `INTERNAL_ERROR`.
@@ -585,7 +585,7 @@ How it works:
 - **The training range check** (API contract §2.4):
   - **Bounds.** Each venue has separate liquidity and congestion min–max bounds, taken over the union of the actual 30-day windows of all training transactions.
   - **Values checked.** The effective values the selected policy reads, after scenario multipliers or explicit overrides: the current day for the baselines, and the whole 30-day window, including explicit `history`, for `ppo_projected`.
-  - **Effect.** A value outside its bounds adds the **warning** `STATE_OUTSIDE_TRAINING_RANGE`, in replay, scenario and explicit mode alike. It never blocks routing with a baseline policy.
+  - **Effect.** A value outside its bounds adds the **warning** `STATE_OUTSIDE_TRAINING_RANGE`, in replay, scenario and explicit mode alike. It never blocks routing with a baseline policy. It is emitted by `/v1/route` and `/v1/compare` only, never by `/v1/state` (owner decision).
   - PPO behaviour on such inputs is out of distribution and unvalidated.
   - This replaces the v0.3 wording, which checked against the train-period range in explicit and scenario mode only.
 - Explicit states can't be combined with scenarios in v1. Responses label them `values_provenance: "user_supplied_synthetic"`, and they are never presented as replay data.
@@ -605,7 +605,7 @@ How it works:
 
   Responses report `provenance.split`. For `ppo_projected`, a train-split date also triggers `DATE_IN_TRAINING_SPLIT`.
 - **Cost-baseline granularity:** the RPW baseline is quarterly and lagged by one quarter, so it is constant within a quarter. ARE→MEX has no real RPW anchor and uses the documented USA→MEX fallback (`SYNTHETIC_COST_ANCHOR` warning).
-- **Risk granularity:** monthly. Locally supplied FRED daily FX begins around 2021-08; earlier months rely on WDI/CPI-derived signals or an unconditioned default. When the proxy is unavailable, the static placeholder is used (`RISK_FALLBACK_USED`).
+- **Risk granularity:** monthly. Locally supplied FRED daily FX begins around 2021-08; earlier months rely on WDI/CPI-derived signals or an unconditioned default. When the proxy is missing or NaN for the month, Phase 1 uses the static placeholder `0.0` (`DEFAULT_RISK_PLACEHOLDER`, `src/envs/bridge_network.py`), and responses add `RISK_FALLBACK_USED`. This is common on recent dates: for June 2024 the proxy is NaN for PHL, USA and ARE, so all three corridors use 0.0 (checked against `data/processed/macro_risk_proxy.parquet`). Phase 2 preserves this value (owner decision).
 - **Knowledge:** facts are undated today, and dated facts can't affect feasibility (Stage 1E). The reference date doesn't change feasibility.
 - **Scenarios** multiply the whole series, so the 30-day CNN window is stressed too, as in Stage 1F. They are not calibrated shocks.
 
@@ -654,20 +654,7 @@ The UI must say so. Modelling depletion would be a new simulator feature and nee
 5. **Whether to fix the root lock now** (platform markers) or leave it frozen as the Phase 1 record (draft: leave it; Phase 2 uses `services/inference/requirements/`).
 6. **Engine pool defaults.** The 10 s execution limit, the 12 s end-to-end deadline and the 180 s startup timeout are decided. `CBDC_ENGINE_WORKERS=2` and a queue of 32 are still to be confirmed after measurement.
 7. **Who administers GitHub branch protection or rulesets** (§3.1), and the real GitHub handles for CODEOWNERS.
-8. **Waiting for Ayush's sign-off** (agreed by every developer who answered; marked **Pending** in the text):
-   - the error code for a task that expires in the queue (`ENGINE_BUSY`, §6.2 item 6);
-   - `ready_workers` in health (§6.2 item 9);
-   - the `decision_id` composition rules (API contract §2.11);
-   - strict inference request bodies, and closed inference response schemas in CI;
-   - the 200-character `client_reference` limit in the Inference API;
-   - engine 4xx messages free of internal paths;
-   - the `completionRate` definition (contract §3.8).
-9. **API questions still undecided:** the API contract §10, Q1–Q15. Among them, for Ayush:
-   - `api_version` hashing (Q1);
-   - what `engine_version` means (Q2);
-   - the code for a wrong-length history (Q5);
-   - `include_semantic_context` (Q8);
-   - whether the deadline is configurable (Q9).
+8. **Remaining open questions** are in API contract §10. The blocking ones are Q11, Q16, Q17 and Q19; the rest are non-blocking. `docs/TEAM_REVIEW_RESOLUTION.md` lists the implementation follow-ups for each developer.
 
 **Resolved in v0.4 (approved by Ayush as project owner and Dev A):**
 - the individual worker-process pool (§6.2);
@@ -685,5 +672,21 @@ The UI must say so. Modelling depletion would be a new simulator feature and nee
 - C11 and C16 as agreed.
 
 The Application API changes in contract §3–§4 were agreed by Dev B (producer) and Dev C (consumer), except where the contract marks them as pending or open.
+
+**Resolved after the team reviews (owner decisions, 4 November 2026):**
+- `decision_id` composition, with `engine_version` and `id_scheme: 1`;
+- the request deadline, separate from the execution timeout;
+- strict requests and closed responses in CI;
+- `ready_workers`;
+- engine 4xx message sanitising;
+- wrong-length history returns `VALIDATION_ERROR`;
+- `include_semantic_context` removed;
+- form-level errors omit `field`;
+- mapped field paths forwarded;
+- `details.cause: NOT_READY`;
+- `completionRate`;
+- database-down readiness 503, with liveness separate;
+- the 0.0 risk fallback;
+- no range warning from `/v1/state`.
 
 Resolved in v0.2: the concurrency approach (§6), the lock strategy (§7) and the development auth model (§8). Resolved in v0.3: the folder structure and container layout (§4).

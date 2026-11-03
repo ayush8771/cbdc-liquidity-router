@@ -9,16 +9,14 @@ info:
 
     Status: DRAFT pending approval by Dev A, B and C (arch §10). Until it is
     approved, docs/PHASE2_API_CONTRACT.md stays normative; any difference
-    between the two is a bug in this file. Items the contract marks
-    "Pending: Ayush" are included here and labelled PENDING; open questions
-    (contract §10) are left open.
+    between the two is a bug in this file. Questions the contract still
+    leaves open (contract §10) are left open here.
 
-    Response schemas are closed (additionalProperties: false) so the
-    conformance check catches undocumented fields (PENDING: Ayush to confirm
-    this as the CI rule). Consumers still ignore unknown response fields at run
-    time (§1); adding an optional field is non-breaking, but it must be added
-    here first. Request objects are strict at every level (§1): `state`
-    since v0.3; the rest of each body is PENDING (Ayush).
+    CI rules (owner decision): request schemas are strict at every level, and
+    response schemas are closed (additionalProperties: false), so the
+    conformance check catches undocumented fields. At run time the consumer
+    still ignores unknown response fields (§1); adding an optional field is
+    non-breaking, but it must be added here first.
 
     405 METHOD_NOT_ALLOWED (with an Allow header) is returned for any method a
     documented path doesn't define; see components.responses.MethodNotAllowed.
@@ -91,8 +89,10 @@ paths:
         - name: scenario_id
           in: query
           required: false
-          description: Required when mode=scenario.
-          schema: {$ref: '#/components/schemas/ScenarioId'}
+          description: |
+            Required when mode=scenario, rejected otherwise (VALIDATION_ERROR). Any string is
+            accepted by the schema; an unknown value returns UNKNOWN_SCENARIO, as on /v1/route.
+          schema: {type: string}
         - {name: include_history, in: query, required: false, schema: {type: boolean, default: false}}
       responses:
         '200':
@@ -231,8 +231,9 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     ServiceUnavailable:
       description: |
-        ENGINE_BUSY (queue full; PENDING Ayush: also a task whose 12 s end-to-end deadline expired
-        while still queued, which never ran) or NOT_READY. Both send Retry-After.
+        ENGINE_BUSY: the queue is full, or the request's deadline (CBDC_ENGINE_REQUEST_DEADLINE_S,
+        default 12 s) expired while it was still queued, so it never ran. NOT_READY: no worker is
+        ready yet. Both send Retry-After.
       headers: {Retry-After: {$ref: '#/components/headers/RetryAfter'}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     NotReady:
@@ -241,8 +242,9 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     EngineTimeout:
       description: |
-        ENGINE_TIMEOUT — a task that had started ran past min(CBDC_ENGINE_TASK_TIMEOUT_S, 12 s − time
-        queued). Its worker process is replaced (§5).
+        ENGINE_TIMEOUT — the request's deadline expired while its task was running. The worker is
+        not killed for that; it is replaced only if the task also exceeds its own execution timeout
+        (CBDC_ENGINE_TASK_TIMEOUT_S, 10 s) (§5).
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     MethodNotAllowed:
       description: METHOD_NOT_ALLOWED. The path exists but not with this method (§4).
@@ -330,11 +332,11 @@ components:
         engine_pool:
           type: object
           additionalProperties: false
-          required: [workers, queued, max_queue, rebuilds_since_start]
+          required: [workers, ready_workers, queued, max_queue, rebuilds_since_start]
           properties:
             workers: {type: integer, minimum: 0}
             ready_workers:
-              description: PENDING (Ayush). Workers that have finished warming up and can take a task.
+              description: Workers that have finished warming up and can take a task.
               type: integer
               minimum: 0
             queued: {type: integer, minimum: 0}
@@ -483,6 +485,10 @@ components:
         history: {$ref: '#/components/schemas/VenueHistory'}
 
     StateView:
+      description: |
+        warnings never contains STATE_OUTSIDE_TRAINING_RANGE: that depends on the policy, so only
+        /v1/route and /v1/compare emit it (owner decision). RISK_FALLBACK_USED appears when
+        corridor_risk is the 0.0 fallback.
       type: object
       additionalProperties: false
       required: [corridor, state, corridor_risk, baseline_cost_pct, venues, warnings]
@@ -610,22 +616,21 @@ components:
 
     ExplicitHistory:
       description: |
-        30 finite, non-negative numbers per channel, oldest first; the last
-        equals the current value within 1e-9 relative. Length and value rules
-        are enforced by the service as INVALID_STATE_VALUE, so the schema
-        does not constrain them. (Whether a wrong length should instead be
-        VALIDATION_ERROR is open: contract §10, Q5.) null and an omitted
-        history mean the same.
+        Exactly 30 numbers per channel, oldest first. A wrong length is a
+        schema rule and returns VALIDATION_ERROR (owner decision). The value
+        rules (finite, >= 0, last value equal to the current one within 1e-9
+        relative) return INVALID_STATE_VALUE. null and an omitted history mean
+        the same.
       type: object
       additionalProperties: false
       required: [liquidity_usd, congestion]
       properties:
-        liquidity_usd: {type: array, items: {type: number}}
-        congestion: {type: array, items: {type: number}}
+        liquidity_usd: {type: array, minItems: 30, maxItems: 30, items: {type: number}}
+        congestion: {type: array, minItems: 30, maxItems: 30, items: {type: number}}
 
     # ---------- route / compare / explain ----------
     TransactionInput:
-      description: Strict (PENDING Ayush, §1).
+      description: Strict (§1).
       type: object
       additionalProperties: false
       required: [sender_country, receiver_country, amount_usd]
@@ -636,12 +641,12 @@ components:
           type: number
           description: '> 0 and finite (INVALID_AMOUNT). Above the $500K cap is not an error: 200 with feasibility.allowed=false.'
         client_reference:
-          description: Echoed unchanged; not part of decision_id. Max 200 characters (PENDING Ayush).
+          description: Echoed unchanged; not part of decision_id. At most 200 characters, counted as Unicode code points.
           type: ['string', 'null']
           maxLength: 200
 
     RouteRequest:
-      description: Strict (PENDING Ayush, §1). policy null is rejected.
+      description: Strict (§1). policy null is rejected.
       type: object
       additionalProperties: false
       required: [transaction, state]
@@ -654,9 +659,8 @@ components:
 
     ExplainRequest:
       description: |
-        The /v1/route body plus an optional flag that does not enter decision_id. Strict (PENDING
-        Ayush, §1). The flag has no effect in v1, because semantic_context is always null; whether
-        it stays is open (contract §10, Q8).
+        The same body as /v1/route. Strict (§1). include_semantic_context was removed in v1
+        (owner decision): semantic_context is always null, so sending it returns VALIDATION_ERROR.
       type: object
       additionalProperties: false
       required: [transaction, state]
@@ -666,10 +670,9 @@ components:
         policy:
           allOf: [{$ref: '#/components/schemas/Policy'}]
           default: waterfall
-        include_semantic_context: {type: boolean, default: false}
 
     CompareRequest:
-      description: Strict (PENDING Ayush, §1).
+      description: Strict (§1).
       type: object
       additionalProperties: false
       required: [transaction, state]
@@ -925,7 +928,10 @@ components:
           properties:
             code: {$ref: '#/components/schemas/ErrorCode'}
             message:
-              description: Never includes tokens or stack traces. 4xx messages contain no internal paths or values (PENDING Ayush).
+              description: |
+                Never includes tokens or stack traces. A 4xx message never exposes internal filesystem
+                paths, exception representations or internal configuration values; sanitised
+                caller-supplied values may be echoed.
               type: string
             details:
               type: object
@@ -939,7 +945,7 @@ components:
                     type: object
                     description: |
                       field: the request path, snake_case, dot/bracket form (e.g. state.venues[1].history.liquidity_usd).
-                      A form-level error is written as "" or by omitting field; which one is open (contract §10, Q4).
+                      A form-level error (not about one field) omits field. An empty string is never used.
                     required: [message]
                     properties:
                       field: {type: string}

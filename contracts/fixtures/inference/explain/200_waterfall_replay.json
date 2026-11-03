@@ -16,8 +16,7 @@
       "state": {
         "mode": "historical_replay",
         "date": "2024-06-14"
-      },
-      "include_semantic_context": false
+      }
     }
   },
   "response": {

@@ -1,0 +1,74 @@
+{
+  "description": "FIXTURE ONLY: /v1/version with ppo_projected enabled, matching the illustrative ppo_projected fixtures. No checkpoint is approved (§7); a real deployment returns 200_version.json.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/v1/version",
+    "headers": {
+      "X-Request-Id": "fixture-200_version_ppo_enabled"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_version_ppo_enabled"
+    },
+    "body": {
+      "api_version": "v1",
+      "engine_version": "0.1.0",
+      "phase1_baseline_tag": "phase1-complete",
+      "git_commit": "bc9905e",
+      "default_policy": "waterfall",
+      "policies": [
+        {
+          "policy": "waterfall",
+          "status": "default",
+          "enabled": true
+        },
+        {
+          "policy": "cheapest_feasible",
+          "status": "baseline",
+          "enabled": true
+        },
+        {
+          "policy": "ppo_projected",
+          "status": "experimental",
+          "enabled": true
+        }
+      ],
+      "checkpoint": {
+        "checkpoint_id": "fixture-only-not-approved",
+        "sha256": "0fd441744e610e3356e8f64ea85cc4b6e5ecfc1f4f136eba18e960f4109891c9",
+        "approved_by": "fixture (no checkpoint is approved)",
+        "approved_on": "2026-11-02",
+        "source_run": "outputs/experiments/<illustrative>/ppo_checkpoint.pt"
+      },
+      "knowledge": {
+        "knowledge_version": "2026-11-02.1",
+        "sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2"
+      },
+      "data": {
+        "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+        "bridge_network_sha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+        "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+        "date_range": {
+          "start": "2011-01-01",
+          "end": "2025-09-30"
+        }
+      },
+      "reward_weights": {
+        "lambda_latency": 1.0,
+        "lambda_risk": 1.0,
+        "lambda_unrouted": 1.0,
+        "status": "placeholder"
+      },
+      "runtime": {
+        "platform": "linux-x86_64",
+        "python": "3.10.11",
+        "torch": "2.13.0+cpu",
+        "device": "cpu",
+        "lock_file": "services/inference/requirements/linux-x86_64-cpu.txt"
+      }
+    }
+  }
+}

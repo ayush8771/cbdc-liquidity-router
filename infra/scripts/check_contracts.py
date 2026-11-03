@@ -9,10 +9,12 @@ Checks, in order:
      definitions of §2.8 (including the allocation invariant, the C14 warning
      rule and regulatory rejections), policy defaults, compare and explain
      rules (§2.9, §2.10), decision_id stability across fixtures, failed
-     transaction records (§3.2–§3.4), and 405 responses with Allow (§4).
+     transaction records (§3.2–§3.4), 405 responses with Allow (§4), health
+     readiness (§3.9), the risk fallback and state-view warnings (§2.5, §2.8),
+     and dashboard totals derived from the stored transactions (§3.8).
   4. App fixtures marked `derived_from` are the field-for-field camelCase
-     mapping of their inference fixture (§3.2), with no recomputation; a
-     passed-through 4xx keeps the engine message, truncated to 500 characters.
+     mapping of their inference fixture (§3.2), with no recomputation. Error
+     messages are free text: a passthrough must keep the code and status only.
   5. Coverage: every operation has a success fixture, and every error code the
      API raises has at least one fixture.
   6. No real-looking bearer token appears in any fixture.
@@ -47,7 +49,7 @@ VALUES_PROVENANCE = {"historical_replay": "synthetic_simulation", "scenario": "s
 # Phase 1 constants the §2.8 definitions refer to (src/training/metrics.py).
 RELATIVE_UNROUTED_TOLERANCE = 1e-4  # Stage 1F amount-based completed (src/backtesting/evaluation.py)
 MEANINGFUL_ALLOCATION_THRESHOLD = 1e-6  # bridges_used counts shares above this
-FORWARDED_MESSAGE_LIMIT = 500  # §4: a passed-through 4xx message is truncated to this many characters
+RISK_FALLBACK = 0.0  # Phase 1 DEFAULT_RISK_PLACEHOLDER (src/envs/bridge_network.py)
 FAILURE_CODES = ("INFERENCE_ERROR", "INFERENCE_UNAVAILABLE", "ENGINE_BUSY", "ENGINE_TIMEOUT")
 NEAR_BOUNDARY_TOLERANCE = 0.15  # src/training/transaction_generator.py true_regime_for_row()
 
@@ -195,6 +197,8 @@ class Checker:
             self.check_error(rel, api, status, body, resp_headers)
         elif status < 400 and request_ok and response_ok:  # semantics assume schema-valid bodies
             self.check_semantics(rel, api, template, req, body)
+        elif api == "app" and template == "/api/v1/health" and response_ok:  # a 503 readiness body is a Health object
+            self.check_health(rel, body)
 
     def check_schema(self, rel, api, schema, instance, label) -> bool:
         errors = self.schema_errors(api, schema, instance)
@@ -280,13 +284,23 @@ class Checker:
     # ------------------------------------------------------------- semantics
     def check_semantics(self, rel, api, template, req, body) -> None:
         if api == "app":
-            if template in ("/api/v1/transactions", "/api/v1/transactions/{id}") and "status" in body:
+            if template == "/api/v1/health":
+                self.check_health(rel, body)
+            elif template == "/api/v1/dashboard/summary":
+                self.check_dashboard(rel, body)
+            elif template in ("/api/v1/transactions", "/api/v1/transactions/{id}") and "status" in body:
                 self.check_record(rel, body)
             elif template == "/api/v1/transactions" and "items" in body:
                 for item in body["items"]:
                     self.check_summary(rel, item)
             return
-        if template == "/v1/route":
+        if template == "/v1/state":
+            codes = [w["code"] for w in body["warnings"]]
+            if "STATE_OUTSIDE_TRAINING_RANGE" in codes:
+                self.fail(rel, "/v1/state never emits STATE_OUTSIDE_TRAINING_RANGE; it depends on the policy (§2.5)")
+            if ("RISK_FALLBACK_USED" in codes) != (body["corridor_risk"] == RISK_FALLBACK):
+                self.fail(rel, "RISK_FALLBACK_USED must be present exactly when corridor_risk is the 0.0 fallback")
+        elif template == "/v1/route":
             self.check_route(rel, req["body"], body)
         elif template == "/v1/compare":
             self.check_compare(rel, req["body"], body)
@@ -314,6 +328,35 @@ class Checker:
                     self.fail(rel, f"item {item['id']}: {field} must be null for a failed transaction (§3.3)")
         elif any(item[field] is None for field in derived):
             self.fail(rel, f"item {item['id']}: a routed transaction has every decision-derived field (§3.3)")
+
+    def check_health(self, rel, body) -> None:
+        """§3.9 readiness: unavailable exactly when the database is; otherwise ok/degraded by inference."""
+        if body["database"] == "unavailable":
+            want = "unavailable"
+        else:
+            want = "ok" if body["inference"] in ("ok", "mock") else "degraded"
+        if body["status"] != want:
+            self.fail(rel, f"health status must be {want!r} for database={body['database']}, "
+                           f"inference={body['inference']}")
+
+    def check_dashboard(self, rel, body) -> None:
+        """§3.8: totals and completionRate follow from the stored transactions in the list fixture."""
+        listing = self.fixtures.get("app/transactions/200_list.json")
+        if listing is None:
+            return
+        items = listing["response"]["body"]["items"]
+        routed = [i for i in items if i["status"] == "routed"]
+        want = {"transactions": len(items), "routed": len(routed),
+                "failed": sum(i["status"] == "failed" for i in items),
+                "rejectedByFeasibility": sum(1 for i in routed if not i["allowed"])}
+        if body["totals"] != want:
+            self.fail(rel, f"totals {body['totals']} do not match the stored transactions {want}")
+        for group in body["byPolicy"]:
+            base = [i for i in routed if i["policy"] == group["policy"] and i["allowed"]]
+            rate = sum(i["completed"] for i in base) / len(base) if base else None
+            got = group["completionRate"]
+            if (rate is None) != (got is None) or (rate is not None and not close(rate, got)):
+                self.fail(rel, f"{group['policy']}: completionRate must be completed/allowed routed = {rate} (§3.8)")
 
     def check_failures(self) -> None:
         """A stored failure repeats the code and message of the POST that created it (§3.2)."""
@@ -362,6 +405,9 @@ class Checker:
             self.fail(at, "provenance.scenario_id does not match the request")
         if state["mode"] == "historical_replay" and prov["state_frame_sha256"] != prov["daily_state_sha256"]:
             self.fail(at, "replay: state_frame_sha256 must equal daily_state_sha256 (§2.8)")
+        if "RISK_FALLBACK_USED" in [wn["code"] for wn in r["warnings"]] and \
+                any(a["risk"] != RISK_FALLBACK for a in r["allocations"]):
+            self.fail(at, "RISK_FALLBACK_USED means every venue's risk is the 0.0 fallback")
         if (prov["checkpoint"] is not None) != (policy == "ppo_projected"):
             self.fail(at, "provenance.checkpoint must be set exactly when the policy is ppo_projected")
 
@@ -530,11 +576,6 @@ class Checker:
         elif kind == "error":
             if app_body["error"]["code"] != eng_body["error"]["code"] or fx["response"]["status"] != src["response"]["status"]:
                 self.fail(rel, f"passthrough must keep the engine's code and status ({src_rel})")
-            if fx["response"]["status"] < 500:
-                want = eng_body["error"]["message"][:FORWARDED_MESSAGE_LIMIT]
-                if app_body["error"]["message"] != want:
-                    self.fail(rel, f"a passed-through 4xx forwards the engine message, truncated to "
-                                   f"{FORWARDED_MESSAGE_LIMIT} characters (§4)")
             return
         else:
             self.fail(rel, f"unknown derived_from kind {kind!r}")

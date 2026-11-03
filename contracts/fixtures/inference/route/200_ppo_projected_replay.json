@@ -51,7 +51,7 @@
           "fee_pct": 0.02,
           "liquidity_usd": 412345.6,
           "congestion": 0.31,
-          "risk": 0.087,
+          "risk": 0.0,
           "share_requested": 0.3633333334,
           "amount_requested_usd": 109000.00002,
           "amount_executed_usd": 109000.00002,
@@ -65,7 +65,7 @@
           "fee_pct": 0.014,
           "liquidity_usd": 150000.0,
           "congestion": 0.22,
-          "risk": 0.087,
+          "risk": 0.0,
           "share_requested": 0.3533333333,
           "amount_requested_usd": 105999.99999,
           "amount_executed_usd": 105999.99999,
@@ -79,7 +79,7 @@
           "fee_pct": 0.03,
           "liquidity_usd": 85000.0,
           "congestion": 0.48,
-          "risk": 0.087,
+          "risk": 0.0,
           "share_requested": 0.2833333333,
           "amount_requested_usd": 84999.99999,
           "amount_executed_usd": 84999.99999,
@@ -102,11 +102,11 @@
         "baseline_cost_pct": 0.0612,
         "cost_term": 0.0404866667,
         "latency_term": 0.3263666667,
-        "risk_term": 0.087,
+        "risk_term": 0.0,
         "unrouted_term_env": 0.0,
         "unrouted_term_amount_based": 0.0,
-        "reward_env": -0.37288,
-        "reward_amount_based": -0.37288,
+        "reward_env": -0.28588,
+        "reward_amount_based": -0.28588,
         "reward_weights": {
           "lambda_latency": 1.0,
           "lambda_risk": 1.0,
@@ -144,6 +144,10 @@
         {
           "code": "EXPERIMENTAL_POLICY",
           "message": "ppo_projected is experimental: PPO shares corrected by an inference-time capacity projection. Not shown to beat the waterfall (Stage 1F)."
+        },
+        {
+          "code": "RISK_FALLBACK_USED",
+          "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
         }
       ]
     }

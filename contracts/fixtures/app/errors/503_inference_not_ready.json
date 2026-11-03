@@ -29,7 +29,8 @@
         "code": "INFERENCE_UNAVAILABLE",
         "message": "The inference service is unavailable.",
         "details": {
-          "transactionId": "94f3896b-b9f1-5efa-90e7-2effa29d865b"
+          "transactionId": "94f3896b-b9f1-5efa-90e7-2effa29d865b",
+          "cause": "NOT_READY"
         },
         "requestId": "fixture-503_inference_not_ready"
       }

@@ -51,7 +51,7 @@
           "fee_pct": 0.012,
           "liquidity_usd": 520000.0,
           "congestion": 0.27,
-          "risk": 0.064,
+          "risk": 0.0,
           "share_requested": 0.0,
           "amount_requested_usd": 0.0,
           "amount_executed_usd": 0.0,
@@ -65,7 +65,7 @@
           "fee_pct": 0.0084,
           "liquidity_usd": 230000.0,
           "congestion": 0.18,
-          "risk": 0.064,
+          "risk": 0.0,
           "share_requested": 1.0,
           "amount_requested_usd": 100000.0,
           "amount_executed_usd": 100000.0,
@@ -79,7 +79,7 @@
           "fee_pct": 0.018,
           "liquidity_usd": 120000.0,
           "congestion": 0.41,
-          "risk": 0.064,
+          "risk": 0.0,
           "share_requested": 0.0,
           "amount_requested_usd": 0.0,
           "amount_executed_usd": 0.0,
@@ -102,11 +102,11 @@
         "baseline_cost_pct": 0.0455,
         "cost_term": 0.0371,
         "latency_term": 0.18,
-        "risk_term": 0.064,
+        "risk_term": 0.0,
         "unrouted_term_env": 0.0,
         "unrouted_term_amount_based": 0.0,
-        "reward_env": -0.2069,
-        "reward_amount_based": -0.2069,
+        "reward_env": -0.1429,
+        "reward_amount_based": -0.1429,
         "reward_weights": {
           "lambda_latency": 1.0,
           "lambda_risk": 1.0,
@@ -138,6 +138,10 @@
         {
           "code": "SYNTHETIC_COST_ANCHOR",
           "message": "ARE->MEX has no real RPW anchor; the cost baseline uses the documented USA->MEX fallback."
+        },
+        {
+          "code": "RISK_FALLBACK_USED",
+          "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
         }
       ]
     }

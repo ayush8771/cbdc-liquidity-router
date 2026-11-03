@@ -59,7 +59,7 @@
             "feePct": 0.02,
             "liquidityUsd": 412345.6,
             "congestion": 0.31,
-            "risk": 0.087,
+            "risk": 0.0,
             "shareRequested": 0.5,
             "amountRequestedUsd": 150000.0,
             "amountExecutedUsd": 150000.0,
@@ -73,7 +73,7 @@
             "feePct": 0.014,
             "liquidityUsd": 150000.0,
             "congestion": 0.22,
-            "risk": 0.087,
+            "risk": 0.0,
             "shareRequested": 0.5,
             "amountRequestedUsd": 150000.0,
             "amountExecutedUsd": 150000.0,
@@ -87,7 +87,7 @@
             "feePct": 0.03,
             "liquidityUsd": 85000.0,
             "congestion": 0.48,
-            "risk": 0.087,
+            "risk": 0.0,
             "shareRequested": 0.0,
             "amountRequestedUsd": 0.0,
             "amountExecutedUsd": 0.0,
@@ -110,11 +110,11 @@
           "baselineCostPct": 0.0612,
           "costTerm": 0.0442,
           "latencyTerm": 0.265,
-          "riskTerm": 0.087,
+          "riskTerm": 0.0,
           "unroutedTermEnv": 0.0,
           "unroutedTermAmountBased": 0.0,
-          "rewardEnv": -0.3078,
-          "rewardAmountBased": -0.3078,
+          "rewardEnv": -0.2208,
+          "rewardAmountBased": -0.2208,
           "rewardWeights": {
             "lambdaLatency": 1.0,
             "lambdaRisk": 1.0,
@@ -142,7 +142,12 @@
           "device": "cpu",
           "platform": "linux-x86_64"
         },
-        "warnings": []
+        "warnings": [
+          {
+            "code": "RISK_FALLBACK_USED",
+            "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+          }
+        ]
       }
     }
   }

@@ -1,9 +1,33 @@
 # Major Phase 2 — API Contract
 
-**Status:** v0.4 (3 November 2026), proposed for team review. This document is normative until `contracts/openapi/inference.v1.yaml` and `contracts/openapi/app.v1.yaml` are approved and merged; after that the OpenAPI files are, and this document must be kept in sync with them.
+**Status:** v0.4, revised on 4 November 2026 after the team reviews, proposed for a second team review. `docs/TEAM_REVIEW_RESOLUTION.md` lists what each review changed and what is still open. This document is normative until `contracts/openapi/inference.v1.yaml` and `contracts/openapi/app.v1.yaml` are approved and merged; after that the OpenAPI files are, and this document must be kept in sync with them.
 **Architecture and roles:** `docs/PHASE2_ARCHITECTURE.md`. Section references written "arch §n" point there.
 
-**How to read v0.4.** Rules without a marker are approved. A rule marked **Pending: <name>** has been agreed by every developer who answered, but still needs that person's sign-off; implement it only after the sign-off. A rule that is still disputed or undecided is not stated as a rule: the text says it is open and points to §10, which lists each side's position and who decides.
+**How to read v0.4.** Rules without a marker are approved. Rules marked **proposed** need the named person's approval before they're implemented. A question that is still disputed or undecided is not stated as a rule: the text says it is open and points to §10, which gives each side's position and who decides.
+
+**Revision after the team reviews (4 November 2026):**
+- **Owner decisions applied** (Ayush):
+  - `decision_id` includes `engine_version`, every output-affecting artefact and `id_scheme: 1`, and excludes `api_version` and `git_commit` (§2.11);
+  - the request deadline is configurable, default 12 s, and independent of the 10 s worker execution timeout; a running task isn't killed when the caller's deadline passes (§5);
+  - strict requests and closed responses in CI, in both APIs (§1);
+  - `ready_workers` (§2.1);
+  - wrong-length history is `VALIDATION_ERROR` (§2.4);
+  - `include_semantic_context` removed (§2.10);
+  - form-level errors omit `field`, and mapped engine field paths are forwarded (§4);
+  - `details.cause: "NOT_READY"` (§4);
+  - the `completionRate` formula (§3.8);
+  - database-down readiness is a 503 with the Health body, and liveness is separate (§3.9);
+  - the 0.0 risk fallback with `RISK_FALLBACK_USED` (§2.8);
+  - no range warning from `/v1/state` (§2.4).
+- **Review fixes:**
+  - tightened app request validation, so failed records always match their schema (§3.2);
+  - aligned `scenarioId` handling across `/state` and `POST` (§2.5, §3.7);
+  - nullable dashboard window bounds;
+  - the list query rules (§3.3);
+  - comparison persistence confirmed (§3.6);
+  - audit wording (§6.2);
+  - unknown enum values handled at run time (§1).
+- **Fixtures corrected:** risk fallback on every 2024-06-14 decision, a PPO-enabled meta fixture, a dashboard derived from the stored transactions, and new health and validation fixtures.
 
 **Changes in v0.4:**
 - **Errors (§4):**
@@ -13,7 +37,7 @@
   - `ENGINE_TIMEOUT` is 504 everywhere (the §3.2 wording is fixed);
   - `Retry-After` is forwarded;
   - rules for forwarding engine messages and for `details.errors[]`.
-- **Requests are strict, responses are tolerant (§1).** Also: `clientReference` is at most 200 characters, `policy: null` is rejected, and an empty `venues` list returns `STATE_VENUE_MISMATCH`.
+- **Requests are strict (§1).** Also: `clientReference` is at most 200 characters, `policy: null` is rejected, and an empty `venues` list returns `STATE_VENUE_MISMATCH`.
 - **Failed transactions (§3.2–§3.5):**
   - a `failure` object, which is null for routed transactions;
   - `decision`, `corridor` and the decision-derived list fields are null when a transaction failed;
@@ -26,12 +50,12 @@
 - **`STATE_OUTSIDE_TRAINING_RANGE` (§2.4):** per-venue liquidity and congestion bounds from the actual 30-day training windows. It is a warning in all three state modes.
 - **`decision_id` (§2.11):** RFC 8785 canonical JSON; `git_commit` excluded; text artefacts hashed with LF line endings; a defined daily-state fingerprint.
 - **Deadlines and engine workers (§5, §8):**
-  - a 12 s end-to-end deadline and a 10 s execution limit;
+  - a 12 s request deadline and a 10 s worker execution timeout;
   - individual worker recycling;
   - `CBDC_ENGINE_STARTUP_TIMEOUT_S`.
-- **Health (§3.9):** mock mode reports `ok`, and the `database` values are defined. The HTTP status when the database is down is still open.
+- **Health (§3.9):** mock mode reports `ok`, and the `database` values are defined.
 - **Other definitions:**
-  - `completionRate` counts only routed, feasible decisions (pending the owner's sign-off);
+  - `completionRate` counts only routed, feasible decisions;
   - comparisons are independent records (§3.6, §6.3);
   - `semantic_context` is always null in v1 (C6);
   - explanation outcomes are confirmed (C11).
@@ -72,15 +96,9 @@ There are two APIs:
 - Shares are fractions of the transaction amount in [0, 1].
 - Every request may send an `X-Request-Id` header. If it is missing, the receiver generates one. It is echoed in the response header and in error bodies, and the backend forwards it to the inference service.
 - **Unknown fields.**
-  - **Responses are tolerant.** Consumers ignore unknown response fields at run time and never reject a response because of them. Producers add only optional fields within a version.
-    - The OpenAPI response schemas are still closed (`additionalProperties: false`) where they serve as conformance checks:
-      - every Inference API response, enforced in fixture and producer tests in CI (**Pending: Ayush**);
-      - the app's non-`Decision` responses, pending Q7.
-    - The app `Decision` schema is open, so a new engine field reaches the app through the mapper without a backend change.
-  - **Requests are strict.** Every request body object, at every level, accepts only the fields this contract defines. An unknown field returns `422 VALIDATION_ERROR`, so a misspelt field never silently falls back to its default. This applies:
-    - to the Application API;
-    - to the Inference API's `state` object (unchanged from v0.3);
-    - to the rest of every Inference API request body (**Pending: Ayush**).
+  - **Responses: closed in CI, tolerant at run time** (owner decision). Every OpenAPI response schema, in both APIs, is closed (`additionalProperties: false`), and the fixture and producer tests enforce that in CI, so an undocumented field is caught before it ships. At run time, a consumer ignores unknown response fields and never rejects a response because of one. Producers add only optional fields within a version, and must add them to the OpenAPI file first.
+  - **Unknown enum values.** At run time, a consumer that meets an enum value it doesn't know treats it generically and doesn't fail. It shows an unknown warning `code` as a plain warning with its `message`, and handles an unknown error `code` by its HTTP status. CI still rejects undocumented values.
+  - **Requests are strict.** Every request body object, at every level, in both APIs, accepts only the fields this contract defines. An unknown field returns `422 VALIDATION_ERROR`, so a misspelt field never silently falls back to its default. CI enforces this with closed request schemas. Query parameters are not request bodies; for app list and dashboard queries, see §3.3.
   - **Null values.** `policy: null` is rejected with `422 VALIDATION_ERROR`; an omitted `policy` takes its default. `clientReference: null` / `client_reference: null` and `history: null` are accepted and mean "not given".
 - **Determinism:** the same request against the same artefacts returns the same body *on the same platform and device*. PPO values may differ in the last floating-point digits between CPU and CUDA, or between operating systems (see `provenance.device`). `decision_id` hashes a canonical form of the request plus artefact fingerprints, never the outputs (§2.11).
   - **Cross-platform claim.** Baseline results, artefact fingerprints and `decision_id` are *designed* to be identical on Windows and Linux. The claim may be made only once the golden-hash test (§9) passes identically on both platforms. Until then, treat it as unverified.
@@ -128,7 +146,7 @@ The FastAPI process answers `/v1/health`, `/v1/version`, `/v1/replay/calendar` a
     "engine_workers": "ok",
     "ppo_checkpoint": "disabled"
   },
-  "engine_pool": {"workers": 2, "queued": 0, "max_queue": 32, "rebuilds_since_start": 0},
+  "engine_pool": {"workers": 2, "ready_workers": 2, "queued": 0, "max_queue": 32, "rebuilds_since_start": 0},
   "time": "2026-11-02T10:00:00Z"
 }
 ```
@@ -139,7 +157,7 @@ The FastAPI process answers `/v1/health`, `/v1/version`, `/v1/replay/calendar` a
 - `engine_pool`:
   - `workers` is the configured number of worker processes.
   - `rebuilds_since_start` counts individual worker replacements.
-  - **Pending: Ayush.** Add `ready_workers`: the number of workers that have finished warming up and can take a task.
+  - `ready_workers` (required) is the number of workers that have finished warming up and can take a task.
 - `ppo_checkpoint` is `ok`, `disabled` (none approved or configured) or `error` (hash mismatch). A `disabled` checkpoint doesn't make the service `degraded`.
 - The non-`ok` values of `structured_data`, `daily_state` and `knowledge_base` are not yet defined (§10, Q12).
 - HTTP 200 when `ready`, otherwise 503. `ready` is false until at least one engine worker has finished warming up. Warm-up is limited by `CBDC_ENGINE_STARTUP_TIMEOUT_S` (default 180 s, §8).
@@ -176,8 +194,8 @@ When a checkpoint is enabled, `checkpoint` is `{"checkpoint_id": "...", "sha256"
 
 - `source_run` is the directory containing the checkpoint file, for now. It is to be revisited when the first checkpoint is approved.
 - `git_commit` is provenance only. It is read at build time, never hard-coded, and does **not** enter `decision_id` (§2.11).
-- `engine_version`: what a change to it means, and when it must be bumped, is not yet defined (§10, Q2).
-- Whether `api_version` enters `decision_id` is open (§10, Q1).
+- `engine_version` is the semantic version of the inference logic that can change routing outputs. It must be bumped whenever a code change can change any output for the same request and artefacts, and it enters `decision_id` (§2.11). A change that can't affect outputs, such as logging or error text, needn't bump it.
+- `api_version` does **not** enter `decision_id`.
 - The hashes in `knowledge` and `data` are computed as §2.11 describes.
 
 ### 2.3 `GET /v1/network`
@@ -238,7 +256,10 @@ The `/* … */` comments stand in for the arrays; they aren't valid JSON.
 - **Dates.** `date` and `reference_date` must pass Phase 1's `validate_simulation_date()`: between 2011-01-01 and 2025-09-30, and not within 30 days of a split boundary. The boundaries include the dataset start, 2011-01-01, and its end, 2025-09-30. Failures return `DATE_OUT_OF_RANGE` or `DATE_IN_GAP_BUFFER`. `/v1/replay/calendar` lists every excluded range.
 - **Explicit venues** must list **exactly** the corridor's venues, each once, or the error is `STATE_VENUE_MISMATCH`. An empty `venues` list is a mismatched venue set: it returns `STATE_VENUE_MISMATCH`, not `VALIDATION_ERROR`. The schemas therefore set no `minItems` on `venues`.
 - **Explicit values.** `liquidity_usd` ≥ 0 and `congestion` ≥ 0, both finite. Otherwise the error is `INVALID_STATE_VALUE`.
-- **Explicit history**, when given, has exactly 30 finite, non-negative numbers per channel, and the last element equals the current value (within 1e-9 relative). Otherwise the error is `INVALID_STATE_VALUE`. Whether a wrong *length* should instead be `VALIDATION_ERROR` is open (§10, Q5). Until it is decided, the v0.3 rule above stands. `history: null` and an omitted `history` mean the same thing.
+- **Explicit history**, when given, has exactly 30 numbers per channel (oldest first).
+  - A wrong **length** is a schema rule (`minItems`/`maxItems` 30) and returns `VALIDATION_ERROR` in both APIs (owner decision).
+  - The **value** rules return `INVALID_STATE_VALUE`: every value finite and non-negative, and the last element equal to the current value (within 1e-9 relative).
+  - `history: null` and an omitted `history` mean the same thing.
 - **Fields that can't be set.** Explicit mode accepts **no** `fee`, `risk`, `baseline_cost_pct`, `data_source_tag` or extra venues. Unknown fields inside `state` are rejected with `VALIDATION_ERROR`, rather than ignored, so callers can't believe they set a value that had no effect (see also §1).
 
 #### What comes from where in explicit mode
@@ -263,7 +284,7 @@ The `/* … */` comments stand in for the arrays; they aren't valid JSON.
     - for `ppo_projected`, the whole 30-day window, including explicit `history`.
   - **Scope.** It applies in all three modes: replay, scenario and explicit.
   - **Effect.** Any value outside its bounds adds the **warning** `STATE_OUTSIDE_TRAINING_RANGE`. It is never an error, and it never blocks routing with a baseline policy. PPO on such inputs is out of distribution and unvalidated.
-  - **Not yet decided:** whether `/v1/state` also reports this warning (§10, Q15).
+  - **Where.** Only `/v1/route` and `/v1/compare` (each result) emit it, because the values checked depend on the policy. `/v1/state` never emits it (owner decision). So the bridge monitor can't show this warning before a transaction is routed.
 - **No future dates.** No data exists after 2025-09-30. A "today" what-if must use explicit mode with a valid `reference_date`, and its cost and risk context come from that date.
 - **"Historical" replay is synthetic.** It is the Phase 1 simulation conditioned on real lagged data, not observed bridge history.
 - **No unseen dates for PPO.** Train dates trained the model, validation dates selected checkpoints, and test dates were examined in Phase 1. `provenance.split` is always reported, and `ppo_projected` on a train date adds `DATE_IN_TRAINING_SPLIT`.
@@ -274,6 +295,10 @@ The `/* … */` comments stand in for the arrays; they aren't valid JSON.
 ### 2.5 `GET /v1/state`
 
 Query: `corridor=GBR->PHL&mode=historical_replay&date=2024-06-14`, or `&mode=scenario&scenario_id=...`, plus optional `include_history=true`. Explicit states are not looked up; they are what the caller already has.
+
+- `scenario_id` is required with `mode=scenario`; it returns `VALIDATION_ERROR` if missing, and also if it is given with `historical_replay`.
+- Any string passes the schema. An unknown value returns `UNKNOWN_SCENARIO`, exactly as on `/v1/route`, so both endpoints treat an unknown scenario the same way.
+- `warnings` may contain `RISK_FALLBACK_USED`, when `corridor_risk` is the 0.0 fallback (§2.8). It never contains `STATE_OUTSIDE_TRAINING_RANGE` (§2.4).
 
 ```json
 {
@@ -339,7 +364,7 @@ With `include_history=true`, each venue also has `"history": {"dates": [30 dates
 ```
 
 - `policy` is optional and defaults to `waterfall`. `null` is rejected (§1).
-- `client_reference` is optional: a string or null, echoed back unchanged. **Pending: Ayush:** at most 200 characters (Unicode code points, as JSON Schema `maxLength` counts them), the same limit as the Application API.
+- `client_reference` is optional: a string or null, echoed back unchanged. It is at most 200 characters, counted as Unicode code points (as JSON Schema `maxLength` counts them; the backend counts `[...s].length`, not `s.length`), the same limit as the Application API.
 - `amount_usd` must be > 0 and finite. Amounts above the $500K cap are **not** a validation error: they return 200 with `feasibility.allowed = false`, exactly as Phase 1 does.
 - The transaction's `simulation_date` is `state.date` (replay and scenario modes) or `state.reference_date` (explicit mode).
 
@@ -451,7 +476,7 @@ Field definitions:
 | `EXPERIMENTAL_POLICY` | Always present for `ppo_projected` |
 | `DATE_IN_TRAINING_SPLIT` | `ppo_projected` on a train-split date |
 | `STATE_OUTSIDE_TRAINING_RANGE` | An effective value read by the selected policy is outside the venue's training-window bounds, in any state mode (§2.4). A warning only. |
-| `RISK_FALLBACK_USED` | The risk proxy was unavailable, so the static placeholder was used |
+| `RISK_FALLBACK_USED` | The corridor risk proxy is missing or NaN for the date's month, so Phase 1's static placeholder `0.0` (`DEFAULT_RISK_PLACEHOLDER`) is used, as Phase 1 does. Every venue's `risk` is then 0.0. Example: in June 2024 the proxy is NaN for PHL, USA and ARE, so all three corridors fall back. |
 | `COST_BASELINE_FALLBACK_USED` | No lagged RPW baseline exists, so the reward default was used |
 | `SYNTHETIC_COST_ANCHOR` | Corridor ARE→MEX: the cost baseline uses the synthetic USA→MEX fallback |
 | `PARTIAL_COMPLETION` | `completed` is false **and** `feasibility.allowed` is true. A regulatory rejection never carries it (C14). |
@@ -484,11 +509,11 @@ Field definitions:
 
 Every policy runs in **one engine task**, on one request-scoped state frame. That guarantees `same_state` and gives every result the same `state_frame_sha256`. A policy that is disabled or unavailable for the state goes into `skipped`; it doesn't fail the request.
 
-**Pending: Ayush.** Each result's `decision_id` is computed for that one policy (§2.11), never over the `policies` list. It therefore equals the `decision_id` that `/v1/route` returns for the same transaction, state and policy.
+Each result's `decision_id` is computed for that one policy (§2.11), never over the `policies` list. It therefore equals the `decision_id` that `/v1/route` returns for the same transaction, state and policy.
 
 ### 2.10 `POST /v1/explain`
 
-**Request:** the same body as `/v1/route`. The service recomputes the decision deterministically, and the response's `decision_id` must equal the one `/v1/route` returned. Optional: `"include_semantic_context": false`. Because `semantic_context` is always null in v1 (below), this flag currently has no effect. Whether it stays in the v1 request schema is open (§10, Q8).
+**Request:** the same body as `/v1/route`. The service recomputes the decision deterministically, and the response's `decision_id` must equal the one `/v1/route` returned. `include_semantic_context` is **removed** from v1 (owner decision): `semantic_context` is always null, so the flag could have no effect, and the strict request rule (§1) rejects it with `VALIDATION_ERROR`.
 
 ```json
 {
@@ -548,23 +573,23 @@ Every policy runs in **one engine task**, on one request-scoped state frame. Tha
 
   pandas stays pinned. Dev A fixes the exact byte layout in code, and a golden-hash test pins it (§9).
 
-**Pending: Ayush** (agreed by Dev B and Dev D):
-- **What is canonicalised.** The *validated, parsed* request model, never the raw body. So a client sending `300000` and one sending `300000.0` get the same ID; JCS writes both as `300000`. Within it:
-  - the default policy is applied before hashing;
-  - `history: null` and a missing `history` are the same;
-  - explicit `venues` are sorted by `bridge_uid`.
-- **Inputs hashed.**
-  - `transaction`: `sender_country`, `receiver_country` and `amount_usd`;
-  - `state`;
-  - the one `policy`;
-  - artefact fingerprints: knowledge, daily state, bridge network and normalisation stats;
-  - the checkpoint's SHA-256, **for `ppo_projected` only**. A checkpoint change then never changes the IDs of baseline decisions.
-- **Not hashed:** `client_reference` and `include_semantic_context`. Neither affects the decision.
+**Hashed document** (owner decision):
+- `id_scheme`: `1`. It identifies this canonical form, so a future change to the form gets a new scheme number instead of silently changing IDs.
+- `engine_version` (§2.2).
+- The request: `transaction` (`sender_country`, `receiver_country`, `amount_usd`), `state`, and the one `policy`.
+- The fingerprints of **every artefact that can affect the output**: the knowledge base, the daily state, the bridge network, the normalisation stats, and the risk-proxy and cost-baseline tables the engine reads. Dev A fixes the exact list in code, and the golden-hash test pins it.
+- The checkpoint's SHA-256, **for `ppo_projected` only**. A checkpoint change never changes the ID of a baseline decision.
+
+**Never hashed:** `api_version`, `git_commit` (provenance only), `client_reference`, and every output field.
+
+**Canonicalisation details** (agreed by Dev B and Dev D). Ayush's decision is consistent with them but doesn't restate them, so Dev A confirms them when implementing:
+- The *validated, parsed* request model is hashed, never the raw body. So a client sending `300000` and one sending `300000.0` get the same ID; JCS writes both as `300000`.
+- The default policy is applied before hashing.
+- `history: null` and a missing `history` are the same.
+- Explicit `venues` are sorted by `bridge_uid`.
 - **One ID per policy.** Each ID is computed for one policy, so `/v1/compare` IDs equal `/v1/route` IDs (§2.9).
 
-**Open:**
-- whether `api_version` enters the hash (§10, Q1);
-- what `engine_version` means, and whether it enters the hash (§10, Q2).
+The fixture IDs are illustrative strings: the checker tests only that they are consistent across route, compare and explain. Real values will come from Dev A's engine-generated fixtures.
 
 ---
 
@@ -592,7 +617,8 @@ It returns `401 UNAUTHENTICATED` if the token is missing or invalid. There is no
 
 | Method | Path | Purpose | Calls inference |
 |---|---|---|---|
-| `GET` | `/api/v1/health` | Backend, database and inference status (no auth) | `/v1/health` |
+| `GET` | `/api/v1/health` | Readiness: backend, database and inference status (no auth) | `/v1/health` |
+| `GET` | `/api/v1/health/live` | Liveness: the process is running (no auth; path proposed, §3.9) | — |
 | `GET` | `/api/v1/auth/me` | Caller identity and role | — |
 | `GET` | `/api/v1/meta` | Versions, enabled policies, reward-weight status | `/v1/version` (cached) |
 | `GET` | `/api/v1/network` | Corridors and venues | `/v1/network` (cached) |
@@ -626,6 +652,11 @@ History, comparisons and the dashboard return every user's records to any authen
 - The body is strict (§1): only the fields shown here, plus the `state` fields below, are accepted.
 - `clientReference` is optional: a string of at most 200 characters (Unicode code points), or null. A longer value returns `422 VALIDATION_ERROR` with `field: "clientReference"`.
 - `policy: null` is rejected with `422 VALIDATION_ERROR`. An omitted `policy` means `waterfall`.
+- `senderCountry` and `receiverCountry` must be three upper-case letters, and `amountUsd` must be greater than 0. Otherwise the backend returns `422 VALIDATION_ERROR` before calling inference.
+  - This is the chosen fix for a frontend review finding: a request that inference never validated (because it was unavailable) is still saved as a failed record, and that record must match the response schema (`CountryCode`, positive `amountUsd`).
+  - So the backend's checks are tightened, rather than the failed-record schema relaxed. As a result, `INVALID_AMOUNT` reaches the app only for a value the backend's schema accepts.
+  - Whether a valid-shaped but unsupported corridor (e.g. `FRA->DEU`) is also checked by the backend is not required: a failed record keeps `corridor: null` in that case.
+- `explicit` history arrays must have exactly 30 numbers each, or the backend returns `VALIDATION_ERROR`, the same code inference uses (§2.4).
 - State mode values:
   - `historicalReplay` (with `date`);
   - `scenario` (with `date` and `scenarioId`);
@@ -685,9 +716,9 @@ The example `allocations` array is shortened to one entry; real responses list e
   |---|---|
   | 5xx other than those below, or an invalid body | `502 INFERENCE_ERROR` |
   | Unreachable, or the backend's 15 s timeout elapsed | `503 INFERENCE_UNAVAILABLE` |
-  | `503 NOT_READY` | `503 INFERENCE_UNAVAILABLE`, with `Retry-After` forwarded |
-  | `503 ENGINE_BUSY`, including a task that expired in the queue (§5) | `503 ENGINE_BUSY`, with `Retry-After` forwarded |
-  | `504 ENGINE_TIMEOUT` | `504 ENGINE_TIMEOUT` |
+  | `503 NOT_READY` | `503 INFERENCE_UNAVAILABLE`, with `Retry-After` forwarded and `details.cause: "NOT_READY"` |
+  | `503 ENGINE_BUSY`, including a request whose deadline expired while queued (§5) | `503 ENGINE_BUSY`, with `Retry-After` forwarded |
+  | `504 ENGINE_TIMEOUT`: the deadline expired while the task was running (§5) | `504 ENGINE_TIMEOUT` |
 
   Under load this fills the history with `ENGINE_BUSY` rows. That is accepted at development scale.
 - **Passed through, not persisted.** Engine validation errors (422) and `409 POLICY_DISABLED` keep their code and status and are not persisted.
@@ -710,18 +741,28 @@ Query parameters: `page` (default 1), `pageSize` (default 20, max 100), `corrido
 }
 ```
 
-For a `failed` transaction, the fields that come from a decision are null: `corridor`, `policyStatus`, `allowed`, `completed`, `completionRatio`, `executedUsd` and `rewardAmountBased`. `policy` is the requested policy. The `completed=true|false` filter never matches a failed row.
+For a `failed` transaction, the fields that come from a decision are null: `corridor`, `policyStatus`, `allowed`, `completed`, `completionRatio`, `executedUsd` and `rewardAmountBased`. `policy` is the requested policy.
+
+Query rules (they match the backend's implementation, `services/backend/src/routes/transactions.ts`):
+- `from` is inclusive and `to` is exclusive, both on `createdAt`, as full ISO 8601 UTC timestamps. `from` must not be later than `to`.
+- `sort` accepts only `createdAt:desc`, the default.
+- `completed=true|false` matches only transactions with a decision, so never a failed row.
+- `corridor` matches the stored corridor, so it never matches a failed row, whose corridor is null.
+- `policy` matches the requested policy, so failed rows are included.
+- A documented parameter given twice is a `VALIDATION_ERROR`. Unknown query parameters are ignored: the strict rule in §1 covers request bodies, not queries.
+- There is no `status` filter in v1.
+- Every problem returns `422 VALIDATION_ERROR` with `details.errors[]`, all at once.
 
 ### 3.4 `GET /api/v1/transactions/:id`
 
-Returns the same body as the 201 response in §3.2. That includes failed transactions, with `status: "failed"`, `decision: null`, `transaction.corridor: null` and `failure` set. Unknown IDs return `404 NOT_FOUND`.
+Returns the same body as the 201 response in §3.2. That includes failed transactions, with `status: "failed"`, `decision: null`, `transaction.corridor: null` and `failure` set. Unknown IDs return `404 NOT_FOUND`. What a non-UUID `:id` returns (404 or 422) is not yet defined (§10, Q11a).
 
 ### 3.5 `GET /api/v1/transactions/:id/explanation`
 
 Returns the camelCase mapping of the `/v1/explain` response, plus `"transactionId"`. The backend calls `/v1/explain` with the stored request, checks that the returned `decisionId` equals the stored one (otherwise `409 DECISION_MISMATCH`, which means the engine artefacts changed), and stores the result.
 
 - **Failed transaction.** If the transaction's `status` is `failed`, the backend returns `409 TRANSACTION_FAILED` without calling inference, and stores nothing. A 404 would wrongly say the transaction doesn't exist, and `DECISION_MISMATCH` means something else.
-- **Policy now disabled.** If `/v1/explain` returns `409 POLICY_DISABLED`, for example because a `ppoProjected` transaction's checkpoint is no longer enabled, it is passed through and nothing is stored.
+- **Policy now disabled.** If `/v1/explain` returns `409 POLICY_DISABLED`, for example because a `ppoProjected` transaction's checkpoint is no longer enabled, it is passed through and nothing is stored. Explaining a stored PPO decision after its checkpoint is disabled is listed as an open point by Dev B (§10, Q17). This is the interim rule, not a settled one.
 - **Other errors.** Inference failures map as in §3.2, but nothing is persisted.
 
 ### 3.6 `POST /api/v1/comparisons`
@@ -732,11 +773,18 @@ The request is the same as §3.2, with `"policies": [...]` in place of `policy`.
 - It creates no transaction record, has no `transactionId`, and never appears in `GET /api/v1/transactions` or the dashboard.
 - It stores its own transaction fields, the state spec, the policy list sent to the engine, its creator and the verbatim `/v1/compare` response (§6.3).
 - `transaction.corridor` is null only if every policy was skipped. In that case no result confirms the corridor, and it is not derived.
-- **Pending: Anvesh** (it follows from the backend schema, where `engineResponse` is required). A comparison is persisted only when `/v1/compare` returns 200. On an inference failure it returns the §3.2 error, with no `transactionId`.
+- A comparison is persisted **only** when `/v1/compare` returns 200, including a 200 in which some or all policies are skipped. On any error nothing is saved, and the §3.2 error is returned with no `transactionId` (confirmed by Dev B).
+- Not yet defined (§10, Q18):
+  - which list the backend sends when an **analyst** omits `policies`;
+  - the order of `results`;
+  - whether the record echoes `state` and `policies`. Both are stored, but not returned.
 
 ### 3.7 `GET /api/v1/state`
 
 Query: `corridor`, `mode` (`historicalReplay` or `scenario`), `date`, `scenarioId`, `includeHistory`. It returns the camelCase mapping of §2.5.
+
+- `scenarioId` follows the §2.5 rules. It is required with `scenario`, and a `VALIDATION_ERROR` with `historicalReplay`.
+- Any string passes the app schema, and an unknown value is passed through as `UNKNOWN_SCENARIO`, the same as on `POST /transactions`. (The v0.4 draft schema used a closed enum here, which made the two endpoints disagree.)
 
 ### 3.8 `GET /api/v1/dashboard/summary`
 
@@ -758,13 +806,18 @@ Query: `from`, `to`, `corridor`, `policy`.
 The aggregates are computed from stored decision fields only, never recomputed from allocations. Comparisons are not included (§3.6).
 
 - `totals.failed` counts transactions with `status: "failed"`. `totals.rejectedByFeasibility` counts routed decisions with `allowed = false`.
-- **`completionRate`** (**Pending: Ayush, as project owner**; agreed by Dev B, Dev C and Dev D) is the share of `completed = true` among routed decisions with `allowed = true`. Rejected and failed transactions are excluded from both the numerator and the denominator; they are counted separately in `totals`. It is null when no such decision exists. The same rule applies in `byPolicy` and `byCorridor`.
-  - Rejections are feasibility outcomes and failures are infrastructure problems; neither is a policy result.
-  - In v0.3 the rate was the mean of every stored `completed` value, so a rejection pulled it down. This change alters how the dashboard reads.
-- Not yet defined (§10, Q11):
-  - what `count` counts;
-  - which decisions the `mean*` fields average over;
-  - whether to add a field giving the rate's denominator.
+- **`completionRate`** (owner decision) = completed allowed routed decisions ÷ all allowed routed decisions. Rejected and failed transactions are excluded from both, and counted separately in `totals`. It is **null** when the denominator is zero. The same rule applies in `byPolicy` and `byCorridor`.
+  - This changes the v0.3 definition (the mean of every stored `completed` value, under which a rejection pulled the rate down). The change is deliberate and documented here, not silent.
+- `window.from` and `window.to` echo the query, and are **null** when the query didn't supply them.
+- **Proposed, awaiting owner approval** (compatible with the Dev B and Dev C reviews; the fixture uses them):
+  - `byPolicy` groups by the requested policy. `count` is every transaction with that policy, failed and rejected included.
+  - `meanRewardAmountBased`, `meanLatencyTerm` and `meanRiskTerm` average over the same decisions as the `completionRate` denominator, and are null when it is zero.
+  - `byCorridor` covers routed transactions only, because a failed row has no corridor. Its `count` is the routed transactions on that corridor.
+- **Still open** (§10, Q11):
+  - the source and formula of `meanFeeCostPct`: a new stored column, or supplied by inference, and over which denominator. The fixture sends null until it is decided.
+  - the window's defaults when `from` or `to` is omitted;
+  - an optional denominator field (asked for by Dev C).
+- The dashboard fixture is derived from the stored transactions in the list fixture, and the checker verifies the totals and `completionRate`.
 
 ### 3.9 `GET /api/v1/health`, `GET /api/v1/meta`
 
@@ -774,10 +827,13 @@ The aggregates are computed from stored decision fields only, never recomputed f
 ```
 - `database` is `ok` or `unavailable`.
 - `inference` is `ok`, `degraded`, `unavailable` or `mock`. `mock` means `INFERENCE_MODE=mock`, and inference is not called.
-- `status`, with the database `ok`:
-  - `ok` with HTTP 200 when `inference` is `ok` or `mock`. Mock mode is a deliberate configuration, not a fault.
-  - `degraded` with HTTP 200 when `inference` is `degraded` or `unavailable`.
-- **Database `unavailable`: HTTP status and `status` value are open** (§10, Q3). Dev B and Dev D propose HTTP 503 with `status: "unavailable"`. Dev C proposes HTTP 200 with `status: "degraded"`, and a separate readiness endpoint if one is needed. Until Q3 is decided, the schema allows only `ok` and `degraded`, and no 503 is specified.
+- **`/api/v1/health` is the readiness check** (owner decision):
+  - database `unavailable` → HTTP **503**, `status: "unavailable"`;
+  - database `ok` and `inference` `ok` or `mock` → HTTP 200, `status: "ok"`. Mock mode is a deliberate configuration, not a fault.
+  - database `ok` and `inference` `degraded` or `unavailable` → HTTP 200, `status: "degraded"`.
+- **The 503 body is the `Health` object, not the §4 error envelope.** Its component fields name what failed (`"database": "unavailable"`), so the UI can still say which component is down.
+- **Liveness is separate.** Liveness asks only whether the backend process is running, and checks no dependency. It stays 200 while the database or inference is down, so a container orchestrator doesn't restart the backend for a database outage.
+  - The proposed endpoint is `GET /api/v1/health/live` → `{"status": "ok"}`, with no auth. The path and body are a proposal awaiting Dev B's confirmation (§10, Q3a).
 - The backend checks inference health with its own short timeout, not the 15 s routing timeout (§5).
 
 `meta`: the camelCase mapping of `/v1/version`, plus `"backendVersion"` and `"inferenceMode": "live"|"mock"`.
@@ -804,16 +860,20 @@ The Application API uses `requestId` in place of `request_id`. The `code` values
 **`details`:**
 - `VALIDATION_ERROR` carries `details.errors`: a non-empty array of `{"field", "message"}`.
   - `field` is the path of the offending value in that API's own request body and field case, with `.` between keys and `[n]` for array indexes. For example, `state.venues[1].history.liquidityUsd` in the app and `state.venues[1].history.liquidity_usd` in inference.
-  - How an error that is about no single field is written is open (§10, Q4). Dev B proposes `field: ""`, always present. Dev C proposes omitting `field`. Until Q4 is decided, the schemas accept both, and consumers treat a missing or empty `field` as a form-level error.
-- Other 422 codes may set `details.field` with the same path syntax.
+  - **An error that is about no single field omits `field`** (owner decision). There is one representation, and no empty-string marker. Consumers treat a missing `field` as a form-level error.
+- Other 422 codes may set `details.field` with the same path syntax, omitted when there is no single field.
 - A failed `POST /api/v1/transactions` sets `details.transactionId` (§3.2).
+- An app `503 INFERENCE_UNAVAILABLE` caused by inference `NOT_READY` sets the optional `details.cause: "NOT_READY"` (owner decision), so the UI can say "starting up". It is absent for other causes.
+- **Engine messages** (owner decision). An engine 4xx `message` never exposes internal filesystem paths, exception representations or internal configuration values. Sanitised values the caller supplied may be echoed.
 
-**How the backend passes inference errors on:**
-- **Message.** For a passed-through 4xx code, the backend forwards the engine's `message`, truncated to 500 characters. For every 5xx it uses its own fixed message and never forwards engine text. **Pending: Ayush:** engine 4xx messages contain no internal paths or values.
-- **Details.**
-  - `details.errors[]` is forwarded only after each `field` is mapped from the engine path to the app path. The mapping uses an explicit table, not a generic camelCase conversion. For example, `transaction.amount_usd` becomes the top-level `amountUsd`. A path that can't be mapped becomes a form-level error, written as Q4 decides.
-  - Whether `details.field` of a domain 422 (such as `DATE_IN_GAP_BUFFER`) is forwarded, after mapping, is open (§10, Q6).
-  - All other engine `details` are dropped.
+**How the backend passes inference errors on** (owner decision: mapped field paths are forwarded through an explicit table):
+- **Field paths.** Engine paths are mapped to app paths with an explicit table, not a generic camelCase conversion. For example, `transaction.amount_usd` becomes the top-level `amountUsd`, and `state.venues[1].history.liquidity_usd` becomes `state.venues[1].history.liquidityUsd`. The app keeps the shapes the engine used, so no new envelope is invented:
+  - an engine `VALIDATION_ERROR`'s `details.errors[]` is forwarded as app `details.errors[]`, with every `field` mapped;
+  - a domain 422's `details.field` (for example `state.date` on `DATE_IN_GAP_BUFFER`) is forwarded as app `details.field`, mapped.
+  - A path the table can't map is dropped, so the item becomes a form-level error with no `field`. A raw engine path never reaches the app.
+- **Everything else in engine `details` is dropped.**
+- **Message.** The app `message` is free text for people. Consumers key their behaviour on `code`, never on `message`, and the checker treats it as free text. For 5xx the backend uses its own fixed message.
+  - For a passed-through 4xx, whether the backend forwards the sanitised engine message, capped at 500 characters, or uses its own fixed message is open (§10, Q16). The v0.4 draft forwarded it, and the backend review recommends not exposing engine messages.
 - **`Retry-After`.** When inference sends it, with `ENGINE_BUSY` or `NOT_READY`, the backend copies it, in integer seconds, onto the app response.
 
 | HTTP | `code` | Raised by | When |
@@ -826,37 +886,38 @@ The Application API uses `requestId` in place of `request_id`. The `code` values
 | 409 | `DECISION_MISMATCH` | app | Recomputed `decision_id` differs from the stored one |
 | 409 | `POLICY_DISABLED` | inference (passed through by app) | `ppo_projected` requested but no approved checkpoint is enabled. The app doesn't persist it. In comparisons it appears in `skipped`, not as an error. |
 | 409 | `TRANSACTION_FAILED` | app | Explanation requested for a transaction whose `status` is `failed` |
-| 422 | `VALIDATION_ERROR` | both | Schema or type error, including any unknown request field (§1) and `policy: null`. `details.errors[]` lists them. |
+| 422 | `VALIDATION_ERROR` | both | Schema or type error, including any unknown request field (§1), `policy: null`, and explicit `history` of the wrong length. `details.errors[]` lists them. |
 | 422 | `UNSUPPORTED_CORRIDOR` | inference | Corridor not in the network |
 | 422 | `INVALID_AMOUNT` | inference | Amount ≤ 0 or not finite |
 | 422 | `DATE_OUT_OF_RANGE` | inference | Outside 2011-01-01 to 2025-09-30 |
 | 422 | `DATE_IN_GAP_BUFFER` | inference | Within a gap buffer |
 | 422 | `UNKNOWN_SCENARIO` | inference | `scenario_id` not defined |
 | 422 | `STATE_VENUE_MISMATCH` | inference | Explicit venues don't match the corridor exactly, including an empty list |
-| 422 | `INVALID_STATE_VALUE` | inference | Negative, NaN or infinite value; history of the wrong length (§10, Q5); last history value ≠ current |
+| 422 | `INVALID_STATE_VALUE` | inference | Value rules only: a negative, NaN or infinite value, or a last history value ≠ the current one. A wrong history length is `VALIDATION_ERROR`. |
 | 422 | `POLICY_UNAVAILABLE_FOR_STATE` | inference | `ppo_projected` in explicit mode without `history` on every venue |
 | 500 | `INTERNAL_ERROR` | both | Unexpected failure, with no result returned. Includes a failed engine integrity check and a failed allocation invariant (§2.8). |
 | 502 | `INFERENCE_ERROR` | app | Inference returned a 5xx other than `NOT_READY`, `ENGINE_BUSY` or `ENGINE_TIMEOUT`, or an invalid body |
 | 503 | `INFERENCE_UNAVAILABLE` | app | Inference unreachable, the backend's 15 s timeout elapsed, or inference returned `NOT_READY` |
-| 503 | `ENGINE_BUSY` | inference (passed through by app) | Engine queue full (`CBDC_ENGINE_MAX_QUEUE`). **Pending: Ayush:** also a task whose end-to-end deadline expired while it was still queued (§5). It never ran, so a retry is safe. |
-| 503 | `NOT_READY` | inference (app maps it to `INFERENCE_UNAVAILABLE`) | No engine worker is ready yet, or required artefacts failed to load |
-| 504 | `ENGINE_TIMEOUT` | inference (passed through by app) | A task that had **started** ran past its execution limit (§5) |
+| 503 | `ENGINE_BUSY` | inference (passed through by app) | Engine queue full (`CBDC_ENGINE_MAX_QUEUE`), or the request's deadline expired while it was still queued (§5). It never ran, so a retry is safe. |
+| 503 | `NOT_READY` | inference (app maps it to `INFERENCE_UNAVAILABLE` with `details.cause: "NOT_READY"`) | No engine worker is ready yet, or required artefacts failed to load |
+| 504 | `ENGINE_TIMEOUT` | inference (passed through by app) | The request's deadline expired while its task was **running** (§5). The worker is not killed for that. |
 
 A regulatory rejection is **not** an error (§2.8). `ENGINE_BUSY` and `NOT_READY` responses include a `Retry-After` header in integer seconds. The app forwards it (see above).
 
-**Not yet decided** (§10, Q10): an optional `details.cause` on `INFERENCE_UNAVAILABLE`, which would let the UI say "starting up". It is not part of v0.4.
+The optional `details.cause: "NOT_READY"` is described above.
 
 ---
 
 ## 5. Inter-service behaviour
 
 - **Backend → inference:** a 15 s timeout (`INFERENCE_TIMEOUT_MS`). `POST` requests are never retried automatically; `GET` requests may retry once. `X-Request-Id` is forwarded. The `Authorization` header is never forwarded: the inference service has no auth.
-- **Engine deadlines.** Each engine task has a **12 s end-to-end deadline**, counted from when the inference service accepts the request, and a **10 s execution limit** (`CBDC_ENGINE_TASK_TIMEOUT_S`).
-  - A task that starts runs for at most min(10 s, 12 s − time spent queued).
-  - A task that started and ran out of time fails with `504 ENGINE_TIMEOUT`. Its worker process is terminated and replaced (worker recycling, arch §6.2).
-  - **Pending: Ayush.** A task whose deadline expires while it is still queued is removed without running, and fails with `503 ENGINE_BUSY` and `Retry-After`.
-  - The 12 s deadline leaves 3 s for transport inside the backend's 15 s, so the engine always answers before the backend gives up.
-  - Whether the 12 s value is configurable, and under which variable name, is open (§10, Q9).
+- **Engine deadlines** (owner decision). Two limits apply, independently.
+  - **Request deadline:** configurable, default **12 s**, counted from when the inference service accepts the request. The variable name `CBDC_ENGINE_REQUEST_DEADLINE_S` is a proposal (§8).
+    - If it expires while the request is still **queued**, the task is removed without running and the request fails with `503 ENGINE_BUSY` and `Retry-After`.
+    - If it expires while the task is **running**, the request fails with `504 ENGINE_TIMEOUT`. The worker is **not** killed because the caller's deadline passed: the task runs on, its result is discarded, and the worker then takes the next task.
+  - **Worker execution timeout:** `CBDC_ENGINE_TASK_TIMEOUT_S`, **10 s**, counted from when the worker starts the task. It is not shortened to the time left on the request deadline. A task that runs past it is stopped: its worker process is terminated and replaced (worker recycling, arch §6.2). The request, if still waiting, gets `504 ENGINE_TIMEOUT`.
+  - The 12 s default leaves 3 s for transport inside the backend's 15 s timeout, so the engine normally answers before the backend gives up. A configured deadline must stay below `INFERENCE_TIMEOUT_MS`.
+  - One consequence: a task the caller has already been told timed out may keep a worker busy for up to 10 s, so `ENGINE_BUSY` can rise under load. That is accepted at development scale.
 - **Health checks.** The backend's check of `/v1/health` uses its own short timeout (set by Dev B; 3 s, like the database probe, was proposed), not the 15 s routing timeout.
 - **Caching:** cached `GET` results (`version`, `network`, `calendar`, `scenarios`) are invalidated when `/v1/version` reports a different `git_commit`, `knowledge.sha256` or `checkpoint.sha256`.
 - **Network exposure:** the inference service listens on the internal Compose network only and must not be published to the host in the `full` profile of `infra/compose.yaml`. For local debugging, Dev A may publish it on `127.0.0.1:8000`.
@@ -871,7 +932,7 @@ A regulatory rejection is **not** an error (§2.8). `ENGINE_BUSY` and `NOT_READY
 - Records are append-only. Corrections create new records.
 
 ### 6.2 What is persisted
-Each transaction request (including the full state spec, so explicit states can be replayed, and, for a failed transaction, its failure code), its routing decision, each allocation row, comparisons (as independent records), explanations and an audit log entry for every mutating call.
+Each transaction request (including the full state spec, so explicit states can be replayed, and, for a failed transaction, its failure code), its routing decision, each allocation row, comparisons (as independent records), explanations, and an audit log entry for each of those writes. Whether rejected requests (401, 403, 422, and errors that save nothing) also get an audit row is not decided (§10, Q19); the v0.3 wording "every mutating call" implied it. The backend review asked for the wording to match what the backend persists, and the backend branch has no audit code yet, so Dev B confirms the rule.
 
 ### 6.3 Prisma models (outline; Dev B finalises)
 
@@ -923,7 +984,8 @@ Each transaction request (including the full state spec, so explicit states can 
 | `CBDC_PPO_CHECKPOINT_ID` | inference | unset | Entry in the approval registry; unset disables `ppo_projected` |
 | `CBDC_DEVICE` | inference | `cpu` | `cpu` or `cuda` |
 | `CBDC_ENGINE_WORKERS` | inference | `2` | Engine worker processes per server process |
-| `CBDC_ENGINE_TASK_TIMEOUT_S` | inference | `10` | Execution limit for a task that has started, capped by the 12 s end-to-end deadline (§5). Exceeding it returns `ENGINE_TIMEOUT` and recycles **that worker**: its process is terminated and replaced. The other workers keep serving. |
+| `CBDC_ENGINE_TASK_TIMEOUT_S` | inference | `10` | Worker execution timeout, counted from when the task starts. Independent of the request deadline and never shortened to it (§5). Exceeding it recycles **that worker**: its process is terminated and replaced; the other workers keep serving. |
+| `CBDC_ENGINE_REQUEST_DEADLINE_S` (proposed name) | inference | `12` | Request deadline from acceptance (§5). Expiry while queued → `ENGINE_BUSY`; while running → `ENGINE_TIMEOUT`, without killing the worker. Must stay below `INFERENCE_TIMEOUT_MS`. |
 | `CBDC_ENGINE_STARTUP_TIMEOUT_S` | inference | `180` | Maximum time for one engine worker to finish warming up: loading the tables, the knowledge base and the CNN (arch §6.2). |
 | `CBDC_ENGINE_MAX_QUEUE` | inference | `32` | Waiting tasks before `ENGINE_BUSY` |
 | `CBDC_ENABLE_COGNEE` | inference | `false` | Optional Cognee support (needs local Ollama and the `services/inference/requirements/cognee-<platform>.txt` lock; see `docs/STAGE1E_MEMORY.md`). In v1, `semantic_context` is always null whatever this is set to (§2.10). |
@@ -952,31 +1014,34 @@ Each suite lives in its owner's folder and runs in that owner's path-filtered CI
 | A (`services/inference/tests/api/`) | **API:** schemas, defaults (no policy given → `waterfall`), the disabled-PPO path, regulatory rejection returning 200 (with `requested_usd = 0`, `allocations = []` and no `PARTIAL_COMPLETION`), determinism (same request → same body and `decision_id`), `405` with `Allow`, and that no Phase 1 file changes (hashes before and after). |
 | A (`services/inference/tests/`) | **Golden hashes (required on Windows and Linux):** fixed inputs must produce identical artefact fingerprints, daily-state fingerprints and `decision_id`s on both platforms, including a CRLF checkout of the text artefacts. Until this passes on both, no cross-platform determinism is claimed (§1). |
 | A (`services/inference/tests/`) | **Invariants and ranges:** an allocation that breaks the §2.8 invariant, or weights an infeasible or padding slot, returns `500 INTERNAL_ERROR` with no result. `STATE_OUTSIDE_TRAINING_RANGE` is raised in all three modes and never blocks a baseline policy. |
-| A (`services/inference/tests/concurrency/`) | **Deadlines and workers:** a started task past its limit returns `504 ENGINE_TIMEOUT` and only its worker is replaced. A queued task past the 12 s deadline never runs (its code is pending, §5). `ENGINE_BUSY` while a worker is rebuilding. Workers start within `CBDC_ENGINE_STARTUP_TIMEOUT_S`. |
+| A (`services/inference/tests/concurrency/`) | **Deadlines and workers:** a request whose deadline expires while queued gets `503 ENGINE_BUSY` and never runs; one that expires while running gets `504 ENGINE_TIMEOUT` and its worker is **not** killed; a task past the 10 s execution timeout recycles only its worker. `ENGINE_BUSY` while a worker is rebuilding. Workers start within `CBDC_ENGINE_STARTUP_TIMEOUT_S`; `ready_workers` reports them. |
 | B (`services/backend/test/` · `phase2-backend.yml`) | Mapping completeness (every engine field maps to an app field, unknown engine fields included), persistence round trip, error passthrough, timeout → 503, mock mode. **Also:**<br>• failed transactions: `failureCode` and `failure`, the null fields, `409 TRANSACTION_FAILED`;<br>• `POLICY_DISABLED` and 4xx message forwarding (capped at 500), the field-path mapping table, `NOT_READY` → `INFERENCE_UNAVAILABLE`, and `Retry-After` forwarding;<br>• strict request bodies, the 200-character `clientReference`, `policy: null` → 422, and 405 with `Allow`.<br>**Auth:** startup refusal in each forbidden configuration; 401 for missing, malformed or unknown tokens; 403 for a viewer requesting `ppoProjected`; `Authorization` never logged or persisted. |
 | C (`services/web/test/` · `phase2-web.yml`) | Rendering from every fixture, including rejection, partial completion, the disabled experimental policy, an explicit state, a failed transaction (null fields, `failure`), 401, 403, 409 and 503 with `Retry-After`. Mandatory labels and the dev-auth banner present. Token absent from `localStorage`, URLs and the built bundle; cleared on 401 and sign-out. |
 | D (`e2e/`, `infra/scripts/` · `phase2-integration.yml`) | Every fixture in `contracts/fixtures/` validates against `contracts/openapi/`, and `infra/scripts/check_contracts.py` applies the §2.8, §3.2 and §4 rules the schemas can't express. Lock drift and install checks on Linux and Windows, including the dependency checks of arch §7.2. Docker images build. The `infra/compose.yaml` `full` profile end to end: sign in → submit → route → persist → read back → explain. |
 
 ---
 
-## 10. Open decisions (v0.4)
+## 10. Open decisions (v0.4 revision)
 
-These are not decided. The contract text doesn't state a rule for them; the schemas either leave them out or accept every proposed form. Items marked **Pending** in the text above aren't listed here; each names the one person whose sign-off it needs.
+Ayush's owner decisions of 4 November resolved Q1–Q5, Q6, Q7, Q8, Q9, Q10, Q12 (no change), Q13 and Q15, and the `completionRate` part of Q11. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
+
+**Blocking: needed before the dependent implementation lands**
 
 | # | Question | Positions | Decides |
 |---|---|---|---|
-| Q1 | Does `api_version` enter `decision_id`? | No proposal yet | Ayush |
-| Q2 | What does `engine_version` mean, when must it be bumped, and does it enter `decision_id`? | No proposal yet | Ayush |
-| Q3 | App health when the database is `unavailable`: HTTP status and `status` value | **B, D:** 503 with `status: "unavailable"` (the backend can't save or list anything, so it isn't ready).<br>**C:** 200 with `status: "degraded"`, because the UI reads the body to name the failing component; add a separate readiness endpoint if needed. | Anvesh and Varshini (owner if they can't agree) |
-| Q4 | How `details.errors[]` writes an error that isn't about one field | **B:** `field: ""`, always present.<br>**C:** omit `field`.<br>**D:** omit it for request-level errors, and `""` for an engine path that can't be mapped. | Anvesh and Varshini |
-| Q5 | Error code for an explicit `history` of the wrong length | **A's v0.3 text, C and D:** `INVALID_STATE_VALUE` (kept for now).<br>**B:** `VALIDATION_ERROR`, a schema rule (`minItems`/`maxItems` 30), with `INVALID_STATE_VALUE` narrowed to value rules.<br>Note: the backend currently checks the length itself and returns `VALIDATION_ERROR` at the app, so the app and the engine disagree until this is settled. | Ayush (producer); Anvesh for the app side |
-| Q6 | Is a domain 422's `details.field` (for example `state.date` on `DATE_IN_GAP_BUFFER`) forwarded to the app after path mapping? | **B:** forward only `details.errors[]`, drop everything else.<br>**C:** needs app paths for every passed-through engine error to show inline form errors.<br>Option: the engine reports domain fields in `details.errors[]`. The existing app passthrough fixture still forwards `details.field`. | Ayush, Anvesh, Varshini |
-| Q7 | Should the app's non-`Decision` response schemas (meta, network, state, list, explanation and others) be open, or stay closed for fixture checks? Run-time tolerance is agreed in either case (§1). | **C:** open.<br>**B:** spoke only for `Decision`, which is now open.<br>**D:** fixture checks can stay strict either way. | Anvesh and Varshini |
-| Q8 | Keep `include_semantic_context` in the v1 explain request, given `semantic_context` is always null? | Keeping it contradicts the strict-request rationale; removing it is a request change. | Ayush |
-| Q9 | Is the 12 s end-to-end deadline configurable, and under which variable? | No proposal | Ayush |
-| Q10 | Optional `details.cause: "NOT_READY"` on app `INFERENCE_UNAVAILABLE` | **C:** asked for it, if cheap.<br>**B:** forwards no other details. | Anvesh |
-| Q11 | Dashboard: what `count` counts; which decisions the `mean*` fields average over; an optional field giving the `completionRate` denominator | **C:** asked for the denominator field. | Anvesh, Varshini (with Ayush's sign-off of §3.8) |
-| Q12 | Non-`ok` values of the health checks `structured_data`, `daily_state` and `knowledge_base` (C10) | The draft schema uses `[ok, error]` | Ayush |
-| Q13 | Are the illustrative fixtures' risk values right for 2022+ dates? Dev C reported a risk of 0.0 there and asked the fixtures to show `RISK_FALLBACK_USED`. | Not verified: it needs the Phase 1 data environment. | Ayush (engine-generated fixtures will settle it) |
-| Q14 | Is `405` checked before or after authentication in the app? | No proposal. The fixtures send a token, so they don't depend on the answer. | Anvesh (Varshini informed) |
-| Q15 | Does `/v1/state` also report `STATE_OUTSIDE_TRAINING_RANGE`? | No proposal | Ayush |
+| Q11 | Dashboard: the source and formula of `meanFeeCostPct` (a new stored column, or supplied by inference; which denominator), and the window defaults when `from`/`to` are omitted. Also confirm the proposed `count`/`mean*` populations in §3.8. | **B:** the formula is unconfirmed, and there's no column today. **C:** needs a defined formula and an explicit denominator. | Ayush, with Anvesh |
+| Q16 | For a passed-through engine 4xx, does the app forward the sanitised engine `message` (capped at 500) or use its own fixed message? | **v0.4 draft:** forward. **B (review):** don't expose engine messages. **C:** shows the 422 message as detail text if present. The checker now treats messages as free text, so either works for fixtures. | Anvesh and Varshini (Ayush if they don't agree) |
+| Q17 | Explaining a stored `ppoProjected` decision after its checkpoint is disabled or changed. | **Interim rule:** pass through `409 POLICY_DISABLED`; a changed checkpoint gives `409 DECISION_MISMATCH`. B lists it as open. | Ayush, with Anvesh |
+| Q19 | Audit rows: only with a persisted record, or also for rejected requests (401, 403, 422, errors that save nothing)? The `AuditLog.userId` column is required, which rules out 401 rows as the schema stands. | Not decided | Anvesh (Ayush informed) |
+
+**Non-blocking: they can follow v0.4**
+
+| # | Question | Notes | Decides |
+|---|---|---|---|
+| Q3a | Liveness endpoint path and body: proposed `GET /api/v1/health/live` → `{"status": "ok"}` | Owner decided liveness is separate; the path and body are a proposal | Anvesh |
+| Q9a | Variable name for the request deadline: proposed `CBDC_ENGINE_REQUEST_DEADLINE_S` | Owner decided it is configurable, default 12 s | Ayush |
+| Q11a | A non-UUID `:id`: `404 NOT_FOUND` or `422 VALIDATION_ERROR`? | Not implemented yet | Anvesh |
+| Q12 | Non-`ok` values of the health checks `structured_data`, `daily_state` and `knowledge_base` (C10) | Schema keeps `[ok, error]` | Ayush |
+| Q14 | Is `405` checked before or after authentication in the app? | The fixtures send a token, so they don't depend on it | Anvesh |
+| Q18 | Comparisons: the analyst default for an omitted `policies`, the order of `results`, and whether the record echoes `state` and `policies` | Both are already persisted (§6.3) | Anvesh and Varshini |
+| Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback | Nisarga, Anvesh, Varshini |
