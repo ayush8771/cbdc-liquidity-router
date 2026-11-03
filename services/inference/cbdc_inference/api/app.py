@@ -27,7 +27,7 @@ from ..engine.tasks import metadata_task
 from ..settings import Settings, get_settings
 from .errors import install_error_handling
 from .metadata import static_metadata
-from .routers import meta, reference
+from .routers import meta, reference, route
 
 logger = logging.getLogger(__name__)
 METADATA_RETRY_S = 1.0
@@ -83,4 +83,5 @@ def create_app(settings: Optional[Settings] = None,
     install_error_handling(app)
     app.include_router(meta.router)
     app.include_router(reference.router)
+    app.include_router(route.router)
     return app

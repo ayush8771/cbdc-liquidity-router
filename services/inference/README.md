@@ -16,14 +16,15 @@ The FastAPI service and engine that wrap the Phase 1 routing code. It's internal
 | Checkpoint approval registry and the `ppo_projected` gate (contract §7) | Done. The registry ships empty, so PPO is disabled |
 | Error envelope and `X-Request-Id` (contract §1, §4) | Done |
 | `EngineWorker.route(transaction, state, policy)` (`engine/worker.py`) | Done for `waterfall` (default) and `cheapest_feasible`, in `historical_replay` and `scenario` modes. Parity with Phase 1 is exact. |
-| Explicit state mode (`engine/state.py`, `EngineWorker._explicit_frame`) | Done at engine level (contract §2.4, arch §9.1). There's no HTTP endpoint yet; `/v1/route` comes next. |
+| Explicit state mode (`engine/state.py`, `EngineWorker._explicit_frame`) | Done (contract §2.4, arch §9.1). Available through `/v1/route`. |
 | `STATE_OUTSIDE_TRAINING_RANGE` | Not emitted. Its definition is undecided; see "Open points" below. |
 | `ppo_projected`, `decision_id` | Not started. `ppo_projected` raises `POLICY_DISABLED`; `decision_id` waits for C5/C7. |
 | `EnginePool` (`engine/pool.py`) | Done: spawned worker processes, one task each, a bounded queue (`ENGINE_BUSY`), a per-task timeout (`ENGINE_TIMEOUT`), and automatic rebuild after a timeout, crash or failed integrity check. Health reports `engine_workers` and the `engine_pool` block. Started and stopped with the FastAPI app. |
 | `/v1/health`, `/v1/version` (`api/routers/meta.py`) | Done. Answered from startup metadata and the pool's in-memory health, without queuing a worker task. |
 | `/v1/network`, `/v1/state` (`api/routers/reference.py`) | Done. Each request runs as a task in an engine worker; `/v1/state` uses the same request-scoped frame and integrity check as routing. |
 | `/v1/replay/calendar`, `/v1/scenarios` | Done. Answered from startup metadata, which a worker computes from Phase 1 `split.py` and `scenarios.py`. |
-| `/v1/route`, `/v1/compare`, `/v1/explain` | Not started |
+| `POST /v1/route` (`api/routers/route.py`) | Done for `waterfall` and `cheapest_feasible` in all three state modes. Blocked parts: `decision_id` is always `null` (C5/C7), and `STATE_OUTSIDE_TRAINING_RANGE` is never emitted. Unknown fields outside `state` are ignored (C8 open). |
+| `/v1/compare`, `/v1/explain` | Not started |
 | Dockerfile, `Dockerfile.dockerignore` | Not started |
 | Platform locks `requirements/*.txt` | Dev D generates them from `requirements/*.in` |
 

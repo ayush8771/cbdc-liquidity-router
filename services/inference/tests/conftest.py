@@ -73,6 +73,11 @@ class FakePool:
             f.set_result(self.metadata)
             return f
         outcome = self.results.get(fn.__name__)
+        if callable(outcome) and not isinstance(outcome, BaseException):
+            try:  # e.g. an in-process EngineWorker method, so tests use real engine output
+                outcome = outcome(*args)
+            except BaseException as exc:  # noqa: BLE001
+                outcome = exc
         if isinstance(outcome, BaseException):
             f.set_exception(outcome)
         else:

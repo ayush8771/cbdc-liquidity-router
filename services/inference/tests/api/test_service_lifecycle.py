@@ -71,6 +71,32 @@ def test_reference_endpoints_with_real_workers(live, worker):
     assert client.get("/v1/health").json()["engine_pool"]["rebuilds_since_start"] == 0  # errors don't rebuild
 
 
+def test_route_concurrent_mixed_modes_equal_serial_engine(live, worker):
+    """Isolation end to end: replay, scenario and explicit requests on the same corridor and
+    date, sent concurrently over HTTP to real worker processes, equal serial in-process results."""
+    from concurrent.futures import ThreadPoolExecutor
+    from cbdc_inference.api.routers.route import route_response
+    from cbdc_inference.engine import state_from_dict, Transaction
+    _, client = live
+    _poll(client, "/v1/health", 200)
+    explicit = {"mode": "explicit", "reference_date": "2024-06-14", "venues": [
+        {"bridge_uid": "GBR->PHL#0", "liquidity_usd": 90000.0, "congestion": 0.4},
+        {"bridge_uid": "GBR->PHL#1", "liquidity_usd": 20000.0, "congestion": 0.8},
+        {"bridge_uid": "GBR->PHL#2", "liquidity_usd": 400000.0, "congestion": 0.1}]}
+    states = [{"mode": "historical_replay", "date": "2024-06-14"},
+              {"mode": "scenario", "date": "2024-06-14", "scenario_id": "cheapest_venue_outage"}, explicit]
+    payloads = [{"transaction": {"sender_country": "GBR", "receiver_country": "PHL", "amount_usd": 300000.0},
+                 "state": s, "policy": p} for s in states for p in ("waterfall", "cheapest_feasible")]
+    order = [i % len(payloads) for i in range(24)]
+    with ThreadPoolExecutor(max_workers=8) as clients:
+        responses = list(clients.map(lambda i: client.post("/v1/route", json=payloads[i]), order))
+    static = {**live[0].state.static_metadata, "knowledge_sha256": worker.knowledge.sha256}
+    expected = [route_response(worker.route(Transaction("GBR", "PHL", 300000.0), state_from_dict(p["state"]),
+                                            p["policy"]), static, "cpu") for p in payloads]
+    assert all(r.status_code == 200 for r in responses)
+    assert [r.json() for r in responses] == [expected[i] for i in order]
+
+
 def test_worker_crash_degrades_then_recovers(live):
     app, client = live
     _poll(client, "/v1/health", 200)
