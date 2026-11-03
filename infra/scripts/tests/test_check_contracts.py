@@ -448,3 +448,68 @@ def test_fixture_line_endings_do_not_matter(root):
         text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
         path.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
     assert problems(root) == []
+
+
+# ---------------------------------------------------------------- final review: hash edge cases, fallback, scenarios
+
+def test_negative_zero_and_key_order_do_not_change_the_decision_id():
+    vec = _vector("explicit_waterfall_history_missing")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    reordered = {k: inputs[k] for k in reversed(list(inputs))}
+    reordered["request"] = {k: inputs["request"][k] for k in reversed(list(inputs["request"]))}
+    assert check_contracts.decision_id(reordered) == vec["decision_id"]
+    zero = json.loads(json.dumps(inputs))
+    zero["request"]["state"]["venues"][0]["congestion"] = 0.0
+    neg = json.loads(json.dumps(inputs))
+    neg["request"]["state"]["venues"][0]["congestion"] = -0.0
+    assert check_contracts.decision_id(zero) == check_contracts.decision_id(neg)  # RFC 8785 writes both as 0
+
+
+def test_float_values_are_hashed_exactly_not_rounded():
+    vec = _vector("replay_waterfall_default_policy")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    inputs["request"]["transaction"]["amount_usd"] = 0.1 + 0.2  # 0.30000000000000004
+    other = json.loads(json.dumps(inputs))
+    other["request"]["transaction"]["amount_usd"] = 0.3
+    assert check_contracts.decision_id(inputs) != check_contracts.decision_id(other)
+
+
+def test_unicode_is_serialised_as_utf8_not_escaped():
+    doc = {"note": "→é"}
+    assert check_contracts.rfc8785.dumps(doc) == '{"note":"→é"}'.encode("utf-8")
+
+
+def test_scenario_definition_must_match_the_state():
+    vec = _vector("scenario_cheapest_feasible")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    inputs["scenario"]["scenario_id"] = "congestion_x2"
+    with pytest.raises(ValueError):
+        check_contracts.decision_document(inputs)
+
+
+def test_ppo_without_checkpoint_has_no_decision_id():
+    vec = _vector("explicit_ppo_projected")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    inputs.pop("checkpoint_sha256")
+    with pytest.raises(ValueError):
+        check_contracts.decision_document(inputs)
+
+
+def test_compare_result_missing_fallback_warning_is_reported(root):
+    def change(d):
+        for r in d["response"]["body"]["results"]:
+            r["warnings"] = [w for w in r["warnings"] if w["code"] != "RISK_FALLBACK_USED"]
+    edit(root, "inference/compare/200_scenario_outage_ppo_skipped.json", change)
+    assert_reported(problems(root), "200_scenario_outage_ppo_skipped", "RISK_FALLBACK_USED required")
+
+
+def test_fallback_warning_with_nonzero_state_risk_is_reported(root):
+    edit(root, "inference/state/200_replay_gbr_phl.json",
+         lambda d: d["response"]["body"].update(corridor_risk=0.087))
+    assert_reported(problems(root), "200_replay_gbr_phl", "corridor_risk is the 0.0 fallback")
+
+
+def test_scenarios_fingerprint_must_match_the_scenario_list(root):
+    edit(root, "inference/meta/200_scenarios.json",
+         lambda d: d["response"]["body"]["scenarios"][0].update(liquidity_multiplier=0.5))
+    assert_reported(problems(root), "200_version.json", "scenarios_sha256")

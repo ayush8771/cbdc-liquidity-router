@@ -6,7 +6,7 @@
 
 **Revision 2 (owner's final decisions)** is in §7.
 
-**Source note.** This revision was prepared from a written summary of the three reviews, not from the full review texts. The summary's section "B. Reconcile Anvesh's backend findings" numbers his findings 1–14, and it asks for B4 and B5 to stay documented as follow-up implementation blockers. **B4 and B5 are items 4 and 5 of that list** (§2 below). The first revision wrongly said their text was missing (corrected under R2, §8).
+**Source note.** This revision was prepared from a written summary of the three reviews, not from the full review texts. B4 and B5 come from Ayush's earlier project-owner review: **B4 = Anvesh's backend integration gaps**, and **B5 = Ayush's inference implementation gaps** (attribution confirmed by Ayush in his final review; see R2, §8 and §9). Revision 3 wrongly read them as items 4 and 5 of Anvesh's findings list.
 
 ---
 
@@ -130,8 +130,9 @@ Anvesh's open points, kept explicit:
 - The `scenarioId` rules on `/state`; a 405 middleware.
 - Comparison persistence only on 200.
 - Define the behaviour when a database write fails after inference succeeds. The contract doesn't define it.
-- **B4** (Anvesh's finding 4: dashboard `window.from`/`to` nullable when the query omits them). The contract part is done (§3.8, app OpenAPI); the owner then made an omitted bound mean unbounded (A3). Backend work remaining: treat an omitted bound as unbounded and echo it as `null`.
-- **B5** (Anvesh's finding 5: close the top-level `CreateTransactionRequest` and `CreateComparisonRequest`, because the backend rejects unknown top-level fields). The contract part is done (both schemas have `additionalProperties: false`). Anvesh's first review says the backend already rejects them (C8a, "Already implemented"), and his `transactionRequest.ts` does so. Backend work remaining: keep it, and add `CreateComparisonRequest`'s validator when comparisons are implemented.
+- **B4: Anvesh's backend integration gaps** (from Ayush's project-owner review). These are the Dev B follow-ups listed above, and they stay **follow-up implementation blockers** for the backend.
+
+- **B5: Ayush's inference implementation gaps** (from Ayush's project-owner review). These are the Dev A follow-ups above and the requirements in contract §9.1 (A-1 to A-9). They stay **follow-up implementation blockers** for the inference service.
 
 **Dev C (web):**
 - Handle `failure`, the null fields, `details.cause`, the 503 Health body, and unknown enum values as in contract §1.
@@ -174,7 +175,7 @@ Anvesh's open points, kept explicit:
 | Item | Resolution | Where |
 |---|---|---|
 | **R1** | Every outdated GBR→PHL example is corrected. In June 2024 the risk lookup falls back (the proxy is NaN for PHL), so the examples now show: `risk` 0.0 on every venue, `risk_term` 0.0, rewards −0.3078 → **−0.2208** (the 0.087 risk term removed), and the `RISK_FALLBACK_USED` warning. That covers the §2.5 state example (`corridor_risk` 0.0), the §2.8 route example, the §3.2 app example and the §3.3 list example. The §3.8 dashboard example now shows the fixture's derived values, with `routed` and `allowedRouted`. The fixtures were already corrected in revision 1 | Contract §2.5, §2.8, §3.2, §3.3, §3.8 |
-| **R2** | B4/B5 attribution corrected from the review evidence: they are items 4 and 5 of Anvesh's findings in the 4 November review summary (§2). Each now names its contract change and the backend work that remains | §6 (Dev B), source note |
+| **R2** | Superseded by revision 4 (§9): B4 = Anvesh's backend integration gaps, B5 = Ayush's inference implementation gaps, both from Ayush's project-owner review | §6, source note |
 | **R3** | Exact canonical document: a table of members, `null` handling, numeric normalisation, exclusions, `checkpoint_sha256` (the hash for `ppo_projected`, `null` otherwise), and the `id_scheme` and `engine_version` rules. Seven test vectors with exact RFC 8785 strings and IDs. The checker rebuilds and verifies them, and 19 tests check that each hashed input changes the ID and each excluded input doesn't | Contract §2.11; `contracts/test-vectors/decision_id.v1.json`; checker `decision_document`, `check_vectors`; tests |
 | **R4** | `macro_risk_proxy_sha256` and `rpw_corridor_quarterly_sha256` added to `/v1/version` `data`, the app `meta`, the cache-invalidation keys (which now cover every `decision_id` input that `/v1/version` reports) and the hashed `artefacts`. The fixture values are the SHA-256 of the committed binary blobs | Contract §2.2, §2.11, §5; both OpenAPI files; version and meta fixtures; test |
 | **R5** | Q12 closed: `structured_data`, `daily_state` and `knowledge_base` are exactly `ok` or `error` | Contract §2.1, §10; inference OpenAPI |
@@ -196,3 +197,22 @@ Anvesh's open points, kept explicit:
 - Q16 (Anvesh and Varshini) and Q19 (Anvesh).
 - The `feeCostUsd` Prisma migration (Anvesh; not done, outside this change).
 - The non-blocking items in contract §10.
+
+## 9. Ayush's final corrections (revision 4)
+
+| Correction | Resolution | Where |
+|---|---|---|
+| **R2 attribution** | **B4 = Anvesh's backend integration gaps; B5 = Ayush's inference implementation gaps.** Both originated in Ayush's earlier project-owner review. Revision 3's reading (items 4 and 5 of Anvesh's findings) is withdrawn. Specific gap lists are not repeated here: they are the Dev B and Dev A follow-ups in §6 and contract §9.1 | Source note; §6 |
+| **Cache invalidation** | The keys now include `reward_weights` and the new `data.scenarios_sha256` (the RFC 8785 hash of the `/v1/scenarios` list). The checker checks the fixture value against the scenario list | Contract §2.2, §5; both OpenAPI files; version and meta fixtures; checker `check_version_fingerprints`; test |
+| **Knowledge hashing** | The Phase 2 service `knowledge_sha256` (LF-normalised) is distinguished from Phase 1's raw-byte `KnowledgeBase.sha256`, and only the service value is reported or hashed. `engine_version` must be bumped when an imported Phase 1 constant that affects outputs changes | Contract §2.2, §9.1 A-1, A-2 |
+| **Startup validation** | The service refuses to start unless `0 <= CBDC_ENGINE_MIN_START_BUDGET_S < CBDC_ENGINE_REQUEST_DEADLINE_S` | Contract §8, §9.1 A-3; arch §6.2 |
+| **Hash edge cases** | Tests added for: −0.0 vs 0.0, input key order, exact floats (`0.1+0.2` ≠ `0.3`), UTF-8 without escaping, a scenario definition that doesn't match the state, and PPO without a checkpoint | Checker tests |
+| **Fallback coverage** | Tests added: a compare result missing a required `RISK_FALLBACK_USED`, and a state view whose warning contradicts a non-zero risk | Checker tests |
+
+Dev A's requirements A-1 to A-9 are documented only; Dev A implements them separately in `services/inference/` once v0.4 is final.
+
+**PR and CI status (checked with the public GitHub API on 4 November 2026):**
+- **There is no PR for `docs/phase2-v0.4`.** The only open PR is #2 (`feature/phase2-platform` → `main`).
+- `phase2-integration.yml` runs only on `pull_request` and on pushes to `main`, so **it has never run on this branch.**
+- The last Ubuntu run of the contract checks was PR #2 at `9fd9353`, which passed.
+- Ubuntu CI for v0.4 will run once a PR from `docs/phase2-v0.4` into `feature/phase2-platform` is opened.

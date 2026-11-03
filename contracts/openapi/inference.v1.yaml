@@ -403,7 +403,7 @@ components:
           type: object
           additionalProperties: false
           required: [daily_state_sha256, bridge_network_sha256, normalization_stats_sha256, macro_risk_proxy_sha256,
-                     rpw_corridor_quarterly_sha256, date_range]
+                     rpw_corridor_quarterly_sha256, scenarios_sha256, date_range]
           properties:
             daily_state_sha256: {$ref: '#/components/schemas/Sha256Hex'}
             bridge_network_sha256: {$ref: '#/components/schemas/Sha256Hex'}
@@ -413,6 +413,11 @@ components:
               allOf: [{$ref: '#/components/schemas/Sha256Hex'}]
             rpw_corridor_quarterly_sha256:
               description: data/processed/rpw_corridor_quarterly.parquet, hashed as committed (binary, §2.11). Enters decision_id.
+              allOf: [{$ref: '#/components/schemas/Sha256Hex'}]
+            scenarios_sha256:
+              description: |
+                SHA-256 of the RFC 8785 serialisation of the /v1/scenarios `scenarios` array (§2.2). A cache
+                key only; the scenario fields that affect a decision enter decision_id directly (§2.11).
               allOf: [{$ref: '#/components/schemas/Sha256Hex'}]
             date_range: {$ref: '#/components/schemas/DateRange'}
         reward_weights: {$ref: '#/components/schemas/RewardWeights'}

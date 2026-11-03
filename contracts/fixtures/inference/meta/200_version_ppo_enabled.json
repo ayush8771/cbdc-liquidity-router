@@ -53,6 +53,7 @@
         "normalization_stats_sha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
         "macro_risk_proxy_sha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
         "rpw_corridor_quarterly_sha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e",
+        "scenarios_sha256": "783bfa6e2374e3bbbbc800de3f402a69ce6ec34ae1d1788e094c735cddaa1788",
         "date_range": {
           "start": "2011-01-01",
           "end": "2025-09-30"

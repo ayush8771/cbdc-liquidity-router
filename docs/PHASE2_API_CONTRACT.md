@@ -185,6 +185,7 @@ The FastAPI process answers `/v1/health`, `/v1/version`, `/v1/replay/calendar` a
     "normalization_stats_sha256": "<hex>",
     "macro_risk_proxy_sha256": "<hex>",
     "rpw_corridor_quarterly_sha256": "<hex>",
+    "scenarios_sha256": "<hex>",
     "date_range": {"start": "2011-01-01", "end": "2025-09-30"}
   },
   "reward_weights": {"lambda_latency": 1.0, "lambda_risk": 1.0, "lambda_unrouted": 1.0, "status": "placeholder"},
@@ -199,6 +200,11 @@ When a checkpoint is enabled, `checkpoint` is `{"checkpoint_id": "...", "sha256"
 - `engine_version` is the semantic version of the inference logic that can change routing outputs. It must be bumped whenever a code change can change any output for the same request and artefacts, and it enters `decision_id` (§2.11). A change that can't affect outputs, such as logging or error text, needn't bump it.
 - `api_version` does **not** enter `decision_id`.
 - The hashes in `knowledge` and `data` are computed as §2.11 describes. They include `macro_risk_proxy_sha256` (`data/processed/macro_risk_proxy.parquet`) and `rpw_corridor_quarterly_sha256` (`data/processed/rpw_corridor_quarterly.parquet`). Both are binary, so they are hashed as committed, and both enter `decision_id` (R4).
+- `data.scenarios_sha256` is the SHA-256 of the RFC 8785 serialisation of the `scenarios` array that `/v1/scenarios` returns. It is a cache key (§5). It doesn't enter `decision_id`, because the scenario fields that affect a decision (`scenario_id` and its three multipliers) are hashed directly (§2.11).
+- **Two knowledge hashes; don't mix them up.**
+  - `knowledge.sha256` here, and `knowledge_sha256` in `decision_id`, is the **Phase 2 service hash**: SHA-256 of `data/knowledge/regulatory_facts.json` after CRLF→LF normalisation (§2.11). It is identical on Windows and Linux.
+  - Phase 1's `KnowledgeBase.sha256` (`src/memory/knowledge.py`) is SHA-256 of the **raw file bytes**, so on a Windows CRLF checkout it differs from the committed blob. Phase 2 never reports or hashes the Phase 1 value; the service computes its own.
+- **`engine_version` and imported Phase 1 constants.** The engine imports Phase 1 code whose constants affect routing outputs: for example `RELATIVE_UNROUTED_TOLERANCE`, `MEANINGFUL_ALLOCATION_THRESHOLD`, `DEFAULT_RISK_PLACEHOLDER`, the regime tolerance and the reward computation. They are not artefact files, so no fingerprint covers them. **`engine_version` must be bumped whenever any such imported value changes.** Phase 1 is frozen at `phase1-complete`, so that should only happen through an approved change, and the bump makes it visible in every `decision_id`.
 
 ### 2.3 `GET /v1/network`
 
@@ -937,7 +943,7 @@ The optional `details.cause: "NOT_READY"` is described above.
   - The 12 s default leaves 3 s for transport inside the backend's 15 s timeout, so the engine normally answers before the backend gives up. A configured deadline must stay below `INFERENCE_TIMEOUT_MS`.
   - One consequence: a task the caller has already been told timed out may keep a worker busy for up to 10 s, so `ENGINE_BUSY` can rise under load. That is accepted at development scale.
 - **Health checks.** The backend's check of `/v1/health` uses its own short timeout (set by Dev B; 3 s, like the database probe, was proposed), not the 15 s routing timeout.
-- **Caching:** cached `GET` results (`version`, `network`, `calendar`, `scenarios`) are invalidated when `/v1/version` reports a different `git_commit`, `engine_version`, `knowledge.sha256`, `data.daily_state_sha256`, `data.bridge_network_sha256`, `data.normalization_stats_sha256`, `data.macro_risk_proxy_sha256`, `data.rpw_corridor_quarterly_sha256` or `checkpoint.sha256` (R4). That covers every input of `decision_id` that `/v1/version` reports.
+- **Caching:** cached `GET` results (`version`, `network`, `calendar`, `scenarios`) are invalidated when `/v1/version` reports a different value for any of: `git_commit`, `engine_version`, `reward_weights` (any λ), `knowledge.sha256`, `data.daily_state_sha256`, `data.bridge_network_sha256`, `data.normalization_stats_sha256`, `data.macro_risk_proxy_sha256`, `data.rpw_corridor_quarterly_sha256`, `data.scenarios_sha256` or `checkpoint.sha256`. That covers every input of `decision_id` that `/v1/version` reports, plus the cached scenario list.
 - **Network exposure:** the inference service listens on the internal Compose network only and must not be published to the host in the `full` profile of `infra/compose.yaml`. For local debugging, Dev A may publish it on `127.0.0.1:8000`.
 
 ---
@@ -1004,7 +1010,7 @@ Each transaction request (including the full state spec, so explicit states can 
 | `CBDC_ENGINE_WORKERS` | inference | `2` | Engine worker processes per server process |
 | `CBDC_ENGINE_TASK_TIMEOUT_S` | inference | `10` | Worker execution timeout, counted from when the task starts. Independent of the request deadline and never shortened to it (§5). Exceeding it recycles **that worker**: its process is terminated and replaced; the other workers keep serving. |
 | `CBDC_ENGINE_REQUEST_DEADLINE_S` | inference | `12` | Request deadline from acceptance (§5). Expiry while queued → `ENGINE_BUSY`; while running → `ENGINE_TIMEOUT`, without killing the worker. Must stay below `INFERENCE_TIMEOUT_MS`. |
-| `CBDC_ENGINE_MIN_START_BUDGET_S` | inference | `1` (provisional) | A queued task is not dispatched if less than this is left on its request deadline; it gets `ENGINE_BUSY` instead (§5). 0 disables it. |
+| `CBDC_ENGINE_MIN_START_BUDGET_S` | inference | `1` (provisional) | A queued task is not dispatched if less than this is left on its request deadline; it gets `ENGINE_BUSY` instead (§5). 0 disables it. **Startup validation:** the service refuses to start unless `0 <= CBDC_ENGINE_MIN_START_BUDGET_S < CBDC_ENGINE_REQUEST_DEADLINE_S`, because a budget at or above the deadline would reject every queued request. |
 | `CBDC_ENGINE_STARTUP_TIMEOUT_S` | inference | `180` | Maximum time for one engine worker to finish warming up: loading the tables, the knowledge base and the CNN (arch §6.2). |
 | `CBDC_ENGINE_MAX_QUEUE` | inference | `32` | Waiting tasks before `ENGINE_BUSY` |
 | `CBDC_ENABLE_COGNEE` | inference | `false` | Optional Cognee support (needs local Ollama and the `services/inference/requirements/cognee-<platform>.txt` lock; see `docs/STAGE1E_MEMORY.md`). In v1, `semantic_context` is always null whatever this is set to (§2.10). |
@@ -1044,9 +1050,9 @@ These are **requirements** that Dev A's inference service and its tests must mee
 
 | # | Requirement | Contract | Test that shows it |
 |---|---|---|---|
-| A-1 | Deterministic `decision_id`: RFC 8785 over the §2.11 document, covering every output-affecting input | §2.11 | Reproduce every vector in `contracts/test-vectors/decision_id.v1.json` byte for byte |
-| A-2 | Cross-platform artefact and daily-state hashing (text files CRLF→LF, binaries raw, little-endian row hashes with column names and dtypes) | §2.11; arch §6.2, §7.4 | Golden-hash test, identical on Windows and Linux CI |
-| A-3 | 10 s worker execution timeout; 12 s request deadline (`CBDC_ENGINE_REQUEST_DEADLINE_S`); 1 s minimum start budget (`CBDC_ENGINE_MIN_START_BUDGET_S`) | §5, §8 | Queued expiry and under-budget → `ENGINE_BUSY`, never run; deadline while running → `ENGINE_TIMEOUT` with the worker kept; past 10 s → only that worker recycled |
+| A-1 | Deterministic `decision_id`: RFC 8785 over the §2.11 document, covering every output-affecting input; checkpoint hash for `ppo_projected` only; `engine_version` bumped when an imported Phase 1 constant affecting outputs changes | §2.2, §2.11 | Reproduce every vector in `contracts/test-vectors/decision_id.v1.json` byte for byte |
+| A-2 | Cross-platform artefact and daily-state hashing (text files CRLF→LF, binaries raw, little-endian row hashes with column names and dtypes). Covers the **six** `decision_id` artefact fingerprints: knowledge, daily state, bridge network, normalisation stats, macro-risk proxy and RPW cost baseline. Also `scenarios_sha256` in `/v1/version` | §2.2, §2.11; arch §6.2, §7.4 | Golden-hash test, identical on Windows and Linux CI; the service `knowledge_sha256` equals the LF-normalised hash, not Phase 1's raw-byte `KnowledgeBase.sha256` |
+| A-3 | 10 s worker execution timeout; 12 s request deadline (`CBDC_ENGINE_REQUEST_DEADLINE_S`); 1 s minimum start budget (`CBDC_ENGINE_MIN_START_BUDGET_S`), with startup refused unless `0 <= budget < deadline` | §5, §8 | Queued expiry and under-budget → `ENGINE_BUSY`, never run; deadline while running → `ENGINE_TIMEOUT` with the worker kept; past 10 s → only that worker recycled |
 | A-4 | Configurable worker startup timeout, default 180 s (`CBDC_ENGINE_STARTUP_TIMEOUT_S`) | §8; arch §6.2 | Before readiness, `NOT_READY` and `ready: false` |
 | A-5 | Strict request validation and the agreed error formats (`details.errors[]`, `field` omitted for form-level errors, sanitised 4xx messages, `VALIDATION_ERROR` for wrong-length history) | §1, §2.4, §4 | Every inference error fixture |
 | A-5b | `405 METHOD_NOT_ALLOWED` with an `Allow` header listing the path's methods | §4 | `inference/errors/405_method_not_allowed.json` |

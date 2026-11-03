@@ -117,6 +117,11 @@ def decision_document(inputs: dict) -> dict:
     }
 
 
+def scenarios_sha256(scenarios: list) -> str:
+    """§2.2: SHA-256 of the RFC 8785 serialisation of the /v1/scenarios `scenarios` array."""
+    return hashlib.sha256(rfc8785.dumps(scenarios)).hexdigest()
+
+
 def canonical(doc: dict) -> str:
     return rfc8785.dumps(doc).decode("utf-8")
 
@@ -731,6 +736,17 @@ class Checker:
             if HEX64_TOKEN.search(json.dumps(fx)):
                 self.fail(rel, "contains a 64-hex bearer token; fixtures may only use mock-viewer / mock-analyst")
 
+    def check_version_fingerprints(self) -> None:
+        """§2.2: data.scenarios_sha256 is the hash of the scenario definitions /v1/scenarios returns."""
+        listing = self.fixtures.get("inference/meta/200_scenarios.json")
+        if listing is None:
+            return
+        want = scenarios_sha256(listing["response"]["body"]["scenarios"])
+        for rel in ("inference/meta/200_version.json", "inference/meta/200_version_ppo_enabled.json"):
+            fx = self.fixtures.get(rel)
+            if fx is not None and fx["response"]["body"]["data"].get("scenarios_sha256") != want:
+                self.fail(rel, f"data.scenarios_sha256 must be the RFC 8785 hash of /v1/scenarios ({want})")
+
     def check_vectors(self) -> None:
         """§2.11 test vectors: each canonical string and decision_id follows from its inputs."""
         path = self.contracts / "test-vectors" / "decision_id.v1.json"
@@ -764,6 +780,7 @@ class Checker:
             self.check_derived(rel, fx)
         self.check_failures()
         self.check_vectors()
+        self.check_version_fingerprints()
         self.check_coverage()
         self.check_secrets()
         return self.problems
