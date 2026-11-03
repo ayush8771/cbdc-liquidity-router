@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from cbdc_inference.engine import ReplayState, ScenarioState, Transaction
+from cbdc_inference.engine import (ExplicitHistory, ExplicitState, ExplicitVenue, ReplayState, ScenarioState,
+                                   Transaction)
 from cbdc_inference.engine import errors as E
 from cbdc_inference.engine import tasks
 from cbdc_inference.engine.pool import EnginePool
@@ -20,6 +21,13 @@ CASES = [(Transaction("GBR", "PHL", 300000.0), ReplayState(DATE), "waterfall"),
          (Transaction("GBR", "PHL", 300000.0), ScenarioState(DATE, "cheapest_venue_outage"), "waterfall"),
          (Transaction("GBR", "PHL", 300000.0), ScenarioState(DATE, "liquidity_minus50"), "cheapest_feasible"),
          (Transaction("USA", "IND", 250000.0), ReplayState("2023-03-01"), "cheapest_feasible"),
+         (Transaction("GBR", "PHL", 300000.0), ExplicitState(DATE, tuple(
+             ExplicitVenue(u, l, c, ExplicitHistory(tuple([l] * 30), tuple([c] * 30)))
+             for u, l, c in (("GBR->PHL#0", 90000.0, 0.4), ("GBR->PHL#1", 20000.0, 0.8),
+                             ("GBR->PHL#2", 400000.0, 0.1)))), "waterfall"),
+         (Transaction("GBR", "PHL", 300000.0), ExplicitState(DATE, tuple(
+             ExplicitVenue(u, 250000.0, 0.5) for u in ("GBR->PHL#2", "GBR->PHL#0", "GBR->PHL#1"))),
+          "cheapest_feasible"),
          (Transaction("ARE", "MEX", 90000.0), ScenarioState("2016-07-07", "congestion_x2"), "waterfall"),
          (Transaction("GBR", "PHL", 600000.0), ReplayState(DATE), "waterfall")]  # regulatory rejection
 

@@ -15,7 +15,7 @@ EXPECTED = [
     "cbdc_inference/api/metadata.py",
     "cbdc_inference/engine/__init__.py", "cbdc_inference/engine/errors.py",
     "cbdc_inference/engine/types.py", "cbdc_inference/engine/worker.py",
-    "cbdc_inference/engine/pool.py", "cbdc_inference/engine/tasks.py",
+    "cbdc_inference/engine/pool.py", "cbdc_inference/engine/tasks.py", "cbdc_inference/engine/state.py",
     "tests/conftest.py",
 ]
 

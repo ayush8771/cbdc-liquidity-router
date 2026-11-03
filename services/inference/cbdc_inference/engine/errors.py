@@ -42,6 +42,21 @@ class UnknownScenario(EngineError):
     code, http_status = "UNKNOWN_SCENARIO", 422
 
 
+class StateVenueMismatch(EngineError):
+    """Explicit venues don't list the corridor's venues exactly, each once (§2.4)."""
+    code, http_status = "STATE_VENUE_MISMATCH", 422
+
+
+class InvalidStateValue(EngineError):
+    """Negative, NaN or infinite value; history of the wrong length; last history value != current (§2.4)."""
+    code, http_status = "INVALID_STATE_VALUE", 422
+
+
+class PolicyUnavailableForState(EngineError):
+    """ppo_projected in explicit mode without history on every venue (§2.4)."""
+    code, http_status = "POLICY_UNAVAILABLE_FOR_STATE", 422
+
+
 class PolicyDisabled(EngineError):
     code, http_status = "POLICY_DISABLED", 409
 

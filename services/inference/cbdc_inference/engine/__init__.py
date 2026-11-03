@@ -5,17 +5,20 @@ engine worker process), never at package import time, so the API process holds
 no Phase 1 state.
 
 Implemented: `EngineWorker.route(transaction, state, policy)` for `waterfall`
-(default) and `cheapest_feasible`, in historical_replay and scenario modes.
+(default) and `cheapest_feasible`, in historical_replay, scenario and explicit modes.
 `EnginePool` (pool.py) runs it in isolated spawned worker processes with a
 bounded queue, per-task timeout and automatic rebuild.
-Not yet: explicit states, ppo_projected, decision_id.
+Not yet: ppo_projected, decision_id, STATE_OUTSIDE_TRAINING_RANGE.
 """
 from .errors import EngineError
-from .types import DEFAULT_POLICY, POLICIES, ReplayState, RouteResult, ScenarioState, Transaction
+from .state import state_from_dict, validate_explicit_values
+from .types import (DEFAULT_POLICY, POLICIES, ExplicitHistory, ExplicitState, ExplicitVenue, ReplayState,
+                    RouteResult, ScenarioState, Transaction)
 from .pool import EnginePool
 from .worker import EngineWorker, init_worker, run_route
 
 route = run_route  # the unified route(transaction, state, policy) entry point inside a worker process
 
 __all__ = ["EngineError", "EnginePool", "EngineWorker", "init_worker", "run_route", "route", "DEFAULT_POLICY", "POLICIES",
-           "ReplayState", "ScenarioState", "RouteResult", "Transaction"]
+           "ReplayState", "ScenarioState", "ExplicitState", "ExplicitVenue", "ExplicitHistory", "RouteResult",
+           "Transaction", "state_from_dict", "validate_explicit_values"]

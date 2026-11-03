@@ -16,7 +16,9 @@ The FastAPI service and engine that wrap the Phase 1 routing code. It's internal
 | Checkpoint approval registry and the `ppo_projected` gate (contract §7) | Done. The registry ships empty, so PPO is disabled |
 | Error envelope and `X-Request-Id` (contract §1, §4) | Done |
 | `EngineWorker.route(transaction, state, policy)` (`engine/worker.py`) | Done for `waterfall` (default) and `cheapest_feasible`, in `historical_replay` and `scenario` modes. Parity with Phase 1 is exact. |
-| Explicit state mode, `ppo_projected`, `decision_id` | Not started. `ppo_projected` raises `POLICY_DISABLED`; `decision_id` waits for C7. |
+| Explicit state mode (`engine/state.py`, `EngineWorker._explicit_frame`) | Done at engine level (contract §2.4, arch §9.1). There's no HTTP endpoint yet; `/v1/route` comes next. |
+| `STATE_OUTSIDE_TRAINING_RANGE` | Not emitted. Its definition is undecided; see "Open points" below. |
+| `ppo_projected`, `decision_id` | Not started. `ppo_projected` raises `POLICY_DISABLED`; `decision_id` waits for C5/C7. |
 | `EnginePool` (`engine/pool.py`) | Done: spawned worker processes, one task each, a bounded queue (`ENGINE_BUSY`), a per-task timeout (`ENGINE_TIMEOUT`), and automatic rebuild after a timeout, crash or failed integrity check. Health reports `engine_workers` and the `engine_pool` block. Started and stopped with the FastAPI app. |
 | `/v1/health`, `/v1/version` (`api/routers/meta.py`) | Done. Answered from startup metadata and the pool's in-memory health, without queuing a worker task. |
 | `/v1/network`, `/v1/state` (`api/routers/reference.py`) | Done. Each request runs as a task in an engine worker; `/v1/state` uses the same request-scoped frame and integrity check as routing. |
@@ -164,6 +166,25 @@ Paths are relative to `CBDC_REPO_ROOT`:
 7. **Dockerfile** and its allow-list `Dockerfile.dockerignore` (arch §4.2).
 
 ### Open points to raise with Nisaraga / Dev D (no contract change made)
+
+0. **`STATE_OUTSIDE_TRAINING_RANGE` can't be implemented without a decision.** Findings from Phase 1:
+   - **Two sets of "frozen train-only statistics" exist.**
+     - The CNN daily stats (`liquidity_level` / `congestion_level`, keyed by parquet bridge ID) use every train-period day (n = 4018 per venue).
+     - The raw PPO stats (`capacity`, keyed by `bridge_uid`) use only liquidity on training-transaction dates (for example n = 179 for GBR->PHL#1). Raw congestion has no stat of its own.
+     - Both hold mean and std only. Neither has a min or max.
+   - **Error or warning?** Arch §9.1 says out-of-range values "return" the code, like an error. Contract §2.4 and the §2.8 table make it a warning.
+   - **Not settled either:**
+     - whether it applies to the current values only or also to the 30 history values;
+     - whether replay dates outside the range should be flagged (the contract only covers explicit and scenario values);
+     - whether the bounds are inclusive.
+   - **Measured, against the per-venue train-period daily min–max:**
+     - test-period replay: 0.7% of venue-days fall outside (validation: 0.9%);
+     - `cheapest_venue_outage`: 11.8%;
+     - `congestion_x2`: 23.9%;
+     - `combined_stress`: 6.1%.
+   - **Options:**
+     - (a) per-venue min–max over the train-period daily rows (2011-01-01 to 2021-12-31, gap buffers included, matching the n = 4018 stats);
+     - (b) min–max over training-transaction dates only.
 
 1. **Inputs vs. Cognee:** arch §7.2 lists the root `requirements.txt` as a lock input, but that file pins `cognee==1.4.2`, which is meant to be separate. `service.in` therefore repeats the Phase 1 runtime pins without Cognee or openpyxl. Confirm this with Dev D.
 2. **Framework errors with no contract code:** for example `405 Method Not Allowed`. The envelope currently uses `MALFORMED_REQUEST`. Either the contract defines a code (such as `METHOD_NOT_ALLOWED`) or we accept this.

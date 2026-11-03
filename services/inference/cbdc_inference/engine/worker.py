@@ -29,9 +29,11 @@ from types import SimpleNamespace
 from typing import Optional
 
 from .errors import (DateInGapBuffer, DateOutOfRange, EngineIntegrityError, EngineNotReady, InvalidAmount,
-                     PolicyDisabled, UnknownScenario, UnsupportedCorridor, ValidationFailed)
-from .types import (DEFAULT_POLICY, POLICIES, POLICY_STATUS, Allocation, ReplayState, RouteResult, ScenarioState,
-                    Transaction, EngineWarning)
+                     PolicyDisabled, PolicyUnavailableForState, StateVenueMismatch, UnknownScenario,
+                     UnsupportedCorridor, ValidationFailed)
+from .state import HISTORY_DAYS, validate_explicit_values
+from .types import (DEFAULT_POLICY, POLICIES, POLICY_STATUS, Allocation, ExplicitState, ReplayState, RouteResult,
+                    ScenarioState, Transaction, EngineWarning)
 
 # Files read at inference (README "Data read at inference"). data/raw is not read.
 REQUIRED_FILES = (
@@ -101,16 +103,35 @@ class EngineWorker:
         self._scenario_frames: dict = {}
         self.healthy = True
         self.tasks_run = 0
+        # No checkpoint is approved and PPO is not wired into the engine yet (D2-D4).
+        self.ppo_enabled = False
 
     # ------------------------------------------------------------------ validation
     def _validate_policy(self, policy: Optional[str]) -> str:
         policy = DEFAULT_POLICY if policy is None else policy
         if policy not in POLICIES:
             raise ValidationFailed(f"unsupported policy {policy!r}", {"field": "policy"})
-        if policy == "ppo_projected":
-            # No checkpoint is approved and PPO is not wired into the engine yet (D2-D4).
+        if policy == "ppo_projected" and not self.ppo_enabled:
             raise PolicyDisabled(PPO_DISABLED_MESSAGE, {"field": "policy"})
         return policy
+
+    @staticmethod
+    def _check_policy_for_state(policy: str, state) -> None:
+        """ppo_projected needs 30-day history on every explicit venue: its CNN window would
+        otherwise mix synthetic and replay values (§2.4, arch §9.1). Baselines read only the
+        reference-date row, so they never need history."""
+        if policy == "ppo_projected" and isinstance(state, ExplicitState) and not state.has_full_history:
+            raise PolicyUnavailableForState("ppo_projected needs 30-day history on every venue in explicit mode",
+                                            {"field": "state.venues"})
+
+    def _validate_explicit_venues(self, state: ExplicitState, sender: str, receiver: str) -> ExplicitState:
+        state = validate_explicit_values(state)
+        expected = [b["bridge_id"] for b in self.corridors[(sender, receiver)]]
+        given = [v.bridge_uid for v in state.venues]
+        if len(given) != len(set(given)) or set(given) != set(expected):
+            raise StateVenueMismatch("explicit venues must list exactly the corridor's venues, each once",
+                                     {"field": "state.venues", "expected": expected, "given": given})
+        return state
 
     def _validate_transaction(self, tx: Transaction):
         amount = tx.amount_usd
@@ -155,8 +176,41 @@ class EngineWorker:
                 self._scenario_frames[state.scenario_id] = (frame, frame_fingerprint(frame))
             frame, sha = self._scenario_frames[state.scenario_id]
             return frame, sha, state.scenario_id, "synthetic_scenario"
-        raise ValidationFailed("state must be historical_replay or scenario (explicit mode is not implemented yet)",
-                               {"field": "state.mode"})
+        if isinstance(state, ExplicitState):
+            frame = self._explicit_frame(state)
+            return frame, frame_fingerprint(frame), None, "user_supplied_synthetic"
+        raise ValidationFailed("state.mode must be historical_replay, scenario or explicit", {"field": "state.mode"})
+
+    def _explicit_frame(self, state: ExplicitState):
+        """A request-scoped COPY of the baseline table with only the caller's venues
+        overridden (arch §9.1): the reference-date row, plus the 29 preceding days when
+        history is given. BASELINE_FRAME itself is never written. Fees, venue set, risk
+        and the cost baseline are not in this table and stay Phase 1's."""
+        pd, dbs = self._p.pd, self._p.dbs
+        frame = self.baseline_frame.copy(deep=True)
+        ref = pd.Timestamp(state.reference_date)
+        dates = frame["date"].values
+        bridge_ids = frame["bridge_id"].values
+        liq_col = frame.columns.get_loc("liquidity_level")
+        cong_col = frame.columns.get_loc("congestion_level")
+        for v in state.venues:
+            is_venue = bridge_ids == dbs._parquet_bridge_id(v.bridge_uid)  # Phase 1's uid -> parquet id mapping
+            if v.history is None:
+                rows = (is_venue & (dates == ref.to_datetime64())).nonzero()[0]
+                liquidity, congestion = [v.liquidity_usd], [v.congestion]
+            else:
+                start = (ref - pd.Timedelta(days=HISTORY_DAYS - 1)).to_datetime64()
+                rows = (is_venue & (dates >= start) & (dates <= ref.to_datetime64())).nonzero()[0]
+                # history[0..28] for the preceding days, then the current value on the reference date
+                liquidity = list(v.history.liquidity_usd[:-1]) + [v.liquidity_usd]
+                congestion = list(v.history.congestion[:-1]) + [v.congestion]
+            rows = rows[frame["date"].values[rows].argsort(kind="stable")]  # oldest first
+            if len(rows) != len(liquidity):
+                raise EngineIntegrityError("daily state has a gap where the explicit state is applied",
+                                           {"bridge_uid": v.bridge_uid, "rows": int(len(rows))})
+            frame.iloc[rows, liq_col] = liquidity
+            frame.iloc[rows, cong_col] = congestion
+        return frame
 
     # ------------------------------------------------------------------ integrity
     def check_integrity(self):
@@ -179,10 +233,18 @@ class EngineWorker:
             raise EngineNotReady("engine worker is unhealthy and must be rebuilt")
         policy = self._validate_policy(policy)
         (sender, receiver), amount = self._validate_transaction(transaction)
-        if not isinstance(state, (ReplayState, ScenarioState)):
-            raise ValidationFailed("state must be historical_replay or scenario (explicit mode is not implemented yet)",
+        if isinstance(state, ExplicitState):
+            state = self._validate_explicit_venues(state, sender, receiver)
+            date_str, split = self._validate_date(state.reference_date, "state.reference_date")
+        elif isinstance(state, (ReplayState, ScenarioState)):
+            date_str, split = self._validate_date(state.date, "state.date")
+        else:
+            raise ValidationFailed("state.mode must be historical_replay, scenario or explicit",
                                    {"field": "state.mode"})
-        date_str, split = self._validate_date(state.date, "state.date")
+        self._check_policy_for_state(policy, state)
+        if policy == "ppo_projected":
+            # reachable only if ppo_enabled is set; the PPO path itself is not implemented yet
+            raise PolicyDisabled("ppo_projected is not implemented in this engine version", {"field": "policy"})
         frame, frame_sha, scenario_id, values_provenance = self._frame_for(state)
 
         try:

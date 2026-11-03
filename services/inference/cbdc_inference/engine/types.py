@@ -34,7 +34,35 @@ class ScenarioState:
     mode: str = field(default="scenario", init=False)
 
 
-StateSpec = Union[ReplayState, ScenarioState]  # explicit mode: not implemented yet
+@dataclass(frozen=True)
+class ExplicitHistory:
+    """30 values per channel, oldest first; the last equals the venue's current value (§2.4)."""
+    liquidity_usd: tuple
+    congestion: tuple
+
+
+@dataclass(frozen=True)
+class ExplicitVenue:
+    """Only liquidity and congestion can be supplied. There is deliberately no field for
+    fee, risk, cost baseline or data_source_tag: those always come from Phase 1 (arch §9.1)."""
+    bridge_uid: str
+    liquidity_usd: float
+    congestion: float
+    history: Optional[ExplicitHistory] = None
+
+
+@dataclass(frozen=True)
+class ExplicitState:
+    reference_date: str  # YYYY-MM-DD; risk, cost baseline and split come from this date
+    venues: tuple        # of ExplicitVenue, exactly the corridor's venues, any order
+    mode: str = field(default="explicit", init=False)
+
+    @property
+    def has_full_history(self) -> bool:
+        return bool(self.venues) and all(v.history is not None for v in self.venues)
+
+
+StateSpec = Union[ReplayState, ScenarioState, ExplicitState]
 
 
 @dataclass(frozen=True)
