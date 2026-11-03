@@ -1,0 +1,38 @@
+{
+  "description": "Inference answered 503 NOT_READY (see inference/errors/503_not_ready.json): mapped to INFERENCE_UNAVAILABLE, Retry-After forwarded, persisted as failed (§3.2).",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-503_inference_not_ready"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Retry-After": "5",
+      "X-Request-Id": "fixture-503_inference_not_ready"
+    },
+    "body": {
+      "error": {
+        "code": "INFERENCE_UNAVAILABLE",
+        "message": "The inference service is unavailable.",
+        "details": {
+          "transactionId": "94f3896b-b9f1-5efa-90e7-2effa29d865b"
+        },
+        "requestId": "fixture-503_inference_not_ready"
+      }
+    }
+  }
+}

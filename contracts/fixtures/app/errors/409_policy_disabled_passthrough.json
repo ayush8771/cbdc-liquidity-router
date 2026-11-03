@@ -1,0 +1,40 @@
+{
+  "description": "An analyst requests ppoProjected while it is disabled. Passed through with the same code and status; the engine's 4xx message is forwarded and its other details dropped. Not persisted, so no transactionId (§3.2, §4).",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "error",
+    "fixture": "inference/errors/409_policy_disabled.json"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-409_policy_disabled_passthrough"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      },
+      "policy": "ppoProjected"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "X-Request-Id": "fixture-409_policy_disabled_passthrough"
+    },
+    "body": {
+      "error": {
+        "code": "POLICY_DISABLED",
+        "message": "ppo_projected is disabled: no approved checkpoint configured.",
+        "details": {},
+        "requestId": "fixture-409_policy_disabled_passthrough"
+      }
+    }
+  }
+}

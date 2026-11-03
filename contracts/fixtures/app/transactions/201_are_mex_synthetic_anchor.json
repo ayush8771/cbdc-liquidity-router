@@ -41,6 +41,7 @@
         "simulationDate": "2024-06-14",
         "clientReference": null
       },
+      "failure": null,
       "decision": {
         "decisionId": "sha256:f7b04ea1ba90f8fdc250202d903afd781d45387aadebe3ba6fe5c3281a8719c6",
         "policy": "waterfall",

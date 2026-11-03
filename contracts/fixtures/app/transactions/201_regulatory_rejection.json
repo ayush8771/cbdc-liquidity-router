@@ -41,6 +41,7 @@
         "simulationDate": "2024-06-14",
         "clientReference": null
       },
+      "failure": null,
       "decision": {
         "decisionId": "sha256:19a8e086d7080c41d89566f4c4f79683783a78f49c6caac05510280cef9219be",
         "policy": "waterfall",
@@ -101,12 +102,7 @@
           "device": "cpu",
           "platform": "linux-x86_64"
         },
-        "warnings": [
-          {
-            "code": "PARTIAL_COMPLETION",
-            "message": "Executed 0.0% of the amount; the rest is unrouted."
-          }
-        ]
+        "warnings": []
       }
     }
   }

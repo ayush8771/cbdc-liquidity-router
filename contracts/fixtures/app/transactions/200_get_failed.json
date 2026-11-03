@@ -1,5 +1,5 @@
 {
-  "description": "GET a transaction persisted with status failed (inference was busy). decision is null (issue C4).",
+  "description": "GET a transaction persisted with status failed (inference was busy; see app/errors/503_engine_busy.json). decision and transaction.corridor are null; failure carries the POST's code and the backend's fixed message (§3.2).",
   "source": "illustrative",
   "request": {
     "method": "GET",
@@ -22,10 +22,14 @@
       "transaction": {
         "senderCountry": "GBR",
         "receiverCountry": "PHL",
-        "corridor": "GBR->PHL",
+        "corridor": null,
         "amountUsd": 300000.0,
         "simulationDate": "2024-06-14",
         "clientReference": null
+      },
+      "failure": {
+        "code": "ENGINE_BUSY",
+        "message": "Engine queue is full; retry later."
       },
       "decision": null
     }

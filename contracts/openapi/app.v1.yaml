@@ -1,15 +1,27 @@
 openapi: 3.1.0
 info:
   title: CBDC Liquidity Router — Application API (public)
-  version: 0.3.0
+  version: 0.4.0
   description: |
-    Machine-readable form of docs/PHASE2_API_CONTRACT.md v0.3, §1, §3 and §4.
+    Machine-readable form of docs/PHASE2_API_CONTRACT.md v0.4, §1, §3 and §4.
     Producer: Dev B (Express, services/backend/). Consumer: Dev C (services/web/).
     Field case: camelCase. Same origin through the Vite proxy; backend on port 4000.
 
     Status: DRAFT pending approval by Dev A, B and C (arch §10). Until it is
     approved, docs/PHASE2_API_CONTRACT.md stays normative; any difference
-    between the two is a bug in this file.
+    between the two is a bug in this file. Questions the contract leaves open
+    (contract §10) are left open here too: the schema accepts every proposed form.
+
+    Requests are strict: every request object has additionalProperties: false
+    (§1). Responses are tolerant at run time: consumers ignore unknown fields.
+    The Decision schema and the engine-derived schemas it uses (Warning,
+    RewardWeights, Checkpoint) are open, so new engine fields pass through.
+    The other response schemas stay closed for fixture conformance checks
+    (contract §10, Q7).
+
+    405 METHOD_NOT_ALLOWED (with an Allow header) is returned for any method a
+    documented path doesn't define. It is not listed per operation, because
+    such methods have no operation; see components.responses.MethodNotAllowed.
 
     Engine → app mapping (§3.2): every key snake_case → camelCase. Only two
     kinds of enum value are mapped: policy names (cheapest_feasible →
@@ -166,6 +178,7 @@ paths:
         '400': {$ref: '#/components/responses/Malformed'}
         '401': {$ref: '#/components/responses/Unauthenticated'}
         '403': {$ref: '#/components/responses/ForbiddenPolicy'}
+        '409': {$ref: '#/components/responses/PolicyDisabled'}
         '422': {$ref: '#/components/responses/Unprocessable'}
         '500': {$ref: '#/components/responses/InternalError'}
         '502': {$ref: '#/components/responses/InferenceError'}
@@ -205,7 +218,7 @@ paths:
         - {$ref: '#/components/parameters/Id'}
       responses:
         '200':
-          description: Same body as the 201 of POST /transactions.
+          description: Same body as the 201 of POST /transactions, including failed transactions (decision null, failure set).
           headers: {X-Request-Id: {$ref: '#/components/headers/XRequestId'}}
           content: {application/json: {schema: {$ref: '#/components/schemas/TransactionRecord'}}}
         '401': {$ref: '#/components/responses/Unauthenticated'}
@@ -227,7 +240,7 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/Explanation'}}}
         '401': {$ref: '#/components/responses/Unauthenticated'}
         '404': {$ref: '#/components/responses/NotFound'}
-        '409': {$ref: '#/components/responses/DecisionMismatch'}
+        '409': {$ref: '#/components/responses/ExplanationConflict'}
         '500': {$ref: '#/components/responses/InternalError'}
         '502': {$ref: '#/components/responses/InferenceError'}
         '503': {$ref: '#/components/responses/Unavailable'}
@@ -237,7 +250,7 @@ paths:
     post:
       tags: [comparisons]
       operationId: createComparison
-      summary: Compare policies for one transaction; persisted (§3.6)
+      summary: Compare policies for one transaction; persisted as an independent record (§3.6)
       parameters: [{$ref: '#/components/parameters/RequestId'}]
       requestBody:
         required: true
@@ -320,6 +333,9 @@ components:
       schema: {type: string}
     RetryAfter:
       schema: {type: integer, minimum: 0}
+    Allow:
+      description: The methods the path supports (RFC 9110), e.g. "POST".
+      schema: {type: string}
 
   responses:
     Malformed:
@@ -334,11 +350,23 @@ components:
     NotFound:
       description: NOT_FOUND
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
-    DecisionMismatch:
-      description: DECISION_MISMATCH — recomputed decisionId differs from the stored one (engine artefacts changed).
+    ExplanationConflict:
+      description: |
+        DECISION_MISMATCH: the recomputed decisionId differs from the stored one (engine artefacts changed).
+        TRANSACTION_FAILED: the transaction's status is "failed"; inference is not called (§3.5).
+        POLICY_DISABLED: passed through from /v1/explain; nothing is stored.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    PolicyDisabled:
+      description: POLICY_DISABLED, passed through from inference (§3.2, §4). Not persisted. A viewer gets 403 first.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    MethodNotAllowed:
+      description: METHOD_NOT_ALLOWED. The path exists but not with this method (§4).
+      headers: {Allow: {$ref: '#/components/headers/Allow'}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     Unprocessable:
-      description: VALIDATION_ERROR, or an engine 422 passed through with the same code (§3.2). Not persisted.
+      description: |
+        VALIDATION_ERROR, or an engine 422 passed through with the same code (§3.2). Not persisted.
+        A passed-through engine message is truncated to 500 characters (§4).
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     InternalError:
       description: INTERNAL_ERROR
@@ -347,11 +375,15 @@ components:
       description: INFERENCE_ERROR — inference returned 5xx or an invalid body.
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     Unavailable:
-      description: INFERENCE_UNAVAILABLE (unreachable or 15 s timeout) or ENGINE_BUSY (passed through, with Retry-After).
+      description: |
+        INFERENCE_UNAVAILABLE: unreachable, the 15 s timeout elapsed, or inference returned NOT_READY.
+        ENGINE_BUSY: passed through.
+        Retry-After (integer seconds) is forwarded whenever inference sent it (ENGINE_BUSY, NOT_READY).
+        A failed POST /transactions is persisted as failed (§3.2).
       headers: {Retry-After: {$ref: '#/components/headers/RetryAfter'}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     EngineTimeout:
-      description: ENGINE_TIMEOUT, passed through from inference.
+      description: ENGINE_TIMEOUT, passed through from inference. A task that started and ran past its limit (§5).
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
 
   schemas:
@@ -418,12 +450,18 @@ components:
       additionalProperties: false
       required: [status, database, inference, authMode, time]
       properties:
-        status: {type: string, enum: [ok, degraded]}
-        database:
-          description: The contract shows only "ok"; "unavailable" is used by the backend (contracts/README.md, issue C1).
+        status:
+          description: |
+            With the database ok: "ok" when inference is ok or mock, "degraded" when inference is
+            degraded or unavailable (HTTP 200). The status and HTTP code when the database is
+            unavailable are open (contract §10, Q3); no value or 503 is added until it is decided.
           type: string
-          enum: [ok, unavailable]
-        inference: {type: string, enum: [ok, degraded, unavailable, mock]}
+          enum: [ok, degraded]
+        database: {type: string, enum: [ok, unavailable]}
+        inference:
+          description: '"mock" means INFERENCE_MODE=mock; inference is not called.'
+          type: string
+          enum: [ok, degraded, unavailable, mock]
         authMode: {type: string, const: dev}
         time: {$ref: '#/components/schemas/Timestamp'}
 
@@ -446,7 +484,6 @@ components:
     # ---------- metadata (camelCase mappings of inference §2.2–§2.7) ----------
     RewardWeights:
       type: object
-      additionalProperties: false
       required: [lambdaLatency, lambdaRisk, lambdaUnrouted, status]
       properties:
         lambdaLatency: {type: number}
@@ -456,7 +493,6 @@ components:
 
     Checkpoint:
       type: object
-      additionalProperties: false
       required: [checkpointId, sha256, approvedBy, approvedOn, sourceRun]
       properties:
         checkpointId: {type: string}
@@ -676,8 +712,8 @@ components:
         mode: {type: string, const: explicit}
         referenceDate: {$ref: '#/components/schemas/Date'}
         venues:
+          description: No minItems. An empty list is a venue mismatch (STATE_VENUE_MISMATCH, §2.4).
           type: array
-          minItems: 1
           items:
             description: No risk or fee field (§2.4).
             type: object
@@ -698,7 +734,9 @@ components:
                       congestion: {type: array, items: {type: number}}
 
     CreateTransactionRequest:
+      description: Strict (§1). policy null is rejected; clientReference null means not given.
       type: object
+      additionalProperties: false
       required: [senderCountry, receiverCountry, amountUsd, state]
       properties:
         senderCountry: {type: string}
@@ -708,10 +746,15 @@ components:
         policy:
           allOf: [{$ref: '#/components/schemas/Policy'}]
           default: waterfall
-        clientReference: {type: ['string', 'null'], maxLength: 200}
+        clientReference:
+          description: At most 200 characters (Unicode code points).
+          type: ['string', 'null']
+          maxLength: 200
 
     CreateComparisonRequest:
+      description: Strict (§1). policies null is rejected.
       type: object
+      additionalProperties: false
       required: [senderCountry, receiverCountry, amountUsd, state]
       properties:
         senderCountry: {type: string}
@@ -734,14 +777,17 @@ components:
       properties:
         senderCountry: {$ref: '#/components/schemas/CountryCode'}
         receiverCountry: {$ref: '#/components/schemas/CountryCode'}
-        corridor: {$ref: '#/components/schemas/Corridor'}
+        corridor:
+          description: |
+            Null when no engine result confirms it: a failed transaction (§3.2), or a comparison
+            in which every policy was skipped (§3.6). Never derived from the country codes.
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Corridor'}]
         amountUsd: {type: number, exclusiveMinimum: 0}
         simulationDate: {$ref: '#/components/schemas/Date'}
-        clientReference: {type: ['string', 'null']}
+        clientReference: {type: ['string', 'null'], maxLength: 200}
 
     Warning:
       type: object
-      additionalProperties: false
       required: [code, message]
       properties:
         code:
@@ -752,7 +798,6 @@ components:
 
     Decision:
       type: object
-      additionalProperties: false
       required: [decisionId, policy, policyStatus, feasibility, allocations, totals, metrics, diagnostics,
                  provenance, warnings]
       properties:
@@ -761,7 +806,6 @@ components:
         policyStatus: {$ref: '#/components/schemas/PolicyStatus'}
         feasibility:
           type: object
-          additionalProperties: false
           required: [allowed, reason, decisiveFactIds, knowledgeVersion]
           properties:
             allowed: {type: boolean}
@@ -772,7 +816,6 @@ components:
           type: array
           items:
             type: object
-            additionalProperties: false
             required: [slot, bridgeUid, dataSourceTag, feePct, liquidityUsd, congestion, risk, shareRequested,
                        amountRequestedUsd, amountExecutedUsd, amountClippedUsd, shareBeforeProjection]
             properties:
@@ -791,7 +834,6 @@ components:
                 oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Share'}]
         totals:
           type: object
-          additionalProperties: false
           required: [amountUsd, requestedUsd, executedUsd, unroutedEnvUsd, unroutedAmountBasedUsd, completionRatio,
                      completed, bridgesUsed]
           properties:
@@ -805,7 +847,6 @@ components:
             bridgesUsed: {type: integer, minimum: 0}
         metrics:
           type: object
-          additionalProperties: false
           required: [feeCostUsd, baselineCostPct, costTerm, latencyTerm, riskTerm, unroutedTermEnv,
                      unroutedTermAmountBased, rewardEnv, rewardAmountBased, rewardWeights]
           properties:
@@ -821,7 +862,6 @@ components:
             rewardWeights: {$ref: '#/components/schemas/RewardWeights'}
         diagnostics:
           type: object
-          additionalProperties: false
           required: [regime, combinedLiquidityUsd, projectionApplied]
           properties:
             regime: {$ref: '#/components/schemas/Regime'}
@@ -829,7 +869,6 @@ components:
             projectionApplied: {type: boolean}
         provenance:
           type: object
-          additionalProperties: false
           required: [stateMode, stateDate, split, scenarioId, valuesProvenance, engineVersion, gitCommit,
                      knowledgeSha256, dailyStateSha256, stateFrameSha256, checkpoint, device, platform]
           properties:
@@ -855,18 +894,31 @@ components:
     TransactionRecord:
       type: object
       additionalProperties: false
-      required: [id, createdAt, createdBy, status, transaction, decision]
+      required: [id, createdAt, createdBy, status, transaction, failure, decision]
       properties:
         id: {type: string, format: uuid}
         createdAt: {$ref: '#/components/schemas/Timestamp'}
         createdBy: {type: string}
         status: {type: string, enum: [routed, failed]}
         transaction: {$ref: '#/components/schemas/Transaction'}
+        failure:
+          description: |
+            Null when status is "routed". When "failed": the error code the POST returned and
+            the backend's fixed message for it, never engine text (§3.2). Stored as failureCode only.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              additionalProperties: false
+              required: [code, message]
+              properties:
+                code: {type: string, enum: [INFERENCE_ERROR, INFERENCE_UNAVAILABLE, ENGINE_BUSY, ENGINE_TIMEOUT]}
+                message: {type: string}
         decision:
-          description: Null when status is "failed" (contracts/README.md, issue C4).
+          description: Null when status is "failed" (§3.2).
           oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Decision'}]
 
     TransactionSummary:
+      description: For a failed transaction, every decision-derived field is null (§3.3).
       type: object
       additionalProperties: false
       required: [id, createdAt, createdBy, corridor, amountUsd, simulationDate, stateMode, policy, policyStatus,
@@ -875,12 +927,14 @@ components:
         id: {type: string, format: uuid}
         createdAt: {$ref: '#/components/schemas/Timestamp'}
         createdBy: {type: string}
-        corridor: {$ref: '#/components/schemas/Corridor'}
+        corridor:
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Corridor'}]
         amountUsd: {type: number}
         simulationDate: {$ref: '#/components/schemas/Date'}
         stateMode: {$ref: '#/components/schemas/StateMode'}
         policy: {$ref: '#/components/schemas/Policy'}
-        policyStatus: {$ref: '#/components/schemas/PolicyStatus'}
+        policyStatus:
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/PolicyStatus'}]
         status: {type: string, enum: [routed, failed]}
         allowed: {type: ['boolean', 'null']}
         completed: {type: ['boolean', 'null']}
@@ -946,7 +1000,8 @@ components:
               text: {type: string}
         policyNotes: {type: array, items: {type: string}}
         semanticContext:
-          oneOf: [{type: 'null'}, {type: object}]
+          description: Reserved; always null in v1 (C6, §2.10).
+          type: 'null'
         limitations: {type: array, minItems: 1, items: {type: string}}
 
     ComparisonRecord:
@@ -1001,8 +1056,14 @@ components:
             required: [policy, count, completionRate, meanRewardAmountBased, meanFeeCostPct, meanLatencyTerm, meanRiskTerm]
             properties:
               policy: {$ref: '#/components/schemas/Policy'}
-              count: {type: integer, minimum: 0}
-              completionRate: {type: ['number', 'null'], minimum: 0, maximum: 1}
+              count: {type: integer, minimum: 0, description: 'What it counts is open (contract §10, Q11).'}
+              completionRate:
+                description: |
+                  Share of completed=true among routed decisions with allowed=true; rejected and failed
+                  transactions excluded; null when there are none (§3.8, pending the owner's sign-off).
+                type: ['number', 'null']
+                minimum: 0
+                maximum: 1
               meanRewardAmountBased: {type: ['number', 'null']}
               meanFeeCostPct: {type: ['number', 'null']}
               meanLatencyTerm: {type: ['number', 'null']}
@@ -1022,7 +1083,8 @@ components:
     # ---------- errors (§4) ----------
     ErrorCode:
       type: string
-      enum: [MALFORMED_REQUEST, UNAUTHENTICATED, FORBIDDEN_POLICY, NOT_FOUND, DECISION_MISMATCH, VALIDATION_ERROR,
+      enum: [MALFORMED_REQUEST, UNAUTHENTICATED, FORBIDDEN_POLICY, NOT_FOUND, METHOD_NOT_ALLOWED, DECISION_MISMATCH,
+             POLICY_DISABLED, TRANSACTION_FAILED, VALIDATION_ERROR,
              UNSUPPORTED_CORRIDOR, INVALID_AMOUNT, DATE_OUT_OF_RANGE, DATE_IN_GAP_BUFFER, UNKNOWN_SCENARIO,
              STATE_VENUE_MISMATCH, INVALID_STATE_VALUE, POLICY_UNAVAILABLE_FOR_STATE, INTERNAL_ERROR,
              INFERENCE_ERROR, INFERENCE_UNAVAILABLE, ENGINE_BUSY, ENGINE_TIMEOUT]
@@ -1038,26 +1100,32 @@ components:
           required: [code, message, details, requestId]
           properties:
             code: {$ref: '#/components/schemas/ErrorCode'}
-            message: {type: string}
+            message:
+              description: For a passed-through 4xx, the engine message truncated to 500 characters; for 5xx, the backend's fixed message (§4).
+              type: string
             details:
               type: object
               properties:
-                field: {type: string}
+                field: {type: string, description: 'Whether a domain 422 forwards it is open (contract §10, Q6).'}
                 transactionId: {type: string, format: uuid, description: 'Set on inference failures of POST /transactions (§3.2).'}
                 errors:
                   type: array
+                  minItems: 1
                   items:
                     type: object
-                    required: [field, message]
+                    description: |
+                      field: the app path, camelCase, dot/bracket form (e.g. state.venues[1].history.liquidityUsd).
+                      A form-level error is written as "" or by omitting field; which one is open (contract §10, Q4).
+                    required: [message]
                     properties:
                       field: {type: string}
                       message: {type: string}
             requestId: {type: string}
 
-# Engine 422 codes the backend passes through unchanged (§3.2). Their inference
-# fixtures cover them; one app passthrough fixture (DATE_IN_GAP_BUFFER) covers the mechanism.
-x-passthrough-codes: [UNSUPPORTED_CORRIDOR, INVALID_AMOUNT, DATE_OUT_OF_RANGE, DATE_IN_GAP_BUFFER, UNKNOWN_SCENARIO,
-                      STATE_VENUE_MISMATCH, INVALID_STATE_VALUE, POLICY_UNAVAILABLE_FOR_STATE]
+# Engine codes the backend passes through with the same code and status (§3.2, §4).
+# Their inference fixtures cover them; app passthrough fixtures cover the mechanism.
+x-passthrough-codes: [POLICY_DISABLED, UNSUPPORTED_CORRIDOR, INVALID_AMOUNT, DATE_OUT_OF_RANGE, DATE_IN_GAP_BUFFER,
+                      UNKNOWN_SCENARIO, STATE_VENUE_MISMATCH, INVALID_STATE_VALUE, POLICY_UNAVAILABLE_FOR_STATE]
 
 # HTTP status for each error code (contract §4). Read by infra/scripts/check_contracts.py.
 x-error-status:
@@ -1065,7 +1133,10 @@ x-error-status:
   UNAUTHENTICATED: 401
   FORBIDDEN_POLICY: 403
   NOT_FOUND: 404
+  METHOD_NOT_ALLOWED: 405
   DECISION_MISMATCH: 409
+  POLICY_DISABLED: 409
+  TRANSACTION_FAILED: 409
   VALIDATION_ERROR: 422
   UNSUPPORTED_CORRIDOR: 422
   INVALID_AMOUNT: 422

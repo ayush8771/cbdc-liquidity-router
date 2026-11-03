@@ -41,6 +41,7 @@
         "simulationDate": "2024-06-14",
         "clientReference": null
       },
+      "failure": null,
       "decision": {
         "decisionId": "sha256:921879c5bc4d489383760d9cd4b73e9242dedf8d180e1c39b57c709a0a33ccf8",
         "policy": "ppoProjected",

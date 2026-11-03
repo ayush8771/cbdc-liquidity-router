@@ -6,10 +6,13 @@ Checks, in order:
      response validate against the schemas, and error bodies use the HTTP status
      the contract assigns to their code (§4).
   3. Semantic rules the schemas can't express: the RouteResponse field
-     definitions of §2.8, policy defaults, compare and explain rules (§2.9,
-     §2.10), and decision_id stability across fixtures.
+     definitions of §2.8 (including the allocation invariant, the C14 warning
+     rule and regulatory rejections), policy defaults, compare and explain
+     rules (§2.9, §2.10), decision_id stability across fixtures, failed
+     transaction records (§3.2–§3.4), and 405 responses with Allow (§4).
   4. App fixtures marked `derived_from` are the field-for-field camelCase
-     mapping of their inference fixture (§3.2), with no recomputation.
+     mapping of their inference fixture (§3.2), with no recomputation; a
+     passed-through 4xx keeps the engine message, truncated to 500 characters.
   5. Coverage: every operation has a success fixture, and every error code the
      API raises has at least one fixture.
   6. No real-looking bearer token appears in any fixture.
@@ -42,8 +45,10 @@ VALUES_PROVENANCE = {"historical_replay": "synthetic_simulation", "scenario": "s
                      "explicit": "user_supplied_synthetic"}
 
 # Phase 1 constants the §2.8 definitions refer to (src/training/metrics.py).
-RELATIVE_UNROUTED_TOLERANCE = 1e-4
-MEANINGFUL_ALLOCATION_THRESHOLD = 1e-6
+RELATIVE_UNROUTED_TOLERANCE = 1e-4  # Stage 1F amount-based completed (src/backtesting/evaluation.py)
+MEANINGFUL_ALLOCATION_THRESHOLD = 1e-6  # bridges_used counts shares above this
+FORWARDED_MESSAGE_LIMIT = 500  # §4: a passed-through 4xx message is truncated to this many characters
+FAILURE_CODES = ("INFERENCE_ERROR", "INFERENCE_UNAVAILABLE", "ENGINE_BUSY", "ENGINE_TIMEOUT")
 NEAR_BOUNDARY_TOLERANCE = 0.15  # src/training/transaction_generator.py true_regime_for_row()
 
 HEX64_TOKEN = re.compile(r"Bearer\s+[0-9a-fA-F]{64}\b")
@@ -79,6 +84,8 @@ class Checker:
         self.specs: dict[str, dict] = {}
         self.fixtures: dict[str, dict] = {}  # "inference/route/x.json" -> fixture
         self.decision_ids: dict[str, tuple[str, str]] = {}  # canonical request -> (decision_id, fixture)
+        self.failed_posts: dict[str, tuple[str, str, str]] = {}  # transactionId -> (code, message, fixture)
+        self.failed_records: dict[str, tuple[dict, str]] = {}  # id -> (failure, fixture)
 
     def fail(self, where: str, message: str) -> None:
         self.problems.append(f"{where}: {message}")
@@ -119,11 +126,17 @@ class Checker:
             node = target
         return node
 
-    def find_operation(self, api: str, method: str, path: str):
+    def find_path(self, api: str, path: str):
         for template, item in self.specs[api]["paths"].items():
             pattern = "^" + re.sub(r"\\\{[^}]+\\\}", "[^/]+", re.escape(template)) + "$"
-            if re.match(pattern, path) and method.lower() in item:
-                return template, item[method.lower()]
+            if re.match(pattern, path):
+                return template, item
+        return None, None
+
+    def find_operation(self, api: str, method: str, path: str):
+        template, item = self.find_path(api, path)
+        if item is not None and method.lower() in item:
+            return template, item[method.lower()]
         return None, None
 
     # ------------------------------------------------------------- per fixture
@@ -147,10 +160,15 @@ class Checker:
 
         template, op = self.find_operation(api, req["method"], req["path"])
         if op is None:
-            # Only an unknown-resource 404 may target an undocumented path.
-            if status == 404:
+            # Only an unknown-resource 404, or a 405 on a documented path, may target an undocumented operation.
+            path_template, item = self.find_path(api, req["path"])
+            if status == 404 or (status == 405 and item is not None):
                 self.check_schema(rel, api, {"$ref": "#/components/schemas/ErrorResponse"}, body, "response")
                 self.check_error(rel, api, status, body, resp_headers)
+                if status == 405:
+                    self.check_allow(rel, item, resp_headers)
+            elif status == 405:
+                self.fail(rel, f"405 for {req['path']}, which is not a documented path (that is a 404)")
             else:
                 self.fail(rel, f"no operation {req['method']} {req['path']} in {SPEC_FILES[api]}")
             return
@@ -243,10 +261,30 @@ class Checker:
             self.fail(rel, f"error.{rid_key} does not equal the X-Request-Id header")
         if code in ("ENGINE_BUSY", "NOT_READY") and "retry-after" not in resp_headers:
             self.fail(rel, f"{code} must send Retry-After (§4)")
+        if code == "METHOD_NOT_ALLOWED" and "allow" not in resp_headers:
+            self.fail(rel, "METHOD_NOT_ALLOWED must send an Allow header (§4)")
+        transaction_id = err.get("details", {}).get("transactionId") if api == "app" else None
+        if transaction_id is not None:
+            if code not in FAILURE_CODES:
+                self.fail(rel, f"only an inference failure ({', '.join(FAILURE_CODES)}) persists a transaction (§3.2)")
+            self.failed_posts[transaction_id] = (code, err.get("message"), rel)
+
+    def check_allow(self, rel, item, resp_headers) -> None:
+        documented = {m.upper() for m in item if m in ("get", "post", "put", "patch", "delete")}
+        allow = {m.strip().upper() for m in resp_headers.get("allow", "").split(",") if m.strip()}
+        if not documented <= allow:
+            self.fail(rel, f"Allow must list every method of the path: {sorted(documented)}")
+        if allow - documented - {"HEAD", "OPTIONS"}:
+            self.fail(rel, f"Allow lists undocumented methods: {sorted(allow - documented - {'HEAD', 'OPTIONS'})}")
 
     # ------------------------------------------------------------- semantics
     def check_semantics(self, rel, api, template, req, body) -> None:
-        if api != "inference":
+        if api == "app":
+            if template in ("/api/v1/transactions", "/api/v1/transactions/{id}") and "status" in body:
+                self.check_record(rel, body)
+            elif template == "/api/v1/transactions" and "items" in body:
+                for item in body["items"]:
+                    self.check_summary(rel, item)
             return
         if template == "/v1/route":
             self.check_route(rel, req["body"], body)
@@ -254,6 +292,35 @@ class Checker:
             self.check_compare(rel, req["body"], body)
         elif template == "/v1/explain":
             self.check_explain(rel, req["body"], body)
+
+    def check_record(self, rel, body) -> None:
+        """§3.2–§3.4: a failed record has no decision, no corridor and a failure; a routed one the reverse."""
+        failed = body["status"] == "failed"
+        if failed != (body["decision"] is None):
+            self.fail(rel, "decision must be null exactly when status is failed (§3.2)")
+        if failed != (body["failure"] is not None):
+            self.fail(rel, "failure must be set exactly when status is failed (§3.2)")
+        if failed and body["transaction"]["corridor"] is not None:
+            self.fail(rel, "a failed transaction's corridor must be null; it is never derived (§3.2)")
+        if failed and body["failure"] is not None:
+            self.failed_records[body["id"]] = (body["failure"], rel)
+
+    def check_summary(self, rel, item) -> None:
+        derived = ("corridor", "policyStatus", "allowed", "completed", "completionRatio", "executedUsd",
+                   "rewardAmountBased")
+        if item["status"] == "failed":
+            for field in derived:
+                if item[field] is not None:
+                    self.fail(rel, f"item {item['id']}: {field} must be null for a failed transaction (§3.3)")
+        elif any(item[field] is None for field in derived):
+            self.fail(rel, f"item {item['id']}: a routed transaction has every decision-derived field (§3.3)")
+
+    def check_failures(self) -> None:
+        """A stored failure repeats the code and message of the POST that created it (§3.2)."""
+        for record_id, (failure, rel) in self.failed_records.items():
+            post = self.failed_posts.get(record_id)
+            if post is not None and (failure["code"], failure["message"]) != post[:2]:
+                self.fail(rel, f"failure must repeat the code and message returned by {post[2]}")
 
     def register_decision(self, rel, request, policy, decision_id) -> None:
         tx = request["transaction"]
@@ -320,6 +387,7 @@ class Checker:
         if policy == "ppo_projected" and allocs and not close(sum(a["share_requested"] for a in allocs), 1.0):
             self.fail(at, "projected PPO shares must sum to 1")
 
+        # Allocation invariant: requested_usd is the sum of per-venue requested amounts, never amount_usd.
         requested = sum(a["amount_requested_usd"] for a in allocs)
         executed = sum(a["amount_executed_usd"] for a in allocs)
         checks = [
@@ -352,14 +420,15 @@ class Checker:
         for name, got, want in checks:
             if not close(got, want):
                 self.fail(at, f"{name} = {got}, but the §2.8 definition gives {want}")
-        completed = totals["unrouted_amount_based_usd"] <= RELATIVE_UNROUTED_TOLERANCE * amount
+        completed = max(amount - executed, 0.0) <= RELATIVE_UNROUTED_TOLERANCE * amount
         if totals["completed"] != completed:
-            self.fail(at, "totals.completed disagrees with the Phase 1 rule (amount-based unrouted ≤ 1e-4 × amount)")
+            self.fail(at, "totals.completed disagrees with the Stage 1F rule (max(amount − executed, 0) ≤ 1e-4 × amount)")
 
         feas = r["feasibility"]
         if not feas["allowed"]:
-            if allocs or executed or totals["completed"]:
-                self.fail(at, "a regulatory rejection must have allocations=[], nothing executed, completed=false")
+            if allocs or executed or totals["requested_usd"] or totals["completed"]:
+                self.fail(at, "a regulatory rejection must have allocations=[], requested_usd=0, nothing executed, "
+                              "completed=false")
             if not feas["reason"] or not feas["decisive_fact_ids"]:
                 self.fail(at, "a regulatory rejection needs reason and decisive_fact_ids")
         elif feas["reason"] is not None:
@@ -386,7 +455,8 @@ class Checker:
         if len(codes) != len(set(codes)):
             self.fail(at, "duplicate warning codes")
         for code, required in (("EXPERIMENTAL_POLICY", policy == "ppo_projected"),
-                               ("PARTIAL_COMPLETION", not totals["completed"]),
+                               # C14: a regulatory rejection never carries PARTIAL_COMPLETION.
+                               ("PARTIAL_COMPLETION", not totals["completed"] and feas["allowed"]),
                                ("SYNTHETIC_COST_ANCHOR", corridor == "ARE->MEX")):
             if (code in codes) != required:
                 self.fail(at, f"warning {code} must be present {'' if required else 'only '}when the §2.8 condition holds")
@@ -424,8 +494,8 @@ class Checker:
                 self.fail(rel, "a rejected transaction's venues must all be INFEASIBLE_REGULATORY")
         if policy == "ppo_projected" and not body["policy_notes"]:
             self.fail(rel, "ppo_projected explanations must carry policy_notes (§2.10)")
-        if body["semantic_context"] is not None and not request.get("include_semantic_context", False):
-            self.fail(rel, "semantic_context must be null unless include_semantic_context is true")
+        if body["semantic_context"] is not None:
+            self.fail(rel, "semantic_context must be null in v1 (C6, §2.10)")
 
     # ------------------------------------------------------------- mapping
     def check_derived(self, rel, fx) -> None:
@@ -446,6 +516,7 @@ class Checker:
         elif kind == "transaction":
             expected = {**{k: app_body.get(k) for k in ("id", "createdAt", "createdBy", "status")},
                         "transaction": to_app(eng_body["transaction"]),
+                        "failure": None,  # derived from a 200, so routed
                         "decision": to_app({k: v for k, v in eng_body.items() if k != "transaction"})}
             self.check_request_mapping(rel, fx["request"].get("body"), src["request"]["body"], fx["request"]["method"])
         elif kind == "comparison":
@@ -459,6 +530,11 @@ class Checker:
         elif kind == "error":
             if app_body["error"]["code"] != eng_body["error"]["code"] or fx["response"]["status"] != src["response"]["status"]:
                 self.fail(rel, f"passthrough must keep the engine's code and status ({src_rel})")
+            if fx["response"]["status"] < 500:
+                want = eng_body["error"]["message"][:FORWARDED_MESSAGE_LIMIT]
+                if app_body["error"]["message"] != want:
+                    self.fail(rel, f"a passed-through 4xx forwards the engine message, truncated to "
+                                   f"{FORWARDED_MESSAGE_LIMIT} characters (§4)")
             return
         else:
             self.fail(rel, f"unknown derived_from kind {kind!r}")
@@ -512,6 +588,7 @@ class Checker:
             self.check_fixture(rel, fx)
         for rel, fx in self.fixtures.items():
             self.check_derived(rel, fx)
+        self.check_failures()
         self.check_coverage()
         self.check_secrets()
         return self.problems

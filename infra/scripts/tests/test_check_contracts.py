@@ -180,3 +180,83 @@ def test_missing_success_fixture_is_reported(root):
 def test_missing_error_code_fixture_is_reported(root):
     (root / FIX / "app/errors/409_decision_mismatch.json").unlink()
     assert_reported(problems(root), "coverage/app", "DECISION_MISMATCH")
+
+
+# ---------------------------------------------------------------- v0.4 rules
+
+def test_regulatory_rejection_with_partial_completion_is_reported(root):
+    # C14: a rejection never carries PARTIAL_COMPLETION.
+    edit(root, "inference/route/200_regulatory_rejection.json",
+         lambda d: d["response"]["body"]["warnings"].append({"code": "PARTIAL_COMPLETION", "message": "x"}))
+    assert_reported(problems(root), "200_regulatory_rejection", "PARTIAL_COMPLETION")
+
+
+def test_regulatory_rejection_with_requested_amount_is_reported(root):
+    edit(root, "inference/route/200_regulatory_rejection.json",
+         lambda d: d["response"]["body"]["totals"].update(requested_usd=600000.0))
+    assert_reported(problems(root), "200_regulatory_rejection", "requested_usd=0")
+
+
+def test_requested_usd_equal_to_amount_instead_of_allocations_is_reported(root):
+    # In the explicit exceeds-combined fixture the waterfall requests 360,000 of 400,000.
+    def change(d):
+        totals = d["response"]["body"]["totals"]
+        totals["requested_usd"] = totals["amount_usd"]
+    edit(root, "inference/route/200_waterfall_explicit_exceeds_combined.json", change)
+    assert_reported(problems(root), "200_waterfall_explicit_exceeds_combined", "totals.requested_usd")
+
+
+def test_method_not_allowed_without_allow_header_is_reported(root):
+    edit(root, "inference/errors/405_method_not_allowed.json", lambda d: d["response"]["headers"].pop("Allow"))
+    assert_reported(problems(root), "405_method_not_allowed", "Allow")
+
+
+def test_allow_header_missing_a_method_is_reported(root):
+    edit(root, "app/errors/405_method_not_allowed.json", lambda d: d["response"]["headers"].update(Allow="GET"))
+    assert_reported(problems(root), "405_method_not_allowed", "every method")
+
+
+def test_failed_record_with_decision_or_corridor_is_reported(root):
+    edit(root, "app/transactions/200_get_failed.json",
+         lambda d: d["response"]["body"]["transaction"].update(corridor="GBR->PHL"))
+    assert_reported(problems(root), "200_get_failed", "corridor must be null")
+
+
+def test_routed_record_with_failure_is_reported(root):
+    edit(root, "app/transactions/200_get_routed.json",
+         lambda d: d["response"]["body"].update(failure={"code": "ENGINE_BUSY", "message": "x"}))
+    assert_reported(problems(root), "200_get_routed", "failure must be set exactly")
+
+
+def test_failure_that_differs_from_the_post_error_is_reported(root):
+    edit(root, "app/transactions/200_get_failed.json",
+         lambda d: d["response"]["body"]["failure"].update(message="Something else."))
+    assert_reported(problems(root), "200_get_failed", "503_engine_busy")
+
+
+def test_failed_list_item_with_decision_field_is_reported(root):
+    def change(d):
+        failed = next(i for i in d["response"]["body"]["items"] if i["status"] == "failed")
+        failed["policyStatus"] = "default"
+    edit(root, "app/transactions/200_list.json", change)
+    assert_reported(problems(root), "200_list", "policyStatus must be null")
+
+
+def test_passthrough_4xx_must_forward_engine_message(root):
+    edit(root, "app/errors/409_policy_disabled_passthrough.json",
+         lambda d: d["response"]["body"]["error"].update(message="Rewritten by the backend."))
+    assert_reported(problems(root), "409_policy_disabled_passthrough", "forwards the engine message")
+
+
+def test_unknown_app_request_field_is_rejected(root):
+    # §1: requests are strict; a misspelt field must not route with a default.
+    def change(d):
+        d["request"]["body"]["polcy"] = "waterfall"
+    edit(root, "app/transactions/201_waterfall_replay.json", change)
+    assert_reported(problems(root), "201_waterfall_replay", "request schema", "polcy")
+
+
+def test_semantic_context_must_be_null(root):
+    edit(root, "inference/explain/200_waterfall_replay.json",
+         lambda d: d["response"]["body"].update(semantic_context={"facts": []}))
+    assert_reported(problems(root), "200_waterfall_replay", "semantic_context")
