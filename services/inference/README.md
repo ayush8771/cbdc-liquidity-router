@@ -7,7 +7,7 @@ The FastAPI service and engine that wrap the Phase 1 routing code. It's internal
 
 ## Status
 
-**Foundation only. No `/v1` endpoint is implemented yet**, so the service doesn't route anything.
+**The engine routes; the HTTP API doesn't yet.** No `/v1` endpoint is implemented.
 
 | Piece | State |
 |---|---|
@@ -15,7 +15,10 @@ The FastAPI service and engine that wrap the Phase 1 routing code. It's internal
 | Settings from the `CBDC_*` environment variables (contract §8) | Done |
 | Checkpoint approval registry and the `ppo_projected` gate (contract §7) | Done. The registry ships empty, so PPO is disabled |
 | Error envelope and `X-Request-Id` (contract §1, §4) | Done |
-| `/v1/*` endpoints, engine pool, `route()` | Not started (see the integration plan below) |
+| `EngineWorker.route(transaction, state, policy)` (`engine/worker.py`) | Done for `waterfall` (default) and `cheapest_feasible`, in `historical_replay` and `scenario` modes. Parity with Phase 1 is exact. |
+| Explicit state mode, `ppo_projected`, `decision_id` | Not started. `ppo_projected` raises `POLICY_DISABLED`; `decision_id` waits for C7. |
+| `EnginePool` (`engine/pool.py`) | Done: spawned worker processes, one task each, a bounded queue (`ENGINE_BUSY`), a per-task timeout (`ENGINE_TIMEOUT`), and automatic rebuild after a timeout, crash or failed integrity check. Health reports `engine_workers` and the `engine_pool` block. Not yet wired to FastAPI. |
+| `/v1/*` endpoints | Not started |
 | Dockerfile, `Dockerfile.dockerignore` | Not started |
 | Platform locks `requirements/*.txt` | Dev D generates them from `requirements/*.in` |
 

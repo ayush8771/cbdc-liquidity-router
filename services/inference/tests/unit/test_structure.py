@@ -12,7 +12,9 @@ EXPECTED = [
     "cbdc_inference/__init__.py", "cbdc_inference/settings.py", "cbdc_inference/checkpoints.py",
     "cbdc_inference/api/__init__.py", "cbdc_inference/api/app.py", "cbdc_inference/api/errors.py",
     "cbdc_inference/api/routers/__init__.py",
-    "cbdc_inference/engine/__init__.py",
+    "cbdc_inference/engine/__init__.py", "cbdc_inference/engine/errors.py",
+    "cbdc_inference/engine/types.py", "cbdc_inference/engine/worker.py",
+    "cbdc_inference/engine/pool.py", "cbdc_inference/engine/tasks.py",
     "tests/conftest.py",
 ]
 
@@ -48,6 +50,15 @@ def test_engine_layer_never_imports_fastapi():
     for f in (PKG / "engine").rglob("*.py"):
         bad = _imports(f) & {"fastapi", "starlette", "uvicorn"}
         assert not bad, f"{f.relative_to(SERVICE)} imports {bad}"
+
+
+def test_engine_imports_phase1_only_lazily():
+    """Phase 1 is imported inside EngineWorker (worker processes), never at module import."""
+    for f in (PKG / "engine").rglob("*.py"):
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        top = {n.module.split(".")[0] for n in tree.body if isinstance(n, ast.ImportFrom) and n.module and n.level == 0}
+        top |= {a.name.split(".")[0] for n in tree.body if isinstance(n, ast.Import) for a in n.names}
+        assert not top & {"src", "torch", "pandas", "gymnasium", "numpy"}, f"{f.name}: {top}"
 
 
 def test_shared_modules_import_neither():
