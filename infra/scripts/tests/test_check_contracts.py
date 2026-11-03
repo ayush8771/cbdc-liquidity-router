@@ -310,3 +310,42 @@ def test_include_semantic_context_is_rejected(root):
 def test_wrong_length_history_must_fail_the_schema(root):
     edit(root, "inference/errors/422_validation_error_history_length.json", lambda d: d.pop("request_valid"))
     assert_reported(problems(root), "422_validation_error_history_length", "request schema")
+
+
+def test_regulatory_rejection_with_risk_fallback_is_reported(root):
+    edit(root, "inference/route/200_regulatory_rejection.json", lambda d: d["response"]["body"]["warnings"].append(
+        {"code": "RISK_FALLBACK_USED", "message": "x"}))
+    assert_reported(problems(root), "200_regulatory_rejection", "never carries RISK_FALLBACK_USED")
+
+
+def test_dashboard_mean_fee_cost_pct_formula(root):
+    edit(root, "app/dashboard/200_summary.json",
+         lambda d: d["response"]["body"]["byPolicy"][0].update(meanFeeCostPct=1.0))
+    assert_reported(problems(root), "200_summary", "meanFeeCostPct must be")
+
+
+def test_dashboard_allowed_routed_and_corridor_routed(root):
+    def change(d):
+        d["response"]["body"]["byPolicy"][0]["allowedRouted"] += 1
+        d["response"]["body"]["byCorridor"][0]["routed"] += 1
+    edit(root, "app/dashboard/200_summary.json", change)
+    found = problems(root)
+    assert_reported(found, "200_summary", "allowedRouted must be")
+    assert_reported(found, "200_summary", "routed must be")
+
+
+def test_dashboard_means_use_allowed_routed_decisions(root):
+    edit(root, "app/dashboard/200_summary.json",
+         lambda d: d["response"]["body"]["byPolicy"][0].update(meanLatencyTerm=9.9))
+    assert_reported(problems(root), "200_summary", "meanLatencyTerm must be the mean")
+
+
+def test_non_positive_amount_is_invalid_amount_not_schema_error(root):
+    # Owner decision: INVALID_AMOUNT is preserved for zero or negative amounts.
+    import check_contracts as cc
+    checker = cc.Checker(root)
+    checker.load()
+    fx = checker.fixtures["app/errors/422_invalid_amount.json"]
+    schema = checker.specs["app"]["components"]["schemas"]["CreateTransactionRequest"]
+    assert checker.schema_errors("app", schema, fx["request"]["body"]) == []
+    assert fx["response"]["body"]["error"]["code"] == "INVALID_AMOUNT"

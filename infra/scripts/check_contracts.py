@@ -351,12 +351,43 @@ class Checker:
                 "rejectedByFeasibility": sum(1 for i in routed if not i["allowed"])}
         if body["totals"] != want:
             self.fail(rel, f"totals {body['totals']} do not match the stored transactions {want}")
-        for group in body["byPolicy"]:
-            base = [i for i in routed if i["policy"] == group["policy"] and i["allowed"]]
-            rate = sum(i["completed"] for i in base) / len(base) if base else None
-            got = group["completionRate"]
-            if (rate is None) != (got is None) or (rate is not None and not close(rate, got)):
-                self.fail(rel, f"{group['policy']}: completionRate must be completed/allowed routed = {rate} (§3.8)")
+        decisions = {}
+        for frel, fx in self.fixtures.items():
+            b = fx["response"]["body"]
+            if frel.startswith("app/transactions/") and isinstance(b, dict) and b.get("decision"):
+                decisions[b["id"]] = b["decision"]
+
+        def same(want, got):
+            return (want is None) == (got is None) and (want is None or close(want, got))
+
+        def mean(xs):
+            return sum(xs) / len(xs) if xs else None
+
+        groups = [(f"byPolicy {g['policy']}", g, [i for i in routed if i["policy"] == g["policy"]])
+                  for g in body["byPolicy"]]
+        groups += [(f"byCorridor {g['corridor']}", g, [i for i in routed if i["corridor"] == g["corridor"]])
+                   for g in body["byCorridor"]]
+        for name, g, rows in groups:
+            allowed = [i for i in rows if i["allowed"]]
+            if g["allowedRouted"] != len(allowed):
+                self.fail(rel, f"{name}: allowedRouted must be {len(allowed)} (§3.8)")
+            if "routed" in g and g["routed"] != len(rows):
+                self.fail(rel, f"{name}: routed must be {len(rows)} (§3.8)")
+            rate = mean([float(i["completed"]) for i in allowed])
+            if not same(rate, g["completionRate"]):
+                self.fail(rel, f"{name}: completionRate must be completed/allowed routed = {rate} (§3.8)")
+            if "meanFeeCostPct" not in g:
+                continue
+            decs = [decisions[i["id"]] for i in allowed if i["id"] in decisions]
+            fee = mean([100 * x["metrics"]["feeCostUsd"] / x["totals"]["executedUsd"]
+                        for x in decs if x["totals"]["executedUsd"] > 0])
+            if not same(fee, g["meanFeeCostPct"]):
+                self.fail(rel, f"{name}: meanFeeCostPct must be 100 × AVG(feeCostUsd / executedUsd) = {fee} (§3.8)")
+            for field, key in (("meanRewardAmountBased", "rewardAmountBased"), ("meanLatencyTerm", "latencyTerm"),
+                               ("meanRiskTerm", "riskTerm")):
+                want = mean([x["metrics"][key] for x in decs])
+                if not same(want, g[field]):
+                    self.fail(rel, f"{name}: {field} must be the mean over allowed routed decisions = {want} (§3.8)")
 
     def check_failures(self) -> None:
         """A stored failure repeats the code and message of the POST that created it (§3.2)."""
@@ -405,6 +436,8 @@ class Checker:
             self.fail(at, "provenance.scenario_id does not match the request")
         if state["mode"] == "historical_replay" and prov["state_frame_sha256"] != prov["daily_state_sha256"]:
             self.fail(at, "replay: state_frame_sha256 must equal daily_state_sha256 (§2.8)")
+        if not r["feasibility"]["allowed"] and "RISK_FALLBACK_USED" in [wn["code"] for wn in r["warnings"]]:
+            self.fail(at, "a regulatory rejection does no risk lookup, so it never carries RISK_FALLBACK_USED")
         if "RISK_FALLBACK_USED" in [wn["code"] for wn in r["warnings"]] and \
                 any(a["risk"] != RISK_FALLBACK for a in r["allocations"]):
             self.fail(at, "RISK_FALLBACK_USED means every venue's risk is the 0.0 fallback")

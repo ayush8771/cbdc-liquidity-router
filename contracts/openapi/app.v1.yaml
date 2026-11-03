@@ -70,8 +70,8 @@ paths:
       tags: [system]
       operationId: getLiveness
       summary: |
-        Liveness (§3.9): the backend process is running. Checks no dependency, so it stays 200 while
-        the database or inference is down. Path and body are a proposal (see TEAM_REVIEW_RESOLUTION.md).
+        Liveness (§3.9, approved by the owner): the backend process is running. Checks no dependency,
+        so it stays 200 while the database or inference is down. Public, like /api/v1/health.
       security: []
       parameters: [{$ref: '#/components/parameters/RequestId'}]
       responses:
@@ -389,7 +389,8 @@ components:
       description: |
         DECISION_MISMATCH: the recomputed decisionId differs from the stored one (engine artefacts changed).
         TRANSACTION_FAILED: the transaction's status is "failed"; inference is not called (§3.5).
-        POLICY_DISABLED: passed through from /v1/explain; nothing is stored.
+        POLICY_DISABLED: no stored explanation, and the decision's checkpoint is disabled (§3.5).
+        A stored explanation is returned with 200 instead. Never recomputed with another checkpoint.
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     PolicyDisabled:
       description: POLICY_DISABLED, passed through from inference (§3.2, §4). Not persisted. A viewer gets 403 first.
@@ -778,7 +779,9 @@ components:
       properties:
         senderCountry: {$ref: '#/components/schemas/CountryCode'}
         receiverCountry: {$ref: '#/components/schemas/CountryCode'}
-        amountUsd: {type: number, exclusiveMinimum: 0}
+        amountUsd:
+          description: Must be > 0; the backend returns 422 INVALID_AMOUNT otherwise (§3.2), not VALIDATION_ERROR.
+          type: number
         state: {$ref: '#/components/schemas/StateSpec'}
         policy:
           allOf: [{$ref: '#/components/schemas/Policy'}]
@@ -796,7 +799,9 @@ components:
       properties:
         senderCountry: {$ref: '#/components/schemas/CountryCode'}
         receiverCountry: {$ref: '#/components/schemas/CountryCode'}
-        amountUsd: {type: number, exclusiveMinimum: 0}
+        amountUsd:
+          description: Must be > 0; the backend returns 422 INVALID_AMOUNT otherwise (§3.2), not VALIDATION_ERROR.
+          type: number
         state: {$ref: '#/components/schemas/StateSpec'}
         policies:
           description: A viewer who omits it gets only the non-experimental policies.
@@ -1101,31 +1106,41 @@ components:
           items:
             type: object
             additionalProperties: false
-            required: [policy, count, completionRate, meanRewardAmountBased, meanFeeCostPct, meanLatencyTerm, meanRiskTerm]
+            required: [policy, count, allowedRouted, completionRate, meanRewardAmountBased, meanFeeCostPct,
+                       meanLatencyTerm, meanRiskTerm]
             properties:
               policy: {$ref: '#/components/schemas/Policy'}
-              count: {type: integer, minimum: 0, description: 'Proposed: every transaction with this requested policy, failed and rejected included (§3.8; awaits owner approval).'}
+              count: {type: integer, minimum: 0, description: 'Every transaction with this requested policy, failed and rejected included (§3.8).'}
+              allowedRouted: {type: integer, minimum: 0, description: 'Routed decisions with allowed=true: the denominator of completionRate and of the means.'}
               completionRate:
-                description: |
-                  Completed allowed routed decisions / all allowed routed decisions (owner decision, §3.8).
-                  Rejected and failed transactions excluded; null when the denominator is zero.
+                description: Completed allowed routed decisions / allowedRouted (owner decision, §3.8). Null when allowedRouted is 0.
                 type: ['number', 'null']
                 minimum: 0
                 maximum: 1
-              meanRewardAmountBased: {type: ['number', 'null'], description: 'Proposed: mean over the completionRate denominator; null when it is zero (§3.8).'}
-              meanFeeCostPct: {type: ['number', 'null'], description: 'Source and formula are open (contract §10, Q11); fixtures send null.'}
-              meanLatencyTerm: {type: ['number', 'null'], description: 'Proposed: as meanRewardAmountBased.'}
-              meanRiskTerm: {type: ['number', 'null'], description: 'Proposed: as meanRewardAmountBased.'}
+              meanRewardAmountBased: {type: ['number', 'null'], description: 'Mean over the allowed routed decisions; null when allowedRouted is 0.'}
+              meanFeeCostPct:
+                description: |
+                  100 × AVG(feeCostUsd / executedUsd) over the allowed routed decisions with executedUsd > 0
+                  (owner decision, §3.8); null when there are none. Needs the feeCostUsd column (Dev B migration).
+                type: ['number', 'null']
+              meanLatencyTerm: {type: ['number', 'null'], description: 'Mean over the allowed routed decisions; null when allowedRouted is 0.'}
+              meanRiskTerm: {type: ['number', 'null'], description: 'Mean over the allowed routed decisions; null when allowedRouted is 0.'}
         byCorridor:
           type: array
           items:
             type: object
             additionalProperties: false
-            required: [corridor, count, completionRate]
+            description: Routed transactions only; a failed row has no corridor (§3.8).
+            required: [corridor, routed, allowedRouted, completionRate]
             properties:
               corridor: {$ref: '#/components/schemas/Corridor'}
-              count: {type: integer, minimum: 0}
-              completionRate: {type: ['number', 'null'], minimum: 0, maximum: 1}
+              routed: {type: integer, minimum: 0, description: 'Routed decisions on this corridor (renamed from count).'}
+              allowedRouted: {type: integer, minimum: 0}
+              completionRate:
+                description: Completed allowed routed decisions / allowedRouted; null when allowedRouted is 0.
+                type: ['number', 'null']
+                minimum: 0
+                maximum: 1
         note: {type: string}
 
     # ---------- errors (§4) ----------

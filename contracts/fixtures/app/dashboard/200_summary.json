@@ -1,5 +1,5 @@
 {
-  "description": "Derived from the transactions in app/transactions/200_list.json (§3.8): completionRate by the owner rule; count and the means use the proposed populations; meanFeeCostPct is null while its formula is open (Q11). byCorridor leaves out failed rows, whose corridor is null.",
+  "description": "Derived from the transactions in app/transactions/200_list.json and their records (§3.8): completionRate and the means over allowed routed decisions; meanFeeCostPct = 100 × AVG(feeCostUsd / executedUsd) where executedUsd > 0. byCorridor leaves out failed rows.",
   "source": "illustrative",
   "request": {
     "method": "GET",
@@ -33,27 +33,30 @@
         {
           "policy": "waterfall",
           "count": 5,
+          "allowedRouted": 3,
           "completionRate": 0.666667,
           "meanRewardAmountBased": -0.251407,
-          "meanFeeCostPct": null,
+          "meanFeeCostPct": 1.563333,
           "meanLatencyTerm": 0.257083,
           "meanRiskTerm": 0.0
         },
         {
           "policy": "cheapestFeasible",
           "count": 1,
+          "allowedRouted": 1,
           "completionRate": 0.0,
           "meanRewardAmountBased": -0.5864,
-          "meanFeeCostPct": null,
+          "meanFeeCostPct": 1.4,
           "meanLatencyTerm": 0.11,
           "meanRiskTerm": 0.0
         },
         {
           "policy": "ppoProjected",
           "count": 1,
+          "allowedRouted": 1,
           "completionRate": 1.0,
           "meanRewardAmountBased": -0.28588,
-          "meanFeeCostPct": null,
+          "meanFeeCostPct": 2.071333,
           "meanLatencyTerm": 0.326367,
           "meanRiskTerm": 0.0
         }
@@ -61,12 +64,14 @@
       "byCorridor": [
         {
           "corridor": "ARE->MEX",
-          "count": 1,
+          "routed": 1,
+          "allowedRouted": 1,
           "completionRate": 1.0
         },
         {
           "corridor": "GBR->PHL",
-          "count": 5,
+          "routed": 5,
+          "allowedRouted": 4,
           "completionRate": 0.5
         }
       ],

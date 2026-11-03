@@ -4,6 +4,8 @@
 
 **Rule applied:** where Ayush's explicit decision conflicts with a developer's recommendation, Ayush's decision is followed. Other review findings are incorporated when they are compatible, or classified below. Nothing here changes service implementation code.
 
+**Revision 2 (owner's final decisions)** is in §7.
+
 **Source note.** This revision was prepared from a written summary of the three reviews, not from the full review texts. The summary asks for "B4 and B5" to stay documented as follow-up implementation blockers, but doesn't say what they are. They are listed as placeholders in §6. Anvesh, please confirm what they refer to.
 
 ---
@@ -59,7 +61,7 @@
 Anvesh's open points, kept explicit:
 - `meanFeeCostPct` source and formula: Q11, blocking.
 - Database failure behaviour beyond readiness, for example a write failing after inference succeeded: **not defined by the contract.** Added to the Dev B follow-ups.
-- Explaining a stored PPO decision after its checkpoint is disabled: Q17, blocking. There is an interim rule.
+- Explaining a stored PPO decision after its checkpoint is disabled: **resolved by the owner** (§7).
 - The mock fixture selection rule: Q20.
 - Dev A and Dev B implementation issues: §6.
 
@@ -95,14 +97,14 @@ Anvesh's open points, kept explicit:
 ## 5. Remaining questions (contract §10)
 
 **Blocking:**
-- **Q11:** `meanFeeCostPct` source and formula, the window defaults, and approval of the proposed `count`/`mean*` populations. *Ayush, with Anvesh.*
 - **Q16:** does the app forward the sanitised engine 4xx message (capped at 500) or use a fixed message? *Anvesh and Varshini.*
-- **Q17:** explaining a stored PPO decision after its checkpoint is disabled or changed. *Ayush, with Anvesh.*
 - **Q19:** audit rows for rejected requests. *Anvesh.*
+- **Q11-dep:** the `feeCostUsd` Prisma migration that `meanFeeCostPct` needs (see §7). *Anvesh.*
+- **R1–R6:** not found anywhere (see §7). *Ayush to supply.*
 
 **Non-blocking:**
-- Q3a: the liveness path and body (proposed `GET /api/v1/health/live` → `{"status":"ok"}`). *Anvesh.*
-- Q9a: the deadline variable name (proposed `CBDC_ENGINE_REQUEST_DEADLINE_S`). *Ayush.*
+- Q11: the dashboard window defaults. *Ayush, with Anvesh.*
+- Q21: adopt the minimum start budget, and its default. *Ayush.*
 - Q11a: what a non-UUID id returns. *Anvesh.*
 - Q12: the remaining health check values. *Ayush.*
 - Q14: whether 405 is checked before or after auth. *Anvesh.*
@@ -138,5 +140,31 @@ Anvesh's open points, kept explicit:
 
 **Dev D (contracts and infra):**
 - The missing fixture coverage in §3, item 12.
-- A Compose healthcheck using liveness once Q3a is confirmed.
+- A Compose healthcheck using `GET /api/v1/health/live` (approved).
 - Lock generation once `service.in` is final.
+
+## 7. Owner's final decisions (revision 2)
+
+| Decision | How it is implemented | Where |
+|---|---|---|
+| Q11: rename `byCorridor.count` → `routed`; add `allowedRouted`; `completionRate` = completed allowed ÷ allowed routed; means over allowed routed; null on a zero denominator | Schema renamed and extended (`allowedRouted` in `byPolicy` and `byCorridor`). Fixture rebuilt from the stored transactions. The checker recomputes `allowedRouted`, `routed`, `completionRate` and every mean | Contract §3.8; app OpenAPI `DashboardSummary`; `app/dashboard/200_summary.json`; checker `check_dashboard` + 3 tests |
+| `meanFeeCostPct` = 100 × AVG(`feeCostUsd`/`executedUsd`), allowed routed with `executedUsd > 0` | Formula documented and checked; the fixture now has real values (waterfall 1.563333) | Same as above + 1 test |
+| `feeCostUsd` Prisma migration by Anvesh | **Documented as a dependency, not done.** The backend schema (`origin/feature/phase2-backend`) has no `feeCostUsd` column, and this change touches no backend file | Contract §3.8, §10 Q11-dep |
+| Q17: stored explanation returned; else checkpoint disabled → `POLICY_DISABLED`; else changed → `DECISION_MISMATCH`; never recompute with another checkpoint | Ordered rule, checked from the cached `/v1/version` checkpoint before inference is called | Contract §3.5; app OpenAPI `ExplanationConflict` |
+| Rejection fixtures omit `RISK_FALLBACK_USED` | Already true in both rejection fixtures. A checker rule and test now enforce it | Checker `check_route`; test |
+| Three-letter country codes; `amount > 0`; `INVALID_AMOUNT` preserved | Country codes stay a schema rule (`VALIDATION_ERROR`). `amountUsd` ≤ 0 is checked by the backend and returns `INVALID_AMOUNT`, so the app schema no longer has `exclusiveMinimum` (which would have made it a `VALIDATION_ERROR`). New fixture | Contract §3.2, §4; app OpenAPI; `app/errors/422_invalid_amount.json`; test |
+| `CBDC_ENGINE_REQUEST_DEADLINE_S`, default 12 s | The "proposed name" labels removed | Contract §5, §8; arch §6.2 |
+| `GET /api/v1/health/live` approved, public | Approved and public. The body `{"status":"ok"}` is for Anvesh to confirm when implementing | Contract §3.1, §3.9; app OpenAPI; `app/meta/200_health_live.json` |
+| R1–R6 | **Not addressed.** I searched every file on every remote branch (`git grep` for R1–R6 across `docs/`, `contracts/` and `services/`) and the review material I was given, and found no definition. Inventing them was ruled out | — |
+
+**Additional checks requested:**
+- **Reward weights and scenario definitions in `decision_id`.** Both are now **hashed explicitly**: the λ values, and in scenario mode the scenario's id and every multiplier. Relying on `engine_version` would mean remembering to bump it when weights are recalibrated, and nothing enforces that.
+  - The testable rule: changing any hashed input changes the ID, and changing an excluded input doesn't (contract §2.11).
+  - It is a Dev A test, because the fixtures can't compute real hashes.
+  - **Ayush to confirm**, since it adds inputs to his approved hash list.
+- **Minimum worker-start budget.** Proposed `CBDC_ENGINE_MIN_START_BUDGET_S`, default 1 s as a placeholder until measured (contract §5, Q21).
+  - A queued task with less than that left is not dispatched; it gets `ENGINE_BUSY` without running.
+  - It doesn't conflict with the approved timeouts: it never kills a worker and never shortens the 10 s execution timeout, and a budget of 0 gives exactly the approved behaviour.
+  - Not yet approved.
+
+**Other prior decisions:** unchanged.
