@@ -305,8 +305,8 @@ Before, `executed_usd` and `completion_ratio` were listed under `metrics`, where
 | Audit atomicity | Stated as the approved team decision: each record and its audit row in the same DB transaction; if the audit write fails the whole transaction rolls back. The rejected-request rules are unchanged (no record, no audit row). The caller-facing result of a database failure is **not** defined: it stays the open Dev B item (§6) | Contract §6.2 |
 | Contract header | Status now reads "approved": merged by the project owner (ayush8771) through PR #3 on 4 November 2026, with the follow-up corrections in PR #4. The "proposed for a second team review" wording is removed from both the contract and the architecture headers | Contract and architecture headers |
 
-**One point for Ayush: which source is normative.** The old header said the contract is normative until the OpenAPI files are approved and merged, and the OpenAPI files after that. PR #3 merged them, so that rule may now apply. I did not decide it. The header now says the two describe one contract, that a difference is a bug, and that this document is the reference until the owner confirms. These still say "DRAFT pending approval" and were not changed in this revision:
-- `contracts/README.md` (status line);
-- the `info.description` of both OpenAPI files.
-
-They need a one-line update once the owner confirms.
+**Closed — which source is normative (decision: Ayush).**
+- `docs/PHASE2_API_CONTRACT.md` is the authoritative, approved Phase 2 v0.4 specification.
+- The two OpenAPI files are machine-readable draft representations, not independently normative specifications. If they differ from the written contract, the written contract takes precedence until Ayush explicitly approves OpenAPI status.
+- The `DRAFT – pending approval` labels stay in `contracts/README.md`, `contracts/openapi/inference.v1.yaml` and `contracts/openapi/app.v1.yaml`. They are deliberately not changed.
+- A separate OpenAPI approval review will happen later. It does not delay implementation against the approved v0.4 contract.
