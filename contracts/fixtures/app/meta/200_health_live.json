@@ -1,0 +1,20 @@
+{
+  "description": "Liveness (approved): public GET /api/v1/health/live, HTTP 200, exactly {\"status\": \"ok\"}; no dependency is checked (§3.9).",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/health/live",
+    "headers": {
+      "X-Request-Id": "fixture-200_health_live"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_health_live"
+    },
+    "body": {
+      "status": "ok"
+    }
+  }
+}

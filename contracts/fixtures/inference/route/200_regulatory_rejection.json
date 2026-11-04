@@ -1,0 +1,99 @@
+{
+  "description": "Regulatory rejection is HTTP 200 (§2.8): amount above the assumed $500K cap. allocations=[], nothing executed.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-200_regulatory_rejection"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 600000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      },
+      "policy": "waterfall"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_regulatory_rejection"
+    },
+    "body": {
+      "decision_id": "sha256:19a8e086d7080c41d89566f4c4f79683783a78f49c6caac05510280cef9219be",
+      "policy": "waterfall",
+      "policy_status": "default",
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 600000.0,
+        "corridor": "GBR->PHL",
+        "simulation_date": "2024-06-14",
+        "client_reference": null
+      },
+      "feasibility": {
+        "allowed": false,
+        "reason": "Transaction amount exceeds single transfer policy limit.",
+        "decisive_fact_ids": [
+          "global_max_single_transfer_usd"
+        ],
+        "knowledge_version": "2026-11-02.1"
+      },
+      "allocations": [],
+      "totals": {
+        "amount_usd": 600000.0,
+        "requested_usd": 0.0,
+        "executed_usd": 0.0,
+        "unrouted_env_usd": 0.0,
+        "unrouted_amount_based_usd": 600000.0,
+        "completion_ratio": 0.0,
+        "completed": false,
+        "bridges_used": 0
+      },
+      "metrics": {
+        "fee_cost_usd": 0.0,
+        "baseline_cost_pct": 0.0612,
+        "cost_term": 0.0,
+        "latency_term": 0.0,
+        "risk_term": 0.0,
+        "unrouted_term_env": 0.0,
+        "unrouted_term_amount_based": 1.0,
+        "reward_env": 0.0,
+        "reward_amount_based": -1.0,
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        }
+      },
+      "diagnostics": {
+        "regime": "splitting_needed",
+        "combined_liquidity_usd": 647345.6,
+        "projection_applied": false
+      },
+      "provenance": {
+        "state_mode": "historical_replay",
+        "state_date": "2024-06-14",
+        "split": "test",
+        "scenario_id": null,
+        "values_provenance": "synthetic_simulation",
+        "engine_version": "0.1.0",
+        "git_commit": "bc9905e",
+        "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+        "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+        "state_frame_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+        "checkpoint": null,
+        "device": "cpu",
+        "platform": "linux-x86_64"
+      },
+      "warnings": []
+    }
+  }
+}

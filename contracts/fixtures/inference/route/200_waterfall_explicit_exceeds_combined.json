@@ -1,0 +1,169 @@
+{
+  "description": "Explicit synthetic state without history (baselines only). Amount exceeds combined liquidity: the environment's unrouted is 0 but the amount-based unrouted is $40,000 (D7).",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-200_waterfall_explicit_exceeds_combined"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 400000.0
+      },
+      "state": {
+        "mode": "explicit",
+        "reference_date": "2024-06-14",
+        "venues": [
+          {
+            "bridge_uid": "GBR->PHL#0",
+            "liquidity_usd": 210000.0,
+            "congestion": 0.35,
+            "history": null
+          },
+          {
+            "bridge_uid": "GBR->PHL#1",
+            "liquidity_usd": 60000.0,
+            "congestion": 0.2,
+            "history": null
+          },
+          {
+            "bridge_uid": "GBR->PHL#2",
+            "liquidity_usd": 90000.0,
+            "congestion": 0.5,
+            "history": null
+          }
+        ]
+      },
+      "policy": "waterfall"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_waterfall_explicit_exceeds_combined"
+    },
+    "body": {
+      "decision_id": "sha256:7cb6f2e2595ee7c868226b7aa2265117bb54e88d46933301b721edf3dab49a15",
+      "policy": "waterfall",
+      "policy_status": "default",
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 400000.0,
+        "corridor": "GBR->PHL",
+        "simulation_date": "2024-06-14",
+        "client_reference": null
+      },
+      "feasibility": {
+        "allowed": true,
+        "reason": null,
+        "decisive_fact_ids": [],
+        "knowledge_version": "2026-11-02.1"
+      },
+      "allocations": [
+        {
+          "slot": 0,
+          "bridge_uid": "GBR->PHL#0",
+          "data_source_tag": "real_static_bridge",
+          "fee_pct": 0.02,
+          "liquidity_usd": 210000.0,
+          "congestion": 0.35,
+          "risk": 0.0,
+          "share_requested": 0.525,
+          "amount_requested_usd": 210000.0,
+          "amount_executed_usd": 210000.0,
+          "amount_clipped_usd": 0.0,
+          "share_before_projection": null
+        },
+        {
+          "slot": 1,
+          "bridge_uid": "GBR->PHL#1",
+          "data_source_tag": "synthetic_bridge_expansion",
+          "fee_pct": 0.014,
+          "liquidity_usd": 60000.0,
+          "congestion": 0.2,
+          "risk": 0.0,
+          "share_requested": 0.15,
+          "amount_requested_usd": 60000.0,
+          "amount_executed_usd": 60000.0,
+          "amount_clipped_usd": 0.0,
+          "share_before_projection": null
+        },
+        {
+          "slot": 2,
+          "bridge_uid": "GBR->PHL#2",
+          "data_source_tag": "synthetic_bridge_expansion",
+          "fee_pct": 0.03,
+          "liquidity_usd": 90000.0,
+          "congestion": 0.5,
+          "risk": 0.0,
+          "share_requested": 0.225,
+          "amount_requested_usd": 90000.0,
+          "amount_executed_usd": 90000.0,
+          "amount_clipped_usd": 0.0,
+          "share_before_projection": null
+        }
+      ],
+      "totals": {
+        "amount_usd": 400000.0,
+        "requested_usd": 360000.0,
+        "executed_usd": 360000.0,
+        "unrouted_env_usd": 0.0,
+        "unrouted_amount_based_usd": 40000.0,
+        "completion_ratio": 0.9,
+        "completed": false,
+        "bridges_used": 3
+      },
+      "metrics": {
+        "fee_cost_usd": 7740.0,
+        "baseline_cost_pct": 0.0612,
+        "cost_term": 0.03573,
+        "latency_term": 0.32625,
+        "risk_term": 0.0,
+        "unrouted_term_env": 0.0,
+        "unrouted_term_amount_based": 0.1,
+        "reward_env": -0.29052,
+        "reward_amount_based": -0.39052,
+        "reward_weights": {
+          "lambda_latency": 1.0,
+          "lambda_risk": 1.0,
+          "lambda_unrouted": 1.0,
+          "status": "placeholder"
+        }
+      },
+      "diagnostics": {
+        "regime": "exceeds_combined",
+        "combined_liquidity_usd": 360000.0,
+        "projection_applied": false
+      },
+      "provenance": {
+        "state_mode": "explicit",
+        "state_date": "2024-06-14",
+        "split": "test",
+        "scenario_id": null,
+        "values_provenance": "user_supplied_synthetic",
+        "engine_version": "0.1.0",
+        "git_commit": "bc9905e",
+        "knowledge_sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+        "daily_state_sha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+        "state_frame_sha256": "2ab732243aa08f0405eab69c2dcb292bf72b847f23ea6c5167c02cb06811834f",
+        "checkpoint": null,
+        "device": "cpu",
+        "platform": "linux-x86_64"
+      },
+      "warnings": [
+        {
+          "code": "PARTIAL_COMPLETION",
+          "message": "Executed 90.0% of the amount; the rest is unrouted."
+        },
+        {
+          "code": "RISK_FALLBACK_USED",
+          "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+        }
+      ]
+    }
+  }
+}

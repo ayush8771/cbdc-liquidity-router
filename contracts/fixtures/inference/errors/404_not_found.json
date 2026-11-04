@@ -1,0 +1,25 @@
+{
+  "description": "Unknown path.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/v1/unknown",
+    "headers": {
+      "X-Request-Id": "fixture-404_not_found"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "X-Request-Id": "fixture-404_not_found"
+    },
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Unknown resource.",
+        "details": {},
+        "request_id": "fixture-404_not_found"
+      }
+    }
+  }
+}

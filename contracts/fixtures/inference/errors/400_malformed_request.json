@@ -1,0 +1,27 @@
+{
+  "description": "Invalid JSON.",
+  "source": "illustrative",
+  "request_valid": false,
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-400_malformed_request"
+    },
+    "body_raw": "{\"transaction\": {"
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "X-Request-Id": "fixture-400_malformed_request"
+    },
+    "body": {
+      "error": {
+        "code": "MALFORMED_REQUEST",
+        "message": "Request body is not valid JSON.",
+        "details": {},
+        "request_id": "fixture-400_malformed_request"
+      }
+    }
+  }
+}

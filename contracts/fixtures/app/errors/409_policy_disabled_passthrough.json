@@ -1,0 +1,40 @@
+{
+  "description": "An analyst requests ppoProjected while it is disabled. Passed through with the same code and status; the message is the backend's fixed text, never the engine's, and the engine details are dropped. Not persisted, so no transactionId and no audit row (§3.2, §4, §6.2).",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "error",
+    "fixture": "inference/errors/409_policy_disabled.json"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-409_policy_disabled_passthrough"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      },
+      "policy": "ppoProjected"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "X-Request-Id": "fixture-409_policy_disabled_passthrough"
+    },
+    "body": {
+      "error": {
+        "code": "POLICY_DISABLED",
+        "message": "The experimental PPO policy is disabled.",
+        "details": {},
+        "requestId": "fixture-409_policy_disabled_passthrough"
+      }
+    }
+  }
+}

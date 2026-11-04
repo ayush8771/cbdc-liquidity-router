@@ -1,0 +1,1010 @@
+"""Contract-conformance check for contracts/ (arch §5.4, contract §9 row D).
+
+Checks, in order:
+  1. Both OpenAPI documents are valid OpenAPI 3.1.
+  2. Every fixture matches a documented operation and status, its request and
+     response validate against the schemas, and error bodies use the HTTP status
+     the contract assigns to their code (§4).
+  3. Semantic rules the schemas can't express: the RouteResponse field
+     definitions of §2.8 (including the allocation invariant, the C14 warning
+     rule and regulatory rejections), policy defaults, compare and explain
+     rules (§2.9, §2.10), decision_id stability across fixtures, failed
+     transaction records (§3.2–§3.4), 405 responses with Allow (§4), health
+     readiness (§3.9), the risk fallback and state-view warnings (§2.5, §2.8),
+     and dashboard totals derived from the stored transactions (§3.8).
+  4. App fixtures marked `derived_from` are the field-for-field camelCase
+     mapping of their inference fixture (§3.2), with no recomputation. Error
+     messages are free text: a passthrough must keep the code and status only.
+  5. Coverage: every operation has a success fixture, and every error code the
+     API raises has at least one fixture.
+  6. No real-looking bearer token appears in any fixture.
+  7. The decision_id test vectors in contracts/test-vectors/ match the §2.11
+     canonical document, serialised with RFC 8785 and hashed with SHA-256.
+
+Usage:  python infra/scripts/check_contracts.py [--root REPO_ROOT]
+Exit status 0 when everything conforms, 1 otherwise. Needs only the packages
+in infra/scripts/requirements.txt; it never imports Phase 1 code.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import re
+import sys
+from pathlib import Path
+
+import rfc8785
+import yaml
+from jsonschema import Draft202012Validator, FormatChecker
+from openapi_spec_validator import validate as validate_openapi
+
+APIS = ("inference", "app")
+SPEC_FILES = {"inference": "inference.v1.yaml", "app": "app.v1.yaml"}
+
+# §3.2 mapping: only policy names and state modes change value.
+POLICY_TO_APP = {"cheapest_feasible": "cheapestFeasible", "ppo_projected": "ppoProjected"}
+MODE_TO_APP = {"historical_replay": "historicalReplay"}
+POLICY_STATUS = {"waterfall": "default", "cheapest_feasible": "baseline", "ppo_projected": "experimental"}
+VALUES_PROVENANCE = {"historical_replay": "synthetic_simulation", "scenario": "synthetic_scenario",
+                     "explicit": "user_supplied_synthetic"}
+
+# Phase 1 constants the §2.8 definitions refer to (src/training/metrics.py).
+RELATIVE_UNROUTED_TOLERANCE = 1e-4  # Stage 1F amount-based completed (src/backtesting/evaluation.py)
+MEANINGFUL_ALLOCATION_THRESHOLD = 1e-6  # bridges_used counts shares above this
+RISK_FALLBACK = 0.0  # Phase 1 DEFAULT_RISK_PLACEHOLDER (src/envs/bridge_network.py)
+# (corridor, month) pairs used by fixtures where the Phase 1 risk lookup falls back, because the
+# macro-risk proxy of either country is missing or NaN (src/envs/cbdc_env.py). Read from
+# data/processed/macro_risk_proxy.parquet on 2026-11-04: for 2024-06 the proxy is NaN for PHL, USA and ARE.
+# A fallback is known from this table, never inferred from a risk of 0.0. Add a row for any new fixture month.
+RISK_FALLBACK_MONTHS = {("USA->IND", "2024-06"), ("GBR->PHL", "2024-06"), ("ARE->MEX", "2024-06")}
+FAILURE_CODES = ("INFERENCE_ERROR", "INFERENCE_UNAVAILABLE", "ENGINE_BUSY", "ENGINE_TIMEOUT")
+NEAR_BOUNDARY_TOLERANCE = 0.15  # src/training/transaction_generator.py true_regime_for_row()
+
+HEX64_TOKEN = re.compile(r"Bearer\s+[0-9a-fA-F]{64}\b")
+
+# §2.11: the artefact fingerprints that enter decision_id (id_scheme 1).
+ID_SCHEME = 1
+ID_ARTEFACTS = ("knowledge_sha256", "daily_state_sha256", "bridge_network_sha256", "normalization_stats_sha256",
+                "macro_risk_proxy_sha256", "rpw_corridor_quarterly_sha256")
+SCENARIO_FIELDS = ("liquidity_multiplier", "congestion_multiplier", "cheapest_venue_liquidity_multiplier")
+REWARD_FIELDS = ("lambda_latency", "lambda_risk", "lambda_unrouted")
+
+# §2.11 numeric rule: an integer-valued number above this magnitude is rejected, never rounded.
+MAX_SAFE_INTEGER = 2 ** 53 - 1
+
+
+class UnsafeNumberError(ValueError):
+    """§2.11: an integer-valued number in transaction or state with |x| > 2^53 − 1 (422 VALIDATION_ERROR)."""
+
+    def __init__(self, field: str, value):
+        super().__init__(f"{field}: {value!r} is an integer-valued number outside ±(2^53 − 1)")
+        self.field = field
+
+
+def binary64(value, field: str) -> float:
+    """§2.11: the normalised binary64 value used for both execution and hashing.
+
+    The rule is value-based: an integer, a decimal and a scientific-notation spelling of the same value are
+    treated alike. An integer-valued result with |x| > 2^53 − 1 raises UnsafeNumberError instead of rounding.
+    """
+    x = float(value)
+    if x.is_integer() and abs(x) > MAX_SAFE_INTEGER:
+        raise UnsafeNumberError(field, value)
+    return x
+
+
+def unsafe_numbers(node, path: str) -> list[str]:
+    """Paths of the integer-valued numbers outside ±(2^53 − 1) anywhere under node (§2.11)."""
+    found = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            found += unsafe_numbers(value, f"{path}.{key}" if path else key)
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            found += unsafe_numbers(value, f"{path}[{i}]")
+    elif isinstance(node, (int, float)) and not isinstance(node, bool):
+        try:
+            binary64(node, path)
+        except UnsafeNumberError:
+            found.append(path)
+    return found
+
+
+def normalised_state(raw: dict) -> dict:
+    """The §2.11 `state` member. Venues are sorted ordinally by bridge_uid for hashing only."""
+    if raw["mode"] == "explicit":
+        indexed = list(enumerate(raw["venues"]))  # i is the request position, used in error field paths
+        venues = []
+        for i, v in sorted(indexed, key=lambda iv: iv[1]["bridge_uid"]):
+            at = f"state.venues[{i}]"
+            h = v.get("history")
+            venues.append({"bridge_uid": v["bridge_uid"],
+                           "liquidity_usd": binary64(v["liquidity_usd"], f"{at}.liquidity_usd"),
+                           "congestion": binary64(v["congestion"], f"{at}.congestion"),
+                           "history": None if h is None else {
+                               k: [binary64(x, f"{at}.history.{k}[{j}]") for j, x in enumerate(h[k])]
+                               for k in ("liquidity_usd", "congestion")}})
+        return {"mode": "explicit", "reference_date": raw["reference_date"], "venues": venues}
+    if raw["mode"] == "scenario":
+        return {"mode": "scenario", "date": raw["date"], "scenario_id": raw["scenario_id"]}
+    return {"mode": "historical_replay", "date": raw["date"]}
+
+
+def decision_document(inputs: dict) -> dict:
+    """The §2.11 canonical document (id_scheme 1) for one policy, from a raw engine request and its context.
+
+    inputs: request (a /v1/route or /v1/compare body), policy (required for compare), engine_version,
+    reward_weights, artefacts, scenario (the /v1/scenarios entry, scenario mode only) and
+    checkpoint_sha256 (ppo_projected only). Every other field is excluded.
+    """
+    req = inputs["request"]
+    policy = inputs.get("policy") or req.get("policy") or "waterfall"
+    tx, raw = req["transaction"], req["state"]
+    amount = binary64(tx["amount_usd"], "transaction.amount_usd")
+    state = normalised_state(raw)
+    scenario = None
+    if raw["mode"] == "scenario":
+        definition = inputs["scenario"]
+        if definition["scenario_id"] != raw["scenario_id"]:
+            raise ValueError("scenario definition does not match state.scenario_id")
+        scenario = {"scenario_id": definition["scenario_id"], **{k: float(definition[k]) for k in SCENARIO_FIELDS}}
+    if policy == "ppo_projected" and not inputs.get("checkpoint_sha256"):
+        raise ValueError("ppo_projected needs checkpoint_sha256")
+    return {
+        "id_scheme": ID_SCHEME,
+        "engine_version": inputs["engine_version"],
+        "transaction": {"sender_country": tx["sender_country"], "receiver_country": tx["receiver_country"],
+                        "amount_usd": amount},
+        "state": state,
+        "policy": policy,
+        "scenario": scenario,
+        "reward_weights": {k: float(inputs["reward_weights"][k]) for k in REWARD_FIELDS},
+        "artefacts": {k: inputs["artefacts"][k] for k in ID_ARTEFACTS},
+        "checkpoint_sha256": inputs["checkpoint_sha256"] if policy == "ppo_projected" else None,
+    }
+
+
+def scenarios_sha256(scenarios: list) -> str:
+    """§2.2: SHA-256 of the RFC 8785 serialisation of the scenarios array, sorted by scenario_id
+    (ordinal), so insertion order never matters."""
+    return hashlib.sha256(rfc8785.dumps(sorted(scenarios, key=lambda s: s["scenario_id"]))).hexdigest()
+
+
+# §2.11 daily-state fingerprint (scheme 1).
+FINGERPRINT_DOMAIN = b"cbdc-liquidity-router/daily-state-fingerprint/v1"
+FINGERPRINT_PANDAS = "2.3.3"
+FINGERPRINT_HASH_KEY = "0123456789123456"
+
+
+def daily_state_descriptor(frame) -> dict:
+    """The schema descriptor that is serialised with RFC 8785 and hashed with the row hashes."""
+    return {
+        "scheme": 1,
+        "columns": [{"name": str(c), "dtype": str(frame[c].dtype)} for c in frame.columns],
+        "index": {"names": [None if n is None else str(n) for n in frame.index.names],
+                  "dtypes": [str(frame.index.get_level_values(i).dtype) for i in range(frame.index.nlevels)]},
+        "row_count": int(len(frame)),
+        "pandas_version": FINGERPRINT_PANDAS,
+        "hashing": {"function": "pandas.util.hash_pandas_object", "index": True, "categorize": False,
+                    "hash_key": FINGERPRINT_HASH_KEY, "row_hash_dtype": "<u8"},
+    }
+
+
+def daily_state_fingerprint(frame) -> str:
+    """SHA-256 over: domain || u64le(len(schema)) || schema || u64le(len(rows)) || rows (§2.11)."""
+    import pandas as pd  # only the fingerprint needs pandas
+    if pd.__version__ != FINGERPRINT_PANDAS:
+        raise RuntimeError(f"the daily-state fingerprint is defined for pandas {FINGERPRINT_PANDAS}, not {pd.__version__}")
+    schema = rfc8785.dumps(daily_state_descriptor(frame))
+    rows = pd.util.hash_pandas_object(frame, index=True, categorize=False,
+                                      hash_key=FINGERPRINT_HASH_KEY).to_numpy().astype("<u8").tobytes()
+    h = hashlib.sha256(FINGERPRINT_DOMAIN)
+    for part in (schema, rows):
+        h.update(len(part).to_bytes(8, "little"))
+        h.update(part)
+    return h.hexdigest()
+
+
+def frame_from_spec(spec: dict):
+    """Build the fixed DataFrame of a fingerprint test vector."""
+    import pandas as pd
+    data = {}
+    for col in spec["columns"]:
+        values = pd.to_datetime(col["values"]) if col["dtype"].startswith("datetime64") else col["values"]
+        data[col["name"]] = pd.Series(values).astype(col["dtype"])
+    index = pd.Index(spec["index"]["values"], dtype=spec["index"]["dtype"], name=spec["index"]["name"])
+    frame = pd.DataFrame(data)
+    frame.index = index
+    return frame
+
+
+def canonical(doc: dict) -> str:
+    return rfc8785.dumps(doc).decode("utf-8")
+
+
+def decision_id(inputs: dict) -> str:
+    return "sha256:" + hashlib.sha256(rfc8785.dumps(decision_document(inputs))).hexdigest()
+
+
+def camel(key: str) -> str:
+    head, *rest = key.split("_")
+    return head + "".join(part[:1].upper() + part[1:] for part in rest)
+
+
+def to_app(value, key: str | None = None):
+    """Engine (snake_case) → Application API (camelCase), contract §3.2."""
+    if isinstance(value, dict):
+        return {camel(k): to_app(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [to_app(v, key) for v in value]
+    if key in ("policy", "default_policy", "policies") and isinstance(value, str):
+        return POLICY_TO_APP.get(value, value)
+    if key in ("mode", "state_mode") and isinstance(value, str):
+        return MODE_TO_APP.get(value, value)
+    return value
+
+
+def close(a: float, b: float) -> bool:
+    return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-6)
+
+
+class Checker:
+    def __init__(self, root: Path):
+        self.root = root
+        self.contracts = root / "contracts"
+        self.problems: list[str] = []
+        self.specs: dict[str, dict] = {}
+        self.fixtures: dict[str, dict] = {}  # "inference/route/x.json" -> fixture
+        self.decision_ids: dict[str, tuple[str, str]] = {}  # canonical request -> (decision_id, fixture)
+        self.failed_posts: dict[str, tuple[str, str, str]] = {}  # transactionId -> (code, message, fixture)
+        self.failed_records: dict[str, tuple[dict, str]] = {}  # id -> (failure, fixture)
+
+    def fail(self, where: str, message: str) -> None:
+        self.problems.append(f"{where}: {message}")
+
+    # ------------------------------------------------------------- loading
+    def load(self) -> None:
+        for api, name in SPEC_FILES.items():
+            path = self.contracts / "openapi" / name
+            spec = yaml.safe_load(path.read_text(encoding="utf-8"))
+            try:
+                validate_openapi(spec)
+            except Exception as exc:  # report every problem, don't stop at the first
+                self.fail(f"openapi/{name}", f"invalid OpenAPI: {str(exc).splitlines()[0]}")
+            self.specs[api] = spec
+        for api in APIS:
+            for path in sorted((self.contracts / "fixtures" / api).rglob("*.json")):
+                rel = path.relative_to(self.contracts / "fixtures").as_posix()
+                try:
+                    self.fixtures[rel] = json.loads(path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError as exc:
+                    self.fail(rel, f"not valid JSON: {exc}")
+
+    def validator(self, api: str, schema: dict) -> Draft202012Validator:
+        root = dict(schema)
+        root["components"] = self.specs[api]["components"]
+        return Draft202012Validator(root, format_checker=FormatChecker())
+
+    def schema_errors(self, api: str, schema: dict, instance) -> list[str]:
+        errors = sorted(self.validator(api, schema).iter_errors(instance), key=lambda e: list(e.absolute_path))
+        return [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.message[:200]}" for e in errors]
+
+    def deref(self, api: str, node: dict) -> dict:
+        while "$ref" in node:
+            parts = node["$ref"].lstrip("#/").split("/")
+            target = self.specs[api]
+            for part in parts:
+                target = target[part]
+            node = target
+        return node
+
+    def find_path(self, api: str, path: str):
+        for template, item in self.specs[api]["paths"].items():
+            pattern = "^" + re.sub(r"\\\{[^}]+\\\}", "[^/]+", re.escape(template)) + "$"
+            if re.match(pattern, path):
+                return template, item
+        return None, None
+
+    def find_operation(self, api: str, method: str, path: str):
+        template, item = self.find_path(api, path)
+        if item is not None and method.lower() in item:
+            return template, item[method.lower()]
+        return None, None
+
+    # ------------------------------------------------------------- per fixture
+    def check_fixture(self, rel: str, fx: dict) -> None:
+        api = rel.split("/", 1)[0]
+        for key in ("description", "source", "request", "response"):
+            if key not in fx:
+                self.fail(rel, f"wrapper is missing '{key}'")
+                return
+        if fx["source"] not in ("illustrative", "phase1_derived", "engine_generated"):
+            self.fail(rel, f"unknown source {fx['source']!r}")
+        req, resp = fx["request"], fx["response"]
+        status, body = resp["status"], resp["body"]
+        req_headers = {k.lower(): v for k, v in req.get("headers", {}).items()}
+        resp_headers = {k.lower(): v for k, v in resp.get("headers", {}).items()}
+
+        if "x-request-id" not in resp_headers:
+            self.fail(rel, "response has no X-Request-Id header (§1)")
+        elif "x-request-id" in req_headers and req_headers["x-request-id"] != resp_headers["x-request-id"]:
+            self.fail(rel, "X-Request-Id is not echoed unchanged")
+
+        template, op = self.find_operation(api, req["method"], req["path"])
+        if op is None:
+            # Only an unknown-resource 404, or a 405 on a documented path, may target an undocumented operation.
+            path_template, item = self.find_path(api, req["path"])
+            if status == 404 or (status == 405 and item is not None):
+                self.check_schema(rel, api, {"$ref": "#/components/schemas/ErrorResponse"}, body, "response")
+                self.check_error(rel, api, status, body, resp_headers)
+                if status == 405:
+                    self.check_allow(rel, item, resp_headers)
+            elif status == 405:
+                self.fail(rel, f"405 for {req['path']}, which is not a documented path (that is a 404)")
+            else:
+                self.fail(rel, f"no operation {req['method']} {req['path']} in {SPEC_FILES[api]}")
+            return
+
+        # security: every app operation except health needs a bearer token, unless the fixture is a 401
+        secured = op.get("security", self.specs[api].get("security", []))
+        if secured and status != 401 and "authorization" not in req_headers:
+            self.fail(rel, "secured operation without an Authorization header")
+
+        self.check_query(rel, api, op, req.get("query", {}))
+        request_ok = self.check_request_body(rel, api, op, req, fx.get("request_valid", True), status, body)
+        if isinstance(req.get("body"), dict) and not self.check_safe_numbers(rel, req["body"], status, body):
+            request_ok = False  # the semantic checks normalise numbers, so they need a safe request
+
+        responses = op.get("responses", {})
+        if str(status) not in responses:
+            self.fail(rel, f"status {status} is not documented for {req['method']} {template}")
+            return
+        documented = self.deref(api, responses[str(status)])
+        schema = documented.get("content", {}).get("application/json", {}).get("schema")
+        if schema is None:
+            self.fail(rel, f"status {status} of {template} has no JSON schema")
+            return
+        response_ok = self.check_schema(rel, api, schema, body, "response")
+        if isinstance(body, dict) and "error" in body:
+            self.check_error(rel, api, status, body, resp_headers)
+        elif status < 400 and request_ok and response_ok:  # semantics assume schema-valid bodies
+            self.check_semantics(rel, api, template, req, body)
+        elif api == "app" and template == "/api/v1/health" and response_ok:  # a 503 readiness body is a Health object
+            self.check_health(rel, body)
+
+    def check_safe_numbers(self, rel, request_body, status, body) -> bool:
+        """§2.11: an unsafe integer-valued number in transaction or state is a 422 VALIDATION_ERROR naming its path.
+
+        Returns False when the request contains one, so semantic checks that normalise numbers are skipped.
+        """
+        paths = unsafe_numbers(request_body.get("transaction"), "transaction") + \
+            unsafe_numbers(request_body.get("state"), "state")
+        if "amountUsd" in request_body:  # the app request keeps the transaction fields at the top level
+            paths += unsafe_numbers(request_body["amountUsd"], "amountUsd")
+        if not paths:
+            return True
+        err = body.get("error", {}) if isinstance(body, dict) else {}
+        if status != 422 or err.get("code") != "VALIDATION_ERROR":
+            self.fail(rel, f"unsafe integer at {', '.join(paths)} must return 422 VALIDATION_ERROR, never be rounded")
+            return False
+        fields = {e.get("field") for e in err.get("details", {}).get("errors", [])}
+        for path in paths:
+            if path not in fields:
+                self.fail(rel, f"VALIDATION_ERROR must name the unsafe integer's field path {path!r}")
+        return False
+
+    def check_schema(self, rel, api, schema, instance, label) -> bool:
+        errors = self.schema_errors(api, schema, instance)
+        for err in errors[:10]:
+            self.fail(rel, f"{label} schema: {err}")
+        return not errors
+
+    def check_query(self, rel, api, op, query) -> None:
+        params = [self.deref(api, p) for p in op.get("parameters", [])]
+        known = {p["name"]: p for p in params if p["in"] == "query"}
+        for name, raw in query.items():
+            if name not in known:
+                self.fail(rel, f"undocumented query parameter {name!r}")
+                continue
+            schema = self.deref(api, known[name]["schema"])
+            value = raw
+            if schema.get("type") == "boolean":
+                value = {"true": True, "false": False}.get(raw, raw)
+            elif schema.get("type") == "integer" and isinstance(raw, str) and raw.isdigit():
+                value = int(raw)
+            for err in self.schema_errors(api, known[name]["schema"], value):
+                self.fail(rel, f"query {name}: {err}")
+        for name, p in known.items():
+            if p.get("required") and name not in query:
+                self.fail(rel, f"required query parameter {name!r} missing")
+
+    def check_request_body(self, rel, api, op, req, expect_valid, status, body) -> bool:
+        if "body_raw" in req:
+            code = body.get("error", {}).get("code") if isinstance(body, dict) else None
+            if code != "MALFORMED_REQUEST":
+                self.fail(rel, "a raw (non-JSON) request body must produce MALFORMED_REQUEST")
+            return False
+        spec_body = op.get("requestBody")
+        if spec_body is None:
+            if "body" in req:
+                self.fail(rel, "request has a body but the operation takes none")
+            return True
+        if "body" not in req:
+            self.fail(rel, "operation requires a request body")
+            return False
+        schema = spec_body["content"]["application/json"]["schema"]
+        errors = self.schema_errors(api, schema, req["body"])
+        if expect_valid:
+            for err in errors[:10]:
+                self.fail(rel, f"request schema: {err}")
+            return not errors
+        if not errors:
+            self.fail(rel, "request_valid is false but the request validates against the schema")
+        code = body.get("error", {}).get("code") if isinstance(body, dict) else None
+        if code not in ("VALIDATION_ERROR", "MALFORMED_REQUEST"):
+            self.fail(rel, f"a schema-invalid request must produce VALIDATION_ERROR, not {code}")
+        return False
+
+    def check_error(self, rel, api, status, body, resp_headers) -> None:
+        err = body.get("error", {})
+        code = err.get("code")
+        expected = self.specs[api].get("x-error-status", {}).get(code)
+        if expected is None:
+            self.fail(rel, f"error code {code!r} is not in the {api} API's x-error-status table")
+        elif expected != status:
+            self.fail(rel, f"{code} must be HTTP {expected} (§4), fixture has {status}")
+        rid_key = "request_id" if api == "inference" else "requestId"
+        if err.get(rid_key) != resp_headers.get("x-request-id"):
+            self.fail(rel, f"error.{rid_key} does not equal the X-Request-Id header")
+        if code in ("ENGINE_BUSY", "NOT_READY") and "retry-after" not in resp_headers:
+            self.fail(rel, f"{code} must send Retry-After (§4)")
+        if code == "METHOD_NOT_ALLOWED" and "allow" not in resp_headers:
+            self.fail(rel, "METHOD_NOT_ALLOWED must send an Allow header (§4)")
+        transaction_id = err.get("details", {}).get("transactionId") if api == "app" else None
+        if transaction_id is not None:
+            if code not in FAILURE_CODES:
+                self.fail(rel, f"only an inference failure ({', '.join(FAILURE_CODES)}) persists a transaction (§3.2)")
+            self.failed_posts[transaction_id] = (code, err.get("message"), rel)
+
+    def check_allow(self, rel, item, resp_headers) -> None:
+        documented = {m.upper() for m in item if m in ("get", "post", "put", "patch", "delete")}
+        allow = {m.strip().upper() for m in resp_headers.get("allow", "").split(",") if m.strip()}
+        if not documented <= allow:
+            self.fail(rel, f"Allow must list every method of the path: {sorted(documented)}")
+        if allow - documented - {"HEAD", "OPTIONS"}:
+            self.fail(rel, f"Allow lists undocumented methods: {sorted(allow - documented - {'HEAD', 'OPTIONS'})}")
+
+    # ------------------------------------------------------------- semantics
+    def check_semantics(self, rel, api, template, req, body) -> None:
+        if api == "app":
+            if template == "/api/v1/health":
+                self.check_health(rel, body)
+            elif template == "/api/v1/dashboard/summary":
+                self.check_dashboard(rel, body)
+            elif template in ("/api/v1/transactions", "/api/v1/transactions/{id}") and "status" in body:
+                self.check_record(rel, body)
+            elif template == "/api/v1/transactions" and "items" in body:
+                for item in body["items"]:
+                    self.check_summary(rel, item)
+            return
+        if template == "/v1/state":
+            codes = [w["code"] for w in body["warnings"]]
+            if "STATE_OUTSIDE_TRAINING_RANGE" in codes:
+                self.fail(rel, "/v1/state never emits STATE_OUTSIDE_TRAINING_RANGE; it depends on the policy (§2.5)")
+            month = body["state"]["date"][:7]
+            if (body["corridor"], month) in RISK_FALLBACK_MONTHS and "RISK_FALLBACK_USED" not in codes:
+                self.fail(rel, f"the risk lookup falls back for {body['corridor']} in {month}: RISK_FALLBACK_USED required")
+            if "RISK_FALLBACK_USED" in codes and body["corridor_risk"] != RISK_FALLBACK:
+                self.fail(rel, "RISK_FALLBACK_USED means corridor_risk is the 0.0 fallback")
+        elif template == "/v1/route":
+            self.check_route(rel, req["body"], body)
+        elif template == "/v1/compare":
+            self.check_compare(rel, req["body"], body)
+        elif template == "/v1/explain":
+            self.check_explain(rel, req["body"], body)
+
+    def check_record(self, rel, body) -> None:
+        """§3.2–§3.4: a failed record has no decision, no corridor and a failure; a routed one the reverse."""
+        failed = body["status"] == "failed"
+        if failed != (body["decision"] is None):
+            self.fail(rel, "decision must be null exactly when status is failed (§3.2)")
+        if failed != (body["failure"] is not None):
+            self.fail(rel, "failure must be set exactly when status is failed (§3.2)")
+        if failed and body["transaction"]["corridor"] is not None:
+            self.fail(rel, "a failed transaction's corridor must be null; it is never derived (§3.2)")
+        if failed and body["failure"] is not None:
+            self.failed_records[body["id"]] = (body["failure"], rel)
+
+    def check_summary(self, rel, item) -> None:
+        derived = ("corridor", "policyStatus", "allowed", "completed", "completionRatio", "executedUsd",
+                   "rewardAmountBased")
+        if item["status"] == "failed":
+            for field in derived:
+                if item[field] is not None:
+                    self.fail(rel, f"item {item['id']}: {field} must be null for a failed transaction (§3.3)")
+        elif any(item[field] is None for field in derived):
+            self.fail(rel, f"item {item['id']}: a routed transaction has every decision-derived field (§3.3)")
+
+    def check_health(self, rel, body) -> None:
+        """§3.9 readiness: unavailable exactly when the database is; otherwise ok/degraded by inference."""
+        if body["database"] == "unavailable":
+            want = "unavailable"
+        else:
+            want = "ok" if body["inference"] in ("ok", "mock") else "degraded"
+        if body["status"] != want:
+            self.fail(rel, f"health status must be {want!r} for database={body['database']}, "
+                           f"inference={body['inference']}")
+
+    def check_dashboard(self, rel, body) -> None:
+        """§3.8: totals and completionRate follow from the stored transactions in the list fixture."""
+        listing = self.fixtures.get("app/transactions/200_list.json")
+        if listing is None:
+            return
+        items = listing["response"]["body"]["items"]
+        routed = [i for i in items if i["status"] == "routed"]
+        want = {"transactions": len(items), "routed": len(routed),
+                "failed": sum(i["status"] == "failed" for i in items),
+                "rejectedByFeasibility": sum(1 for i in routed if not i["allowed"])}
+        if body["totals"] != want:
+            self.fail(rel, f"totals {body['totals']} do not match the stored transactions {want}")
+        decisions = {}
+        for frel, fx in self.fixtures.items():
+            b = fx["response"]["body"]
+            if frel.startswith("app/transactions/") and isinstance(b, dict) and b.get("decision"):
+                decisions[b["id"]] = b["decision"]
+
+        def same(want, got):
+            return (want is None) == (got is None) and (want is None or close(want, got))
+
+        def mean(xs):
+            return sum(xs) / len(xs) if xs else None
+
+        groups = [(f"byPolicy {g['policy']}", g, [i for i in routed if i["policy"] == g["policy"]])
+                  for g in body["byPolicy"]]
+        groups += [(f"byCorridor {g['corridor']}", g, [i for i in routed if i["corridor"] == g["corridor"]])
+                   for g in body["byCorridor"]]
+        for name, g, rows in groups:
+            allowed = [i for i in rows if i["allowed"]]
+            if g["allowedRouted"] != len(allowed):
+                self.fail(rel, f"{name}: allowedRouted must be {len(allowed)} (§3.8)")
+            if "routed" in g and g["routed"] != len(rows):
+                self.fail(rel, f"{name}: routed must be {len(rows)} (§3.8)")
+            rate = mean([float(i["completed"]) for i in allowed])
+            if not same(rate, g["completionRate"]):
+                self.fail(rel, f"{name}: completionRate must be completed/allowed routed = {rate} (§3.8)")
+            if "meanFeeCostPct" not in g:
+                continue
+            decs = [decisions[i["id"]] for i in allowed if i["id"] in decisions]
+            fee = mean([100 * x["metrics"]["feeCostUsd"] / x["totals"]["executedUsd"]
+                        for x in decs if x["totals"]["executedUsd"] > 0])
+            if not same(fee, g["meanFeeCostPct"]):
+                self.fail(rel, f"{name}: meanFeeCostPct must be 100 × AVG(feeCostUsd / executedUsd) = {fee} (§3.8)")
+            for field, key in (("meanRewardAmountBased", "rewardAmountBased"), ("meanLatencyTerm", "latencyTerm"),
+                               ("meanRiskTerm", "riskTerm")):
+                want = mean([x["metrics"][key] for x in decs])
+                if not same(want, g[field]):
+                    self.fail(rel, f"{name}: {field} must be the mean over allowed routed decisions = {want} (§3.8)")
+
+    def check_failures(self) -> None:
+        """A stored failure repeats the code and message of the POST that created it (§3.2)."""
+        for record_id, (failure, rel) in self.failed_records.items():
+            post = self.failed_posts.get(record_id)
+            if post is not None and (failure["code"], failure["message"]) != post[:2]:
+                self.fail(rel, f"failure must repeat the code and message returned by {post[2]}")
+
+    def register_decision(self, rel, request, policy, decision_id) -> None:
+        tx = request["transaction"]
+        # The §2.11 normalised form, so a request that only reorders explicit venues is the same request.
+        key = json.dumps({"transaction": {"sender_country": tx["sender_country"],
+                                          "receiver_country": tx["receiver_country"],
+                                          "amount_usd": binary64(tx["amount_usd"], "transaction.amount_usd")},
+                          "state": normalised_state(request["state"]), "policy": policy}, sort_keys=True)
+        seen = self.decision_ids.get(key)
+        if seen is None:
+            for other_key, (other_id, other_rel) in self.decision_ids.items():
+                if other_id == decision_id:
+                    self.fail(rel, f"decision_id equals the one in {other_rel}, for a different request")
+            self.decision_ids[key] = (decision_id, rel)
+        elif seen[0] != decision_id:
+            self.fail(rel, f"same request as {seen[1]} but a different decision_id (§2.10)")
+
+    def check_route(self, rel, request, r, policy=None) -> None:
+        policy = policy or request.get("policy", "waterfall")
+        tx, state, at = request["transaction"], request["state"], f"{rel}"
+        if r["policy"] != policy:
+            self.fail(at, f"policy {r['policy']} != requested {policy} (default is waterfall)")
+        if r["policy_status"] != POLICY_STATUS[r["policy"]]:
+            self.fail(at, f"policy_status for {r['policy']} must be {POLICY_STATUS[r['policy']]}")
+        self.register_decision(rel, request, policy, r["decision_id"])
+
+        echo = r["transaction"]
+        corridor = f"{tx['sender_country']}->{tx['receiver_country']}"
+        state_date = state.get("date") or state.get("reference_date")
+        for field, want in (("sender_country", tx["sender_country"]), ("receiver_country", tx["receiver_country"]),
+                            ("amount_usd", tx["amount_usd"]), ("corridor", corridor), ("simulation_date", state_date),
+                            ("client_reference", tx.get("client_reference"))):
+            if echo[field] != want:
+                self.fail(at, f"transaction.{field} = {echo[field]!r}, expected {want!r}")
+
+        prov = r["provenance"]
+        if prov["state_mode"] != state["mode"] or prov["state_date"] != state_date:
+            self.fail(at, "provenance.state_mode/state_date do not match the request state")
+        if prov["values_provenance"] != VALUES_PROVENANCE[state["mode"]]:
+            self.fail(at, f"values_provenance must be {VALUES_PROVENANCE[state['mode']]} for {state['mode']}")
+        if prov["scenario_id"] != state.get("scenario_id"):
+            self.fail(at, "provenance.scenario_id does not match the request")
+        if state["mode"] == "historical_replay" and prov["state_frame_sha256"] != prov["daily_state_sha256"]:
+            self.fail(at, "replay: state_frame_sha256 must equal daily_state_sha256 (§2.8)")
+        warned = "RISK_FALLBACK_USED" in [wn["code"] for wn in r["warnings"]]
+        if not r["feasibility"]["allowed"] and warned:
+            self.fail(at, "a regulatory rejection does no risk lookup, so it never carries RISK_FALLBACK_USED")
+        if r["feasibility"]["allowed"] and (corridor, state_date[:7]) in RISK_FALLBACK_MONTHS and not warned:
+            self.fail(at, f"the risk lookup falls back for {corridor} in {state_date[:7]}: RISK_FALLBACK_USED required")
+        if "RISK_FALLBACK_USED" in [wn["code"] for wn in r["warnings"]] and \
+                any(a["risk"] != RISK_FALLBACK for a in r["allocations"]):
+            self.fail(at, "RISK_FALLBACK_USED means every venue's risk is the 0.0 fallback")
+        if (prov["checkpoint"] is not None) != (policy == "ppo_projected"):
+            self.fail(at, "provenance.checkpoint must be set exactly when the policy is ppo_projected")
+
+        allocs, totals, m = r["allocations"], r["totals"], r["metrics"]
+        amount = tx["amount_usd"]
+        slots = [a["slot"] for a in allocs]
+        if slots != sorted(set(slots)):
+            self.fail(at, "allocations must be sorted by slot, each slot once")
+        self.check_slot_order(at, corridor, state, allocs)
+        for a in allocs:
+            where = f"{at} slot {a['slot']}"
+            if not a["bridge_uid"].startswith(corridor + "#"):
+                self.fail(where, "bridge_uid is not in the transaction's corridor")
+            if not close(a["amount_requested_usd"], a["share_requested"] * amount):
+                self.fail(where, "amount_requested_usd != share_requested × amount_usd")
+            if not close(a["amount_executed_usd"], min(a["amount_requested_usd"], a["liquidity_usd"])):
+                self.fail(where, "amount_executed_usd != min(requested, liquidity)")
+            if not close(a["amount_clipped_usd"], a["amount_requested_usd"] - a["amount_executed_usd"]):
+                self.fail(where, "amount_clipped_usd != requested − executed")
+            if (a["share_before_projection"] is not None) != (policy == "ppo_projected"):
+                self.fail(where, "share_before_projection must be non-null exactly for ppo_projected")
+        if len({a["risk"] for a in allocs}) > 1:
+            self.fail(at, "risk must be the corridor risk, equal for every venue")
+        if policy == "ppo_projected" and allocs and not close(sum(a["share_requested"] for a in allocs), 1.0):
+            self.fail(at, "projected PPO shares must sum to 1")
+
+        # Allocation invariant: requested_usd is the sum of per-venue requested amounts, never amount_usd.
+        requested = sum(a["amount_requested_usd"] for a in allocs)
+        executed = sum(a["amount_executed_usd"] for a in allocs)
+        checks = [
+            ("totals.amount_usd", totals["amount_usd"], amount),
+            ("totals.requested_usd", totals["requested_usd"], requested),
+            ("totals.executed_usd", totals["executed_usd"], executed),
+            ("totals.unrouted_env_usd", totals["unrouted_env_usd"], requested - executed),
+            ("totals.unrouted_amount_based_usd", totals["unrouted_amount_based_usd"], amount - executed),
+            ("totals.completion_ratio", totals["completion_ratio"], executed / amount),
+            ("totals.bridges_used", totals["bridges_used"],
+             sum(1 for a in allocs if a["share_requested"] > MEANINGFUL_ALLOCATION_THRESHOLD)),
+        ]
+        fee_cost = sum(a["amount_executed_usd"] * a["fee_pct"] for a in allocs)
+        latency = sum(a["amount_executed_usd"] / amount * a["congestion"] for a in allocs)
+        risk = sum(a["amount_executed_usd"] / amount * a["risk"] for a in allocs)
+        cost = (m["baseline_cost_pct"] * executed - fee_cost) / amount
+        w = m["reward_weights"]
+        un_env, un_amt = totals["unrouted_env_usd"] / amount, totals["unrouted_amount_based_usd"] / amount
+        base = cost - w["lambda_latency"] * latency - w["lambda_risk"] * risk
+        checks += [
+            ("metrics.fee_cost_usd", m["fee_cost_usd"], fee_cost),
+            ("metrics.cost_term", m["cost_term"], cost),
+            ("metrics.latency_term", m["latency_term"], latency),
+            ("metrics.risk_term", m["risk_term"], risk),
+            ("metrics.unrouted_term_env", m["unrouted_term_env"], un_env),
+            ("metrics.unrouted_term_amount_based", m["unrouted_term_amount_based"], un_amt),
+            ("metrics.reward_env", m["reward_env"], base - w["lambda_unrouted"] * un_env),
+            ("metrics.reward_amount_based", m["reward_amount_based"], base - w["lambda_unrouted"] * un_amt),
+        ]
+        for name, got, want in checks:
+            if not close(got, want):
+                self.fail(at, f"{name} = {got}, but the §2.8 definition gives {want}")
+        completed = max(amount - executed, 0.0) <= RELATIVE_UNROUTED_TOLERANCE * amount
+        if totals["completed"] != completed:
+            self.fail(at, "totals.completed disagrees with the Stage 1F rule (max(amount − executed, 0) ≤ 1e-4 × amount)")
+
+        feas = r["feasibility"]
+        if not feas["allowed"]:
+            if allocs or executed or totals["requested_usd"] or totals["completed"]:
+                self.fail(at, "a regulatory rejection must have allocations=[], requested_usd=0, nothing executed, "
+                              "completed=false")
+            if not feas["reason"] or not feas["decisive_fact_ids"]:
+                self.fail(at, "a regulatory rejection needs reason and decisive_fact_ids")
+            # Ayush: full metrics, zero fee and execution costs, zero completion, amount-based unrouted = amount.
+            for name, want in (("metrics.fee_cost_usd", 0.0), ("metrics.cost_term", 0.0), ("metrics.latency_term", 0.0),
+                               ("metrics.risk_term", 0.0), ("totals.completion_ratio", 0.0),
+                               # Ayush: amount-based unrouted is the full amount; the environment's figure stays 0
+                               # (requested_usd = 0), preserving Phase 1 accounting.
+                               ("totals.unrouted_amount_based_usd", amount), ("totals.unrouted_env_usd", 0.0),
+                               ("metrics.unrouted_term_amount_based", 1.0), ("metrics.unrouted_term_env", 0.0),
+                               ("metrics.reward_env", 0.0)):
+                group, key = name.split(".")
+                if not close((m if group == "metrics" else totals)[key], want):
+                    self.fail(at, f"a regulatory rejection must have {name} = {want}")
+        elif feas["reason"] is not None:
+            self.fail(at, "feasibility.reason must be null when allowed")
+
+        if allocs:
+            liquidities = sorted(allocs, key=lambda a: a["fee_pct"])
+            cheapest = liquidities[0]["liquidity_usd"]
+            combined = sum(a["liquidity_usd"] for a in allocs)
+            if not close(r["diagnostics"]["combined_liquidity_usd"], combined):
+                self.fail(at, "diagnostics.combined_liquidity_usd != sum of venue liquidity")
+            if amount > combined:
+                regime = "exceeds_combined"
+            elif (1 - NEAR_BOUNDARY_TOLERANCE) * cheapest <= amount <= (1 + NEAR_BOUNDARY_TOLERANCE) * cheapest:
+                regime = "near_boundary"
+            else:
+                regime = "splitting_needed" if amount > cheapest else "below_cheapest"
+            if r["diagnostics"]["regime"] != regime:
+                self.fail(at, f"diagnostics.regime is {r['diagnostics']['regime']}, true_regime_for_row gives {regime}")
+        if r["diagnostics"]["projection_applied"] != (policy == "ppo_projected"):
+            self.fail(at, "diagnostics.projection_applied must be true exactly for ppo_projected")
+
+        codes = [wn["code"] for wn in r["warnings"]]
+        if len(codes) != len(set(codes)):
+            self.fail(at, "duplicate warning codes")
+        for code, required in (("EXPERIMENTAL_POLICY", policy == "ppo_projected"),
+                               # C14: a regulatory rejection never carries PARTIAL_COMPLETION.
+                               ("PARTIAL_COMPLETION", not totals["completed"] and feas["allowed"]),
+                               ("SYNTHETIC_COST_ANCHOR", corridor == "ARE->MEX")):
+            if (code in codes) != required:
+                self.fail(at, f"warning {code} must be present {'' if required else 'only '}when the §2.8 condition holds")
+        if "DATE_IN_TRAINING_SPLIT" in codes and not (policy == "ppo_projected" and prov["split"] == "train"):
+            self.fail(at, "DATE_IN_TRAINING_SPLIT only applies to ppo_projected on a train-split date")
+        if policy == "ppo_projected" and prov["split"] == "train" and "DATE_IN_TRAINING_SPLIT" not in codes:
+            self.fail(at, "ppo_projected on a train-split date must warn DATE_IN_TRAINING_SPLIT")
+
+    def check_slot_order(self, at, corridor, state, allocs) -> None:
+        """§2.4, §2.11: slots follow Phase 1's bridge_network order, never the order of the request's venues.
+
+        The ordinal bridge_uid sort is for hashing only. In explicit mode each slot carries the values the request
+        gave for that bridge_uid, wherever it appeared in the request.
+        """
+        network = self.fixtures.get("inference/meta/200_network.json")
+        if network is not None:
+            venues = next((c["venues"] for c in network["response"]["body"]["corridors"]
+                           if c["corridor"] == corridor), None)
+            if venues is not None:
+                by_slot = {v["slot"]: v["bridge_uid"] for v in venues}
+                for a in allocs:
+                    if by_slot.get(a["slot"]) != a["bridge_uid"]:
+                        self.fail(at, f"slot {a['slot']} must be {by_slot.get(a['slot'])} (Phase 1 bridge_network "
+                                      f"slot order), not {a['bridge_uid']}; venue sorting is for hashing only")
+        if state["mode"] == "explicit":
+            given = {v["bridge_uid"]: v for v in state["venues"]}
+            for a in allocs:
+                v = given.get(a["bridge_uid"])
+                if v is not None and not (close(a["liquidity_usd"], v["liquidity_usd"])
+                                          and close(a["congestion"], v["congestion"])):
+                    self.fail(at, f"slot {a['slot']} ({a['bridge_uid']}) must carry the request's values for that "
+                                  f"bridge_uid, whatever the venues' order in the request")
+
+    def check_compare(self, rel, request, body) -> None:
+        requested = request.get("policies")
+        ran = [r["policy"] for r in body["results"]]
+        skipped = [s["policy"] for s in body["skipped"]]
+        if set(ran) & set(skipped):
+            self.fail(rel, "a policy is both in results and in skipped")
+        if requested is not None and sorted(ran + skipped) != sorted(requested):
+            self.fail(rel, "results + skipped must cover exactly the requested policies")
+        frames = {r["provenance"]["state_frame_sha256"] for r in body["results"]}
+        if len(frames) > 1:
+            self.fail(rel, "results use different state frames; same_state requires one (§2.9)")
+        for r in body["results"]:
+            self.check_route(rel + f" [{r['policy']}]", request, r, policy=r["policy"])
+
+    def check_explain(self, rel, request, body) -> None:
+        policy = request.get("policy", "waterfall")
+        if body["policy"] != policy:
+            self.fail(rel, f"policy {body['policy']} != requested {policy}")
+        self.register_decision(rel, request, policy, body["decision_id"])
+        tx = request["transaction"]
+        corridor = f"{tx['sender_country']}->{tx['receiver_country']}"
+        for v in body["venue_explanations"]:
+            if not v["bridge_uid"].startswith(corridor + "#"):
+                self.fail(rel, f"venue explanation for {v['bridge_uid']} is outside the corridor")
+        if not body["feasibility"]["allowed"]:
+            if any(v["reason_code"] != "INFEASIBLE_REGULATORY" for v in body["venue_explanations"]):
+                self.fail(rel, "a rejected transaction's venues must all be INFEASIBLE_REGULATORY")
+        if policy == "ppo_projected" and not body["policy_notes"]:
+            self.fail(rel, "ppo_projected explanations must carry policy_notes (§2.10)")
+        if body["semantic_context"] is not None:
+            self.fail(rel, "semantic_context must be null in v1 (C6, §2.10)")
+
+    # ------------------------------------------------------------- mapping
+    def check_derived(self, rel, fx) -> None:
+        derived = fx.get("derived_from")
+        if not derived:
+            return
+        src_rel = derived["fixture"]
+        src = self.fixtures.get(src_rel)
+        if src is None:
+            self.fail(rel, f"derived_from fixture {src_rel} does not exist")
+            return
+        kind, app_body, eng_body = derived["kind"], fx["response"]["body"], src["response"]["body"]
+        if kind == "identity":
+            expected = to_app(eng_body)
+        elif kind == "meta":
+            expected = {**to_app(eng_body), "backendVersion": app_body.get("backendVersion"),
+                        "inferenceMode": app_body.get("inferenceMode")}
+        elif kind == "transaction":
+            expected = {**{k: app_body.get(k) for k in ("id", "createdAt", "createdBy", "status")},
+                        "transaction": to_app(eng_body["transaction"]),
+                        "failure": None,  # derived from a 200, so routed
+                        "decision": to_app({k: v for k, v in eng_body.items() if k != "transaction"})}
+            self.check_request_mapping(rel, fx["request"].get("body"), src["request"]["body"], fx["request"]["method"])
+        elif kind == "comparison":
+            expected = {**{k: app_body.get(k) for k in ("id", "createdAt", "createdBy")},
+                        "transaction": to_app(eng_body["results"][0]["transaction"]),
+                        "results": [to_app({k: v for k, v in r.items() if k != "transaction"}) for r in eng_body["results"]],
+                        "skipped": to_app(eng_body["skipped"]), "sameState": eng_body["same_state"], "note": eng_body["note"]}
+            self.check_request_mapping(rel, fx["request"].get("body"), src["request"]["body"], fx["request"]["method"])
+        elif kind == "explanation":
+            expected = {"transactionId": app_body.get("transactionId"), **to_app(eng_body)}
+        elif kind == "error":
+            if app_body["error"]["code"] != eng_body["error"]["code"] or fx["response"]["status"] != src["response"]["status"]:
+                self.fail(rel, f"passthrough must keep the engine's code and status ({src_rel})")
+            if app_body["error"]["message"] == eng_body["error"]["message"]:
+                self.fail(rel, "engine messages are never forwarded; use the backend's fixed text (§4, Q16)")
+            return
+        else:
+            self.fail(rel, f"unknown derived_from kind {kind!r}")
+            return
+        if app_body != expected:
+            self.fail(rel, f"not the field-for-field camelCase mapping of {src_rel}: {first_diff(app_body, expected)}")
+
+    def check_request_mapping(self, rel, app_req, eng_req, method) -> None:
+        if method != "POST" or app_req is None:
+            return
+        tx = eng_req["transaction"]
+        want = {"senderCountry": tx["sender_country"], "receiverCountry": tx["receiver_country"],
+                "amountUsd": tx["amount_usd"], "state": to_app(eng_req["state"])}
+        if "policy" in eng_req:
+            want["policy"] = to_app(eng_req["policy"], "policy")
+        if "policies" in eng_req:
+            want["policies"] = to_app(eng_req["policies"], "policies")
+        got = {k: v for k, v in app_req.items() if k != "clientReference"}
+        if got != want:
+            self.fail(rel, f"app request does not map to the engine request: {first_diff(got, want)}")
+
+    # ------------------------------------------------------------- coverage & secrets
+    def check_coverage(self) -> None:
+        for api in APIS:
+            mine = {rel: fx for rel, fx in self.fixtures.items() if rel.startswith(api + "/")}
+            for template, item in self.specs[api]["paths"].items():
+                for method, op in item.items():
+                    if method not in ("get", "post", "put", "patch", "delete"):
+                        continue
+                    successes = [s for s in op["responses"] if s.startswith("2")]
+                    covered = any(fx["request"]["method"].lower() == method
+                                  and self.find_operation(api, method, fx["request"]["path"])[0] == template
+                                  and str(fx["response"]["status"]) in successes for fx in mine.values())
+                    if not covered:
+                        self.fail(f"coverage/{api}", f"no success fixture for {method.upper()} {template}")
+            optional = set(self.specs[api].get("x-passthrough-codes", []))
+            used = {fx["response"]["body"]["error"]["code"] for fx in mine.values()
+                    if isinstance(fx["response"]["body"], dict) and "error" in fx["response"]["body"]}
+            for code in self.specs[api].get("x-error-status", {}):
+                if code not in used and code not in optional:
+                    self.fail(f"coverage/{api}", f"no fixture for error code {code}")
+
+    def check_secrets(self) -> None:
+        for rel, fx in self.fixtures.items():
+            if HEX64_TOKEN.search(json.dumps(fx)):
+                self.fail(rel, "contains a 64-hex bearer token; fixtures may only use mock-viewer / mock-analyst")
+
+    def check_version_fingerprints(self) -> None:
+        """§2.2: data.scenarios_sha256 is the hash of the scenario definitions /v1/scenarios returns."""
+        listing = self.fixtures.get("inference/meta/200_scenarios.json")
+        if listing is None:
+            return
+        for rel, key in (("inference/meta/200_scenarios.json", "scenario_id"), ("app/meta/200_scenarios.json", "scenarioId")):
+            fx = self.fixtures.get(rel)
+            if fx is None:
+                continue
+            seen = [s[key] for s in fx["response"]["body"]["scenarios"]]
+            dupes = sorted({i for i in seen if seen.count(i) > 1})
+            if dupes:
+                self.fail(rel, f"duplicate scenario_id {dupes}: scenario IDs must be unique (§2.7)")
+        ids = [s["scenario_id"] for s in listing["response"]["body"]["scenarios"]]
+        if ids != sorted(ids):
+            self.fail("inference/meta/200_scenarios.json", "/v1/scenarios must list scenarios sorted by scenario_id (§2.7)")
+        want = scenarios_sha256(listing["response"]["body"]["scenarios"])
+        for rel in ("inference/meta/200_version.json", "inference/meta/200_version_ppo_enabled.json"):
+            fx = self.fixtures.get(rel)
+            if fx is not None and fx["response"]["body"]["data"].get("scenarios_sha256") != want:
+                self.fail(rel, f"data.scenarios_sha256 must be the RFC 8785 hash of /v1/scenarios ({want})")
+
+    def check_fingerprint_vectors(self) -> None:
+        """§2.11 daily-state fingerprint: the fixed DataFrame gives the recorded descriptor and hash."""
+        path = self.contracts / "test-vectors" / "daily_state_fingerprint.v1.json"
+        if not path.exists():
+            self.fail("test-vectors", "daily_state_fingerprint.v1.json is missing")
+            return
+        for vec in json.loads(path.read_text(encoding="utf-8"))["vectors"]:
+            frame = frame_from_spec(vec["frame"])
+            where = f"test-vectors/{vec['name']}"
+            if canonical(daily_state_descriptor(frame)) != vec["descriptor"]:
+                self.fail(where, "descriptor is not the RFC 8785 serialisation of the §2.11 schema descriptor")
+            if daily_state_fingerprint(frame) != vec["sha256"]:
+                self.fail(where, "sha256 is not the §2.11 daily-state fingerprint")
+
+    def check_vectors(self) -> None:
+        """§2.11 test vectors: each canonical string and decision_id follows from its inputs."""
+        path = self.contracts / "test-vectors" / "decision_id.v1.json"
+        if not path.exists():
+            self.fail("test-vectors", "decision_id.v1.json is missing")
+            return
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("id_scheme") != ID_SCHEME:
+            self.fail("test-vectors", f"id_scheme must be {ID_SCHEME}")
+        seen = {}
+        for vec in data["vectors"]:
+            where = f"test-vectors/{vec['name']}"
+            try:
+                doc = decision_document(vec["inputs"])
+            except (KeyError, ValueError) as exc:
+                self.fail(where, f"inputs do not build a §2.11 document: {exc}")
+                continue
+            if canonical(doc) != vec["canonical"]:
+                self.fail(where, "canonical is not the RFC 8785 serialisation of the §2.11 document")
+            if decision_id(vec["inputs"]) != vec["decision_id"]:
+                self.fail(where, "decision_id is not sha256 of the canonical document")
+            if "same_as" in vec and seen.get(vec["same_as"]) != vec["decision_id"]:
+                self.fail(where, f"must have the same decision_id as {vec['same_as']}")
+            seen[vec["name"]] = vec["decision_id"]
+
+    def run(self) -> list[str]:
+        self.load()
+        for rel, fx in self.fixtures.items():
+            self.check_fixture(rel, fx)
+        for rel, fx in self.fixtures.items():
+            self.check_derived(rel, fx)
+        self.check_failures()
+        self.check_vectors()
+        self.check_version_fingerprints()
+        self.check_fingerprint_vectors()
+        self.check_coverage()
+        self.check_secrets()
+        return self.problems
+
+
+def first_diff(a, b, path="") -> str:
+    if type(a) is not type(b):
+        return f"{path or '<root>'}: {a!r} vs expected {b!r}"
+    if isinstance(a, dict):
+        for k in sorted(set(a) | set(b)):
+            if k not in a or k not in b:
+                return f"{path}/{k}: present in only one side"
+            if a[k] != b[k]:
+                return first_diff(a[k], b[k], f"{path}/{k}")
+    if isinstance(a, list):
+        if len(a) != len(b):
+            return f"{path}: length {len(a)} vs expected {len(b)}"
+        for i, (x, y) in enumerate(zip(a, b)):
+            if x != y:
+                return first_diff(x, y, f"{path}/{i}")
+    return f"{path or '<root>'}: {a!r} vs expected {b!r}"
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
+    args = parser.parse_args(argv)
+    checker = Checker(args.root)
+    problems = checker.run()
+    for problem in problems:
+        print(f"FAIL {problem}")
+    print(f"{len(checker.fixtures)} fixtures, 2 OpenAPI documents: "
+          f"{'OK' if not problems else f'{len(problems)} problem(s)'}")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
