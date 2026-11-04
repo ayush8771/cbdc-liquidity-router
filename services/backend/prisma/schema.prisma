@@ -50,6 +50,15 @@ enum ValuesProvenance {
   user_supplied_synthetic
 }
 
+// The codes a failed POST /api/v1/transactions returns (§3.2 `failure.code`).
+// NOT_READY is stored as INFERENCE_UNAVAILABLE, the code the app returned.
+enum FailureCode {
+  INFERENCE_ERROR
+  INFERENCE_UNAVAILABLE
+  ENGINE_BUSY
+  ENGINE_TIMEOUT
+}
+
 // ---- Models (contract §6.3) ----
 
 /// Seeded from dev-tokens.json: id, email and role only.
@@ -86,6 +95,11 @@ model TransactionRequest {
   /// code checks this before saving.
   requestedPolicy Policy
   status          TransactionStatus
+  /// The error code the POST returned, set only when status = failed (§3.2,
+  /// §6.3). Null for routed rows, and for failed rows saved before this column
+  /// existed (their code was not recorded). A CHECK constraint in the
+  /// migration SQL forbids a code on a non-failed row.
+  failureCode     FailureCode?
   clientReference String?
 
   decision RoutingDecision? // none when status = failed
@@ -123,7 +137,10 @@ model RoutingDecision {
   knowledgeSha256        String
   gitCommit              String
   engineResponse         Json // RouteResponse, verbatim (§6.1, arch §5.2)
-  // No feeCostPct: its source and definition are unconfirmed (§3.8).
+  /// Copied from metrics.fee_cost_usd (§2.8, §3.8); 0 on a regulatory
+  /// rejection. Null only when the response had no such number.
+  feeCostUsd             Float?
+  // No feeCostPct: the dashboard derives meanFeeCostPct from feeCostUsd (§3.8).
 
   allocations Allocation[]
   explanation Explanation?

@@ -10,7 +10,9 @@ import {
   type InferenceRequest,
   type MockHandler,
 } from "../../src/inferenceClient/client.js";
-import { InferenceError, PASSTHROUGH_CODES } from "../../src/inferenceClient/errors.js";
+import { InferenceError, OPT_IN_PASSTHROUGH_CODES, PASSTHROUGH_CODES } from "../../src/inferenceClient/errors.js";
+import { ENGINE_ITEM_MESSAGE } from "../../src/inferenceClient/client.js";
+import { VALIDATION_ERROR_MESSAGE } from "../../src/validation/transactionRequest.js";
 import { errorHandler } from "../../src/middleware/errors.js";
 import { requestId } from "../../src/middleware/requestId.js";
 import { captureLogger, silentLogger, startServer } from "../helpers/server.js";
@@ -244,9 +246,13 @@ describe("inference client", () => {
       ["ENGINE_TIMEOUT", 504],
     ];
     for (const [code, status] of passthrough) {
-      it(`keeps ${status} ${code} but not the inference message or details`, async () => {
+      it(`keeps ${status} ${code} but not the inference message; only mapped 422 field paths survive`, async () => {
         respond = (res) =>
-          json(res, status, envelope(code, `upstream message for ${code}`, { field: "state.date", errors: [{ x: 1 }] }));
+          json(
+            res,
+            status,
+            envelope(code, `upstream message for ${code}`, { field: "state.date", errors: [{ x: 1 }], trace: "secret" }),
+          );
         const error = await rejectsWith(liveClient().post("/v1/route", {}), {
           status,
           code,
@@ -255,15 +261,141 @@ describe("inference client", () => {
         });
         assert.equal(error.message, PASSTHROUGH_CODES[code]!.message);
         assert.doesNotMatch(error.message, /upstream message/);
-        assert.deepEqual(error.details, {});
+        // §4: VALIDATION_ERROR forwards errors[] (an item with no mappable
+        // field becomes form-level); other 422s forward details.field mapped;
+        // 5xx codes forward nothing. "trace" is always dropped.
+        const expected =
+          status !== 422 ? {} : code === "VALIDATION_ERROR" ? { errors: [{ message: ENGINE_ITEM_MESSAGE }] } : { field: "state.date" };
+        assert.deepEqual(error.details, expected);
       });
     }
+
+    it("forwards a VALIDATION_ERROR with a missing or empty errors list as one form-level item", async () => {
+      for (const details of [{}, { errors: [] }, { errors: "x" }, { errors: null }, { errors: { 0: "x" } }]) {
+        respond = (res) => json(res, 422, envelope("VALIDATION_ERROR", "m", details));
+        const error = await rejectsWith(liveClient().post("/v1/route", {}), {
+          status: 422,
+          code: "VALIDATION_ERROR",
+          failure: "upstream_error",
+        });
+        assert.deepEqual(error.details, { errors: [{ message: ENGINE_ITEM_MESSAGE }] }, JSON.stringify(details));
+      }
+    });
+
+    it("forwards every engine error, in order, with no truncation (well over 50)", async () => {
+      // 120 items: even indexes map, odd ones don't (an unknown venue field).
+      const COUNT = 120;
+      const errors = Array.from({ length: COUNT }, (_, i) =>
+        i % 2 === 0
+          ? { field: `state.venues[${i}].history.liquidity_usd[${i % 30}]`, message: `engine text ${i}` }
+          : { field: `state.venues[${i}].risk`, message: `engine text ${i}` },
+      );
+      respond = (res) => json(res, 422, envelope("VALIDATION_ERROR", "m", { errors }));
+      const error = await rejectsWith(liveClient().post("/v1/route", {}), {
+        status: 422,
+        code: "VALIDATION_ERROR",
+        failure: "upstream_error",
+      });
+      const forwarded = (error.details as { errors: Array<{ field?: string; message: string }> }).errors;
+      assert.equal(forwarded.length, COUNT);
+      forwarded.forEach((item, i) => {
+        const expected =
+          i % 2 === 0
+            ? { field: `state.venues[${i}].history.liquidityUsd[${i % 30}]`, message: ENGINE_ITEM_MESSAGE }
+            : { message: ENGINE_ITEM_MESSAGE };
+        assert.deepEqual(item, expected, `item ${i}`);
+      });
+      assert.deepEqual(Object.keys(error.details), ["errors"]);
+      assert.doesNotMatch(JSON.stringify(error.details), /engine text|liquidity_usd|risk/);
+    });
+
+    it("forwards exactly 51 errors when the engine sends 51", async () => {
+      const errors = Array.from({ length: 51 }, (_, i) => ({ field: "state.date", message: String(i) }));
+      respond = (res) => json(res, 422, envelope("VALIDATION_ERROR", "m", { errors }));
+      const error = await rejectsWith(liveClient().post("/v1/route", {}), {
+        status: 422,
+        code: "VALIDATION_ERROR",
+        failure: "upstream_error",
+      });
+      assert.equal((error.details as { errors: unknown[] }).errors.length, 51);
+    });
+
+    it("uses one VALIDATION_ERROR message for the app's and the engine's errors (§4)", () => {
+      assert.equal(PASSTHROUGH_CODES.VALIDATION_ERROR!.message, VALIDATION_ERROR_MESSAGE);
+    });
 
     it("passes through exactly the documented codes", () => {
       assert.deepEqual(Object.keys(PASSTHROUGH_CODES).sort(), passthrough.map(([code]) => code).sort());
     });
 
-    it("keeps Retry-After from ENGINE_BUSY on the error only", async () => {
+    describe("opt-in pass-through (post passThrough option)", () => {
+      it("has exactly one opt-in code, POLICY_DISABLED 409", () => {
+        assert.deepEqual(Object.keys(OPT_IN_PASSTHROUGH_CODES), ["POLICY_DISABLED"]);
+        assert.equal(OPT_IN_PASSTHROUGH_CODES.POLICY_DISABLED.status, 409);
+      });
+
+      it("keeps 409 POLICY_DISABLED when the call opts in, but not the inference message or details", async () => {
+        respond = (res) => json(res, 409, envelope("POLICY_DISABLED", "upstream message", { field: "policy" }));
+        const error = await rejectsWith(liveClient().post("/v1/route", {}, { passThrough: ["POLICY_DISABLED"] }), {
+          status: 409,
+          code: "POLICY_DISABLED",
+          failure: "upstream_error",
+          upstreamStatus: 409,
+        });
+        assert.equal(error.message, "The experimental PPO policy has no approved checkpoint enabled.");
+        assert.deepEqual(error.details, {});
+      });
+
+      it("maps 409 POLICY_DISABLED to 502 when the call doesn't opt in", async () => {
+        respond = (res) => json(res, 409, envelope("POLICY_DISABLED"));
+        await rejectsWith(liveClient().post("/v1/route", {}, { passThrough: [] }), {
+          status: 502,
+          code: "INFERENCE_ERROR",
+          failure: "upstream_4xx",
+          upstreamStatus: 409,
+        });
+      });
+
+      it("maps an opted-in code with the wrong status to 502", async () => {
+        respond = (res) => json(res, 400, envelope("POLICY_DISABLED"));
+        await rejectsWith(liveClient().post("/v1/route", {}, { passThrough: ["POLICY_DISABLED"] }), {
+          status: 502,
+          code: "INFERENCE_ERROR",
+          failure: "upstream_4xx",
+          upstreamStatus: 400,
+        });
+      });
+
+      it("doesn't change the mapping of other codes", async () => {
+        respond = (res) => json(res, 404, envelope("NOT_FOUND"));
+        await rejectsWith(liveClient().post("/v1/route", {}, { passThrough: ["POLICY_DISABLED"] }), {
+          status: 502,
+          code: "INFERENCE_ERROR",
+          failure: "upstream_4xx",
+        });
+        respond = (res) => json(res, 422, envelope("INVALID_AMOUNT"));
+        await rejectsWith(liveClient().post("/v1/route", {}, { passThrough: ["POLICY_DISABLED"] }), {
+          status: 422,
+          code: "INVALID_AMOUNT",
+          failure: "upstream_error",
+        });
+      });
+
+      it("applies in mock mode too", async () => {
+        const mock = createInferenceClient(
+          { url: fakeUrl, mode: "mock", timeoutMs: 1000 },
+          { logger: silentLogger, mockHandler: () => ({ status: 409, body: envelope("POLICY_DISABLED") }) },
+        );
+        await rejectsWith(mock.post("/v1/route", {}, { passThrough: ["POLICY_DISABLED"] }), {
+          status: 409,
+          code: "POLICY_DISABLED",
+          failure: "upstream_error",
+        });
+        await rejectsWith(mock.post("/v1/compare", {}), { status: 502, code: "INFERENCE_ERROR", failure: "upstream_4xx" });
+      });
+    });
+
+    it("forwards Retry-After from ENGINE_BUSY as a response header", async () => {
       respond = (res) => json(res, 503, envelope("ENGINE_BUSY"), { "Retry-After": "2" });
       const error = await rejectsWith(liveClient().post("/v1/route", {}), {
         status: 503,
@@ -271,6 +403,71 @@ describe("inference client", () => {
         failure: "upstream_error",
       });
       assert.equal(error.retryAfter, "2");
+      assert.deepEqual(error.headers, { "Retry-After": "2" });
+      assert.deepEqual(error.details, {});
+    });
+
+    it("maps 503 NOT_READY to 503 INFERENCE_UNAVAILABLE with cause and Retry-After (§3.2, §4)", async () => {
+      respond = (res) => json(res, 503, envelope("NOT_READY", "upstream message", { trace: "x" }), { "Retry-After": "5" });
+      const error = await rejectsWith(liveClient().post("/v1/route", {}), {
+        status: 503,
+        code: "INFERENCE_UNAVAILABLE",
+        failure: "not_ready",
+        upstreamStatus: 503,
+      });
+      assert.equal(error.upstreamCode, "NOT_READY");
+      assert.equal(error.message, "The inference service is unavailable.");
+      assert.deepEqual(error.details, { cause: "NOT_READY" });
+      assert.deepEqual(error.headers, { "Retry-After": "5" });
+    });
+
+    it("maps NOT_READY without Retry-After, sending no header", async () => {
+      respond = (res) => json(res, 503, envelope("NOT_READY"));
+      const error = await rejectsWith(liveClient().get("/v1/version"), {
+        status: 503,
+        code: "INFERENCE_UNAVAILABLE",
+        failure: "not_ready",
+      });
+      assert.deepEqual(error.details, { cause: "NOT_READY" });
+      assert.equal(error.retryAfter, undefined);
+      assert.deepEqual(error.headers, {});
+    });
+
+    it("treats NOT_READY with a status other than 503 as an invalid response", async () => {
+      respond = (res) => json(res, 500, envelope("NOT_READY"), { "Retry-After": "5" });
+      const error = await rejectsWith(liveClient().post("/v1/route", {}), {
+        status: 502,
+        code: "INFERENCE_ERROR",
+        failure: "upstream_5xx",
+      });
+      assert.deepEqual(error.details, {});
+      assert.deepEqual(error.headers, {});
+    });
+
+    for (const value of ["Wed, 21 Oct 2026 07:28:00 GMT", "1.5", "-1", "+3", "abc", "", "  ", "5s", "99999999999999999999"]) {
+      it(`drops an invalid Retry-After ${JSON.stringify(value)} but keeps the mapping`, async () => {
+        respond = (res) => json(res, 503, envelope("ENGINE_BUSY"), { "Retry-After": value });
+        const error = await rejectsWith(liveClient().post("/v1/route", {}), {
+          status: 503,
+          code: "ENGINE_BUSY",
+          failure: "upstream_error",
+        });
+        assert.equal(error.retryAfter, undefined);
+        assert.deepEqual(error.headers, {});
+      });
+    }
+
+    it("doesn't forward Retry-After with other codes", async () => {
+      for (const [code, status, appStatus, appCode, failure] of [
+        ["ENGINE_TIMEOUT", 504, 504, "ENGINE_TIMEOUT", "upstream_error"],
+        ["INVALID_AMOUNT", 422, 422, "INVALID_AMOUNT", "upstream_error"],
+        ["INTERNAL_ERROR", 500, 502, "INFERENCE_ERROR", "upstream_5xx"],
+      ] as const) {
+        respond = (res) => json(res, status, envelope(code), { "Retry-After": "5" });
+        const error = await rejectsWith(liveClient().post("/v1/route", {}), { status: appStatus, code: appCode, failure });
+        assert.deepEqual(error.headers, {}, code);
+        assert.equal(error.retryAfter, undefined, code);
+      }
     });
 
     it("accepts an envelope without details", async () => {
@@ -305,7 +502,7 @@ describe("inference client", () => {
 
     const mappedTo502: Array<[string, number, unknown]> = [
       ["INTERNAL_ERROR", 500, envelope("INTERNAL_ERROR")],
-      ["NOT_READY", 503, envelope("NOT_READY")],
+      ["an unknown 503 code", 503, envelope("SOMETHING_ELSE")],
       ["a 502 from a proxy", 502, "<html>Bad gateway</html>"],
       ["a 5xx with no body", 500, undefined],
     ];
@@ -487,7 +684,7 @@ describe("inference client", () => {
       respond = (res) => json(res, 503, healthBody(false));
       await rejectsWith(client.get("/v1/version"), { status: 502, code: "INFERENCE_ERROR", failure: "upstream_5xx" });
       respond = (res) => json(res, 503, envelope("NOT_READY"));
-      await rejectsWith(client.post("/v1/route", {}), { status: 502, code: "INFERENCE_ERROR", failure: "upstream_5xx" });
+      await rejectsWith(client.post("/v1/route", {}), { status: 503, code: "INFERENCE_UNAVAILABLE", failure: "not_ready" });
       respond = (res) => json(res, 503, envelope("ENGINE_BUSY"));
       await rejectsWith(client.post("/v1/route", {}), { status: 503, code: "ENGINE_BUSY", failure: "upstream_error" });
     });
@@ -559,6 +756,12 @@ describe("inference client", () => {
         { status: 503, code: "ENGINE_BUSY", failure: "upstream_error" },
       );
       assert.equal(busy.retryAfter, "3");
+      const notReady = await rejectsWith(
+        mockClient(() => ({ status: 503, body: envelope("NOT_READY"), retryAfter: "4" })).post("/v1/route", {}),
+        { status: 503, code: "INFERENCE_UNAVAILABLE", failure: "not_ready" },
+      );
+      assert.deepEqual(notReady.details, { cause: "NOT_READY" });
+      assert.equal(notReady.retryAfter, "4");
       await rejectsWith(mockClient(() => ({ status: 500, body: envelope("INTERNAL_ERROR") })).get("/v1/version"), {
         status: 502,
         code: "INFERENCE_ERROR",
@@ -636,16 +839,17 @@ describe("inference client", () => {
       }
     }
 
-    it("renders a 422 with the documented code, the backend's message and requestId, and empty details", async () => {
+    it("renders a 422 as the passthrough fixture: code, the backend's message, mapped details.field and requestId", async () => {
       respond = (res) => json(res, 422, envelope("DATE_IN_GAP_BUFFER", leaky, { field: "state.date", trace: leaky }));
       const { res, text } = await probe({ "X-Request-Id": "caller-id", Authorization: `Bearer ${"a".repeat(64)}` });
       assert.equal(res.status, 422);
       assert.equal(res.headers.get("x-request-id"), "caller-id");
+      // contracts/fixtures/app/errors/422_date_in_gap_buffer_passthrough.json
       assert.deepEqual(JSON.parse(text), {
         error: {
           code: "DATE_IN_GAP_BUFFER",
           message: "The date falls within a gap buffer.",
-          details: {},
+          details: { field: "state.date" },
           requestId: "caller-id",
         },
       });
@@ -654,15 +858,97 @@ describe("inference client", () => {
       assert.equal(received[0]!.headers.authorization, undefined);
     });
 
-    it("does not send Retry-After with ENGINE_BUSY", async () => {
+    it("renders an engine VALIDATION_ERROR with mapped fields and fixed messages (§4)", async () => {
+      respond = (res) =>
+        json(
+          res,
+          422,
+          envelope("VALIDATION_ERROR", leaky, {
+            errors: [
+              { field: "state.venues[0].history.liquidity_usd", message: "Must have exactly 30 items." },
+              { field: "transaction.amount_usd", message: leaky },
+              { field: "state.venues[0].risk", message: "Unknown field; risk cannot be set in explicit mode." },
+              { message: "form-level" },
+              "not an object",
+            ],
+            trace: leaky,
+          }),
+        );
+      const { res, text } = await probe({ "X-Request-Id": "caller-id" });
+      assert.equal(res.status, 422);
+      assert.deepEqual(JSON.parse(text), {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Request failed validation.",
+          details: {
+            errors: [
+              { field: "state.venues[0].history.liquidityUsd", message: ENGINE_ITEM_MESSAGE },
+              { field: "amountUsd", message: ENGINE_ITEM_MESSAGE },
+              { message: ENGINE_ITEM_MESSAGE }, // unmappable: dropped to form-level
+              { message: ENGINE_ITEM_MESSAGE },
+              { message: ENGINE_ITEM_MESSAGE },
+            ],
+          },
+          requestId: "caller-id",
+        },
+      });
+      assert.doesNotMatch(text, /Traceback|postgresql|liquidity_usd|amount_usd|\.risk|30 items|form-level/);
+    });
+
+    for (const [code, engineField, appField] of [
+      ["INVALID_AMOUNT", "transaction.amount_usd", "amountUsd"],
+      ["INVALID_STATE_VALUE", "state.venues[0].liquidity_usd", "state.venues[0].liquidityUsd"],
+      ["UNKNOWN_SCENARIO", "state.scenario_id", "state.scenarioId"],
+      ["STATE_VENUE_MISMATCH", "state.venues", "state.venues"],
+      ["DATE_OUT_OF_RANGE", "state.date", "state.date"],
+    ] as const) {
+      it(`renders ${code} with details.field ${engineField} -> ${appField}`, async () => {
+        respond = (res) => json(res, 422, envelope(code, leaky, { field: engineField }));
+        const { text } = await probe();
+        assert.deepEqual((JSON.parse(text) as { error: { details: unknown } }).error.details, { field: appField });
+      });
+    }
+
+    it("drops details.field when the table can't map it (UNSUPPORTED_CORRIDOR's 'transaction')", async () => {
+      respond = (res) => json(res, 422, envelope("UNSUPPORTED_CORRIDOR", leaky, { field: "transaction" }));
+      const { text } = await probe();
+      assert.deepEqual((JSON.parse(text) as { error: { details: unknown } }).error.details, {});
+      assert.doesNotMatch(text, /"transaction"/);
+    });
+
+    it("sends Retry-After with ENGINE_BUSY (§4)", async () => {
       respond = (res) => json(res, 503, envelope("ENGINE_BUSY", leaky), { "Retry-After": "5" });
       const { res, text } = await probe();
       assert.equal(res.status, 503);
-      assert.equal(res.headers.get("retry-after"), null);
+      assert.equal(res.headers.get("retry-after"), "5");
       const body = JSON.parse(text) as { error: Record<string, unknown> };
       assert.equal(body.error.code, "ENGINE_BUSY");
       assert.equal(body.error.message, "The routing engine is busy. Try again later.");
       assert.deepEqual(body.error.details, {});
+      assert.doesNotMatch(text, /Traceback|postgresql|token/);
+    });
+
+    it("renders NOT_READY as 503 INFERENCE_UNAVAILABLE with cause and Retry-After", async () => {
+      respond = (res) => json(res, 503, envelope("NOT_READY", leaky, { trace: leaky }), { "Retry-After": "07" });
+      const { res, text } = await probe({ "X-Request-Id": "caller-id" });
+      assert.equal(res.status, 503);
+      assert.equal(res.headers.get("retry-after"), "7");
+      assert.deepEqual(JSON.parse(text), {
+        error: {
+          code: "INFERENCE_UNAVAILABLE",
+          message: "The inference service is unavailable.",
+          details: { cause: "NOT_READY" },
+          requestId: "caller-id",
+        },
+      });
+      assert.doesNotMatch(text, /Traceback|postgresql|token|upstream-id/);
+    });
+
+    it("sends no Retry-After when the inference value is invalid", async () => {
+      respond = (res) => json(res, 503, envelope("ENGINE_BUSY"), { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" });
+      const { res } = await probe();
+      assert.equal(res.status, 503);
+      assert.equal(res.headers.get("retry-after"), null);
     });
 
     for (const [code, status] of [

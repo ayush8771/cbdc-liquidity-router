@@ -62,6 +62,9 @@ function fakeRepository(answer: { rows: TransactionListRow[]; total: number } | 
       if (answer instanceof Error) throw answer;
       return answer;
     },
+    async findById() {
+      throw new Error("not used by the history tests");
+    },
   };
   return { repository, queries };
 }
@@ -225,13 +228,13 @@ describe("GET /api/v1/transactions", () => {
       assert.deepEqual(res.body, {
         error: {
           code: "VALIDATION_ERROR",
-          message: "The query parameters are invalid.",
+          message: "Request failed validation.",
           details: {
             errors: [
-              { field: "page", message: "must be given at most once" },
-              { field: "pageSize", message: "must be at most 100" },
-              { field: "from", message: "must be an ISO 8601 UTC timestamp, e.g. 2026-11-02T10:00:00Z" },
-              { field: "sort", message: "must be one of: createdAt:desc" },
+              { field: "page", message: "Must be given at most once." },
+              { field: "pageSize", message: "Must be at most 100." },
+              { field: "from", message: "Must be an ISO 8601 UTC timestamp, e.g. 2026-11-02T10:00:00Z." },
+              { field: "sort", message: "Must be one of: createdAt:desc." },
             ],
           },
           requestId: "bad-query",
@@ -275,11 +278,14 @@ describe("GET /api/v1/transactions", () => {
       assert.equal(res.status, 422);
     });
 
-    for (const method of ["POST", "PUT", "DELETE"]) {
-      it(`returns 404 NOT_FOUND for ${method}`, async () => {
+    // POST is the create endpoint (Step 6E-3), tested in transactionCreate.test.ts.
+    for (const method of ["PUT", "DELETE"]) {
+      it(`returns 405 METHOD_NOT_ALLOWED for ${method}, without a query`, async () => {
         const { repository, queries } = fakeRepository();
         const res = await get(repository, undefined, { method, headers: auth(analystToken) });
-        assert.equal(res.status, 404);
+        assert.equal(res.status, 405);
+        // The Allow header is checked in errors.test.ts; this helper returns no headers.
+        assert.equal((res.body.error as { code: string }).code, "METHOD_NOT_ALLOWED");
         assert.equal(queries.length, 0);
       });
     }

@@ -94,13 +94,15 @@ describe("toRouteRequest", () => {
   });
 
   it("keeps values exactly, including precision and unsupported inputs left for inference", () => {
+    // Well-formed codes in no supported corridor, and a date outside the replay
+    // range: the backend passes them on, and inference decides (§2.4, §4).
     const request = validated({
-      senderCountry: "usa",
+      senderCountry: "AAA",
       receiverCountry: "XXX",
       amountUsd: 0.1 + 0.2,
       state: { mode: "historicalReplay", date: "1999-12-31" },
     });
-    assert.deepEqual(toRouteRequest(request).transaction, { sender_country: "usa", receiver_country: "XXX", amount_usd: 0.1 + 0.2 });
+    assert.deepEqual(toRouteRequest(request).transaction, { sender_country: "AAA", receiver_country: "XXX", amount_usd: 0.1 + 0.2 });
     assert.equal((toRouteRequest(request).state as { date: string }).date, "1999-12-31");
   });
 

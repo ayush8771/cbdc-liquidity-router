@@ -5,6 +5,7 @@ import { after, before, describe, it } from "node:test";
 import { createApp } from "../../src/app.js";
 import type { DatabaseProbe, DatabaseStatus } from "../../src/db/health.js";
 import type { InferenceHealthProbe, InferenceStatus } from "../../src/inferenceClient/health.js";
+import { readiness } from "../../src/routes/health.js";
 import { silentLogger, startServer } from "../helpers/server.js";
 
 let server: Server;
@@ -44,22 +45,27 @@ describe("GET /api/v1/health", () => {
     assert.equal(new Date(body.time!).toISOString(), body.time);
   });
 
-  it("returns 200 with status degraded when the database is unavailable", async () => {
+  it("returns HTTP 503 with status unavailable and the Health body when the database is unavailable (§3.9)", async () => {
     databaseStatus = "unavailable";
     const res = await fetch(`${baseUrl}/api/v1/health`);
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 503);
+    assert.match(res.headers.get("content-type") ?? "", /^application\/json/);
     const body = (await res.json()) as Record<string, string>;
-    assert.equal(body.status, "degraded");
+    // The Health object, not the §4 error envelope.
+    assert.deepEqual(Object.keys(body), ["status", "database", "inference", "authMode", "time"]);
+    assert.equal(body.status, "unavailable");
     assert.equal(body.database, "unavailable");
     assert.equal(body.inference, "unavailable");
     databaseStatus = "ok";
   });
 
-  it("reports the database as unavailable when the app has no database", async () => {
+  it("reports the database as unavailable, with HTTP 503, when the app has no database", async () => {
     const plain = await startServer(createApp({ logger: silentLogger }));
     try {
-      const body = (await (await fetch(`${plain.baseUrl}/api/v1/health`)).json()) as Record<string, string>;
-      assert.equal(body.status, "degraded");
+      const res = await fetch(`${plain.baseUrl}/api/v1/health`);
+      assert.equal(res.status, 503);
+      const body = (await res.json()) as Record<string, string>;
+      assert.equal(body.status, "unavailable");
       assert.equal(body.database, "unavailable");
     } finally {
       await plain.close();
@@ -77,6 +83,15 @@ describe("GET /api/v1/health", () => {
   });
 });
 
+describe("readiness (§3.9)", () => {
+  it("is ok only with the database ok and inference ok or mock", () => {
+    assert.deepEqual(readiness("ok", "mock"), { httpStatus: 200, status: "ok" });
+    assert.deepEqual(readiness("ok", "ok"), { httpStatus: 200, status: "ok" });
+    assert.deepEqual(readiness("ok", "degraded"), { httpStatus: 200, status: "degraded" });
+    assert.deepEqual(readiness("unavailable", "mock"), { httpStatus: 503, status: "unavailable" });
+  });
+});
+
 describe("GET /api/v1/health with an inference probe", () => {
   const databaseStatuses: DatabaseStatus[] = ["ok", "unavailable"];
   const inferenceStatuses: InferenceStatus[] = ["ok", "degraded", "unavailable", "mock"];
@@ -91,12 +106,22 @@ describe("GET /api/v1/health with an inference probe", () => {
     }
   }
 
+  // The §3.9 table, all eight combinations.
+  const EXPECTED: Record<DatabaseStatus, Record<InferenceStatus, [number, string]>> = {
+    ok: { ok: [200, "ok"], mock: [200, "ok"], degraded: [200, "degraded"], unavailable: [200, "degraded"] },
+    unavailable: {
+      ok: [503, "unavailable"],
+      mock: [503, "unavailable"],
+      degraded: [503, "unavailable"],
+      unavailable: [503, "unavailable"],
+    },
+  };
   for (const db of databaseStatuses) {
     for (const inf of inferenceStatuses) {
-      const expected = db === "ok" && inf === "ok" ? "ok" : "degraded";
-      it(`database ${db} + inference ${inf} -> HTTP 200, status ${expected}`, async () => {
+      const [httpStatus, expected] = EXPECTED[db][inf];
+      it(`database ${db} + inference ${inf} -> HTTP ${httpStatus}, status ${expected}`, async () => {
         const { res, body } = await health({ check: async () => db }, { check: async () => inf });
-        assert.equal(res.status, 200);
+        assert.equal(res.status, httpStatus);
         assert.deepEqual(Object.keys(body), ["status", "database", "inference", "authMode", "time"]);
         assert.equal(body.status, expected);
         assert.equal(body.database, db);

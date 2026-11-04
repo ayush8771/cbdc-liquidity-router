@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import express from "express";
-import { createApp } from "../../src/app.js";
+import { API_ROUTES, createApp } from "../../src/app.js";
 import { ApiError, errorHandler, notFound } from "../../src/middleware/errors.js";
 import { requestId } from "../../src/middleware/requestId.js";
 import { captureLogger, startServer } from "../helpers/server.js";
@@ -29,18 +29,94 @@ describe("404 JSON responses (real app)", () => {
 
   for (const [method, path] of [
     ["GET", "/api/v1/does-not-exist"],
-    ["POST", "/api/v1/transactions"],
-    ["DELETE", "/api/v1/health"],
+    ["POST", "/api/v1/does-not-exist"],
+    ["DELETE", "/api/v1/health/extra"],
+    ["GET", "/api/v1/comparisons"], // not implemented yet, so unknown
     ["GET", "/"],
   ] as const) {
     it(`${method} ${path} returns the NOT_FOUND envelope`, async () => {
       const res = await fetch(`${server.baseUrl}${path}`, { method, headers: { "X-Request-Id": "nf-1" } });
       assert.equal(res.status, 404);
+      assert.equal(res.headers.get("allow"), null);
       const body = await json(res);
       assertEnvelope(body);
       assert.deepEqual(body.error, { code: "NOT_FOUND", message: "Unknown resource.", details: {}, requestId: "nf-1" });
     });
   }
+});
+
+describe("405 METHOD_NOT_ALLOWED (real app, §4)", () => {
+  let server: Awaited<ReturnType<typeof startServer>>;
+  before(async () => {
+    server = await startServer(createApp({ logger: captureLogger().logger }));
+  });
+  after(() => server.close());
+
+  for (const [method, path, allow] of [
+    ["POST", "/api/v1/health", "GET, HEAD"],
+    ["DELETE", "/api/v1/health", "GET, HEAD"],
+    ["PUT", "/api/v1/auth/me", "GET, HEAD"],
+    ["POST", "/api/v1/replay/calendar", "GET, HEAD"],
+    ["DELETE", "/api/v1/transactions", "GET, HEAD, POST"],
+    ["PATCH", "/api/v1/transactions", "GET, HEAD, POST"],
+    ["PUT", "/api/v1/transactions", "GET, HEAD, POST"],
+    ["OPTIONS", "/api/v1/transactions", "GET, HEAD, POST"],
+  ] as const) {
+    it(`${method} ${path} -> 405 with Allow: ${allow}`, async () => {
+      const res = await fetch(`${server.baseUrl}${path}`, { method, headers: { "X-Request-Id": "mna-1" } });
+      assert.equal(res.status, 405);
+      assert.equal(res.headers.get("allow"), allow);
+      assert.equal(res.headers.get("x-request-id"), "mna-1");
+      const body = await json(res);
+      assertEnvelope(body);
+      assert.deepEqual(body.error, {
+        code: "METHOD_NOT_ALLOWED",
+        message: `Method ${method} is not allowed on ${path}.`,
+        details: {},
+        requestId: "mna-1",
+      });
+    });
+  }
+
+  it("needs no token: 405 is checked before authentication (§10 Q14)", async () => {
+    const res = await fetch(`${server.baseUrl}/api/v1/transactions`, { method: "DELETE" });
+    assert.equal(res.status, 405);
+  });
+
+  it("still returns 401, not 405, for a registered method without a token", async () => {
+    const res = await fetch(`${server.baseUrl}/api/v1/transactions`);
+    assert.equal(res.status, 401);
+  });
+
+  it("matches as Express does: case-insensitive, trailing slash, query ignored; names the registered path", async () => {
+    for (const path of ["/API/V1/Transactions", "/api/v1/transactions/", "/api/v1/transactions?x=<script>"]) {
+      const res = await fetch(`${server.baseUrl}${path}`, { method: "DELETE" });
+      assert.equal(res.status, 405, path);
+      const body = await json(res);
+      assert.equal(body.error.message, "Method DELETE is not allowed on /api/v1/transactions.", path);
+    }
+  });
+
+  it("lists in Allow only methods that are actually routed", async () => {
+    for (const [route, methods] of Object.entries(API_ROUTES)) {
+      // A real value for each :param, so the route itself (not 404) answers.
+      const path = route.replace(/:[^/]+/g, "00000000-0000-4000-8000-000000000000");
+      for (const method of methods) {
+        const res = await fetch(`${server.baseUrl}${path}`, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          ...(method === "POST" && { body: "{}" }),
+        });
+        assert.notEqual(res.status, 405, `${method} ${path}`);
+        assert.notEqual(res.status, 404, `${method} ${path}`);
+      }
+    }
+  });
+
+  it("answers HEAD with the GET route, not 405", async () => {
+    const res = await fetch(`${server.baseUrl}/api/v1/health`, { method: "HEAD" });
+    assert.notEqual(res.status, 405);
+  });
 });
 
 describe("thrown errors", () => {

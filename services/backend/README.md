@@ -9,7 +9,7 @@ It serves the public Application API (`/api/v1/*`) to the web frontend and appli
 
 ## Status
 
-Steps 1–5D, 6A–6D, 6E-1 and 6E-2 are implemented and covered by unit tests (627 tests, run with `npm test`; none needs a database or a running inference service). An optional PostgreSQL integration test exists but has not been run (see Step 6D). Step 5D provisionally reviewed; real PostgreSQL validation remains pending. Steps 6A–6D and 6E-1 approved; Step 6E-2 awaits review.
+Steps 1–5D, 6A–6D and 6E-1 to 6E-3 are implemented and covered by unit tests (675 tests, run with `npm test`; none needs a database or a running inference service). PostgreSQL integration tests (`test/integration/`, 16 tests) run when `CBDC_TEST_DATABASE_URL` is set; with them the full run is 691 tests, all passing on PostgreSQL 18.6 (see "PostgreSQL validation"). Steps 1–5D, 6A–6D and 6E-1 approved; 6E-2 approved provisionally; 6E-3 awaits review.
 
 **Endpoints so far:**
 
@@ -19,6 +19,7 @@ Steps 1–5D, 6A–6D, 6E-1 and 6E-2 are implemented and covered by unit tests (
 | `GET /api/v1/auth/me` | Bearer token | Step 4 |
 | `GET /api/v1/replay/calendar` | Bearer token (viewer or analyst) | Step 6C |
 | `GET /api/v1/transactions` | Bearer token (viewer or analyst) | Step 6D |
+| `POST /api/v1/transactions` | Bearer token (viewer or analyst; `ppoProjected` analysts only) | Step 6E-3 |
 
 Every other path returns `404 NOT_FOUND`.
 
@@ -37,7 +38,7 @@ Every other path returns `404 NOT_FOUND`.
   - `GET /api/v1/auth/me` requires `Authorization: Bearer <token>`. The scheme is matched in any letter case, followed by exactly one 64-character hex token.
   - The token is hashed with SHA-256 and compared with `crypto.timingSafeEqual` against every hash in the token file.
   - A missing, malformed or unknown token returns `401 UNAUTHENTICATED`. `/api/v1/health` stays public, and unknown paths return 404 with or without a token.
-  - `authorizePolicies()` (in `src/auth/policies.ts`) refuses `ppoProjected` for non-analysts with `403 FORBIDDEN_POLICY`. It will be wired in when the transaction and comparison endpoints exist.
+  - `authorizePolicies()` (in `src/auth/policies.ts`) refuses `ppoProjected` for non-analysts with `403 FORBIDDEN_POLICY`. `POST /api/v1/transactions` uses it (Step 6E-3); the comparison endpoint will too.
 - **Step 5B: Prisma schema.**
   - **What it defines:** `prisma/schema.prisma` has the seven models from API contract §6.3 (`User`, `TransactionRequest`, `RoutingDecision`, `Allocation`, `Comparison`, `Explanation`, `AuditLog`) and six enums.
   - **Versions:** Prisma 6.19.3, exactly pinned.
@@ -70,13 +71,15 @@ Every other path returns `404 NOT_FOUND`.
     | Engine validation error with its documented status (§3.2: "passed through with the same `code`"): `VALIDATION_ERROR`, `UNSUPPORTED_CORRIDOR`, `INVALID_AMOUNT`, `DATE_OUT_OF_RANGE`, `DATE_IN_GAP_BUFFER`, `UNKNOWN_SCENARIO`, `STATE_VENUE_MISMATCH`, `INVALID_STATE_VALUE`, `POLICY_UNAVAILABLE_FOR_STATE` (all 422) | `422`, same code, backend message, empty details |
     | `ENGINE_BUSY` 503, `ENGINE_TIMEOUT` 504 (§4: "passed through by app") | Same status and code, backend message, empty details. `Retry-After` is kept on the error object but **not** sent to the client. |
     | `NOT_FOUND` 404, `POLICY_DISABLED` 409, `MALFORMED_REQUEST` 400, or any other 4xx error envelope | `502 INFERENCE_ERROR` (generic message) |
+    | `POLICY_DISABLED` 409 on a `post()` call that opts in with `passThrough: ["POLICY_DISABLED"]` (Step 6E-3; only `POST /v1/route` from transaction creation does) | `409 POLICY_DISABLED`, backend message, empty details |
     | Any 5xx not listed above, including `INTERNAL_ERROR` and `NOT_READY` | `502 INFERENCE_ERROR` |
     | Anything else: status other than 200, non-JSON, a body that isn't a JSON object, a malformed envelope, a pass-through code with the wrong status, a 3xx | `502 INFERENCE_ERROR` |
   - **Mock mode** (`INFERENCE_MODE=mock`) makes no network call. It answers only from an injected `mockHandler`, through the same mapping as live mode. `contracts/fixtures/inference/` doesn't exist yet, so no fixture loader exists and, without a handler, every call fails with `503 INFERENCE_UNAVAILABLE`. No response fixtures or schemas have been invented.
   - **Logging:** failures are logged with request ID, method, path, failure kind, code, upstream status, the inference code (only when it looks like one: upper case, digits and underscores) and duration; never bodies, query values or inference messages. Passed-through inference errors are logged at `info`, other failures at `warn`.
   - **Tested on** Node 20.20.2 and 20.6.0 (via `npx -p node@<version>`), as well as Node 24 (Steps 6A and 6B).
   - **Limitations and provisional decisions** (to confirm with Dev A, C and D):
-    - `NOT_FOUND` and `POLICY_DISABLED` from inference become `502 INFERENCE_ERROR`: neither §3.2 nor §4 says they pass through. The frontend can't yet tell a disabled PPO policy from an inference fault on these endpoints.
+    - `NOT_FOUND` and `POLICY_DISABLED` from inference become `502 INFERENCE_ERROR`: neither §3.2 nor §4 says they pass through. The one exception is the opt-in above, used only for transaction creation (Step 6E-3). Comparisons and explanations don't opt in; whether they should is undecided (§2.9 reports a disabled policy in `skipped`, and §2.10 lists no errors).
+    - **Opt-in pass-through:** `post(path, body, {passThrough})` takes codes from `OPT_IN_PASSTHROUGH_CODES` in `errors.ts`, which holds only `POLICY_DISABLED` (409). It works the same in live and mock mode. A code with a status other than the one listed is still an invalid response (502). `get()` and `health()` have no such option.
     - Engine validation errors carry no `details`, so the frontend can't see which field failed. §4 shows `details.field` and `details.errors[]` but defines no schema, and the field paths are snake_case.
     - `Retry-After` is not forwarded until its behaviour is agreed.
     - Response bodies have **no size limit**; only the timeout bounds them. A limit is pending expected response sizes from Dev A.
@@ -126,15 +129,14 @@ Every other path returns `404 NOT_FOUND`.
   - **Ordering:** `createdAt` DESC, then `id` DESC, so pages are stable when timestamps are equal.
   - **Repository:** `TransactionRepository.list()` runs `findMany` and `count` in one Prisma transaction at REPEATABLE READ, so the page and `total` come from the same snapshot. It selects only the item's columns (never `engineResponse` or `stateSpec`).
   - **Errors:** a database error returns `500 INTERNAL_ERROR` (§4 has no database code); the Prisma error is logged with its class name and code only, as in Step 5D. Without `DATABASE_URL` the endpoint also returns `500 INTERNAL_ERROR`. Other methods → `404 NOT_FOUND`.
-  - **Data:** nothing writes transactions yet (`POST /transactions` is a later step), so in practice the list is empty.
-  - **Integration test** (`test/integration/transactions.test.ts`): runs only when `CBDC_TEST_DATABASE_URL` is set, and otherwise reports `SKIP`. It **empties every table** before and after, so the database must be disposable; its name must end in `_test`, or the test file fails without connecting. Apply the migrations to it first; the test never changes the schema:
+  - **Data:** rows are written by `POST /api/v1/transactions` (Step 6E-3).
+  - **Integration test** (`test/integration/transactions.test.ts`, which also holds the Step 6E-3 suite): runs only when `CBDC_TEST_DATABASE_URL` is set, and otherwise reports `SKIP`. It **empties every table** before and after, so the database must be disposable; its name must end in `_test`, or the test file fails without connecting. Apply the migrations to it first; the test never changes the schema:
     ```bash
     DATABASE_URL=<test url> npx prisma migrate deploy
     CBDC_TEST_DATABASE_URL=<test url> npm test
     ```
-    **It has not been run yet:** no disposable test database was configured, and no migration has been applied to any database.
 
-- **Step 6E-1: transaction request parsing, validation and mapping** (`src/middleware/jsonBody.ts`, `src/validation/transactionRequest.ts`, `src/mappers/routeRequest.ts`). Building blocks for `POST /api/v1/transactions`; **no route uses them yet**.
+- **Step 6E-1: transaction request parsing, validation and mapping** (`src/middleware/jsonBody.ts`, `src/validation/transactionRequest.ts`, `src/mappers/routeRequest.ts`). Building blocks for `POST /api/v1/transactions` (used since Step 6E-3).
   - **`jsonBody()`** (per-route middleware): parses `application/json` bodies (any parameters, such as `charset=utf-8`, allowed) up to 100kb, UTF-8 only, with gzip/deflate/br decoding. Every rejection is `400 MALFORMED_REQUEST` with a backend-written message, never the parser's: wrong or missing `Content-Type`, an empty body, invalid JSON, a top-level value that isn't an object or array, a body over 100kb, another charset, or an unsupported content encoding. PROVISIONAL: API contract §4 has no 413 or 415 code, so size and charset/encoding problems also use 400 `MALFORMED_REQUEST`.
   - **`validateTransactionRequest()`**: shape and type checks for the §3.2 body, reporting every problem as `details.errors[]` entries `{field, message}`, with paths such as `state.venues[1].history.congestion`.
     | Field | Rule |
@@ -147,18 +149,19 @@ Every other path returns `404 NOT_FOUND`.
     | `date`, `referenceDate` | `YYYY-MM-DD` real calendar dates |
     | `scenarioId` | Non-empty string, kept exactly as sent |
     | `venues[]` | Objects with `bridgeUid` (non-empty string), `liquidityUsd` and `congestion` (finite numbers), optional `history` (or `null`) of exactly `{liquidityUsd, congestion}`, each exactly 30 finite numbers |
+    - **Unsafe integers** (§2.11): every number above (`amountUsd`, venue `liquidityUsd` and `congestion`, every history element) that is integer-valued with an absolute value above 2⁵³ − 1 (9007199254740991) is rejected with `422 VALIDATION_ERROR` and its camelCase path, such as `state.venues[1].history.liquidityUsd[0]`; it is never rounded. The rule applies to the parsed value, not its spelling, so `9007199254740993`, `9007199254740992.0`, `9.007199254740992e15`, `1e21` and their negatives are all rejected. ±9007199254740991 and non-integers such as `4503599627370495.5` are accepted. Accepted numbers reach `toRouteRequest()` unchanged, so the values validated are the values sent to inference.
     - Unknown fields inside `state`, a venue or `history` are rejected (§2.4), including another mode's fields.
     - **Left to inference** (its own codes, §2.4 and §4): amount > 0, supported corridor, date range and gap buffers, known scenario, venues matching the corridor, non-negative values, and the last history value equalling the current one. No allocation or feasibility logic is in the backend.
   - **`toRouteRequest()`**: the validated request as the §2.8 `RouteRequest`, field for field, with documented fields only. Enum values mapped (§3.2): `cheapestFeasible` → `cheapest_feasible`, `ppoProjected` → `ppo_projected`, `historicalReplay` → `historical_replay`. Everything else is unchanged, including `bridge_uid`, dates and numbers. `policy` is always sent, already defaulted; `client_reference` only when given.
   - **Provisional decisions** (unspecified in the contract): unknown **top-level** fields are rejected too, so a misspelt `polcy` can't silently route with the default policy; `null` counts as omitted for `policy` and `clientReference`; `clientReference` has no length limit beyond the body limit; the `details.errors[]` entry shape.
-  - **Pending confirmation (Dev A/C):** the `scenarioId` value convention. The backend passes it to inference unchanged and doesn't guess whether the Application API uses the engine's values (`cheapest_venue_outage`) or camelCase ones.
+  - **`scenarioId` values** (confirmed by Dev A): the six Stage 1F IDs of API contract §1, `baseline`, `liquidity_minus30`, `liquidity_minus50`, `cheapest_venue_outage`, `congestion_x2` and `combined_stress`, in the engine's spelling. The backend passes the value to inference, stores it in `stateSpec` and returns it in `provenance.scenarioId`, all unchanged. Checking that it is one of the six is left to inference (`UNKNOWN_SCENARIO`).
 
-- **Step 6E-2: inference response validation and mapping** (`src/mappers/routeResponse.ts`). For `POST /api/v1/transactions`; **no route uses it yet**.
+- **Step 6E-2: inference response validation and mapping** (`src/mappers/routeResponse.ts`). Used by `POST /api/v1/transactions` since Step 6E-3.
   - **`mapRouteResponse(body, request)`** takes a `/v1/route` 200 body and the validated request (Step 6E-1) and returns:
     - `transaction`: the §3.2 response `transaction`, i.e. the engine's `transaction` in camelCase;
     - `decision`: the §3.2 `decision`, i.e. the rest of the response in camelCase;
     - `columns`: `corridor` (from the engine), the `RoutingDecision` column values and one `Allocation` column set per entry, copied from the response, never computed.
-  - **Mapping:** keys via `toCamelCase`, so unknown fields are kept at every level. Enum values mapped: `policy` (`cheapest_feasible` → `cheapestFeasible`, `ppo_projected` → `ppoProjected`) and `provenance.stateMode` (`historical_replay` → `historicalReplay`). Unchanged: IDs, codes, tags, `bridgeUid`, `valuesProvenance`, `split`, `regime`, `policyStatus`, warning codes, reason strings and `scenarioId` (convention pending).
+  - **Mapping:** keys via `toCamelCase`, so unknown fields are kept at every level. Enum values mapped: `policy` (`cheapest_feasible` → `cheapestFeasible`, `ppo_projected` → `ppoProjected`) and `provenance.stateMode` (`historical_replay` → `historicalReplay`). Unchanged: IDs, codes, tags, `bridgeUid`, `valuesProvenance`, `split`, `regime`, `policyStatus`, warning codes, reason strings and `scenarioId` (the engine's IDs, confirmed by Dev A).
   - **Validated** (only what persistence and the response rely on): `decision_id`; `policy` (must equal the requested, defaulted policy); `policy_status`; `transaction` (must echo the request's sender, receiver, amount, simulation date and client reference; `corridor` must be a non-empty string); `feasibility.allowed`; the five `totals` columns; `metrics` (see below); `provenance.state_mode` (must equal the requested mode), `values_provenance`, `state_frame_sha256`, `knowledge_sha256`, `git_commit`, `checkpoint`; and every allocation's column fields, with unique whole-number slots. Not validated, only passed through: `feasibility.reason`/`decisive_fact_ids`/`knowledge_version`, the other `totals` and `metrics` fields, `diagnostics`, the rest of `provenance`, and `warnings`.
   - **Rejection:** any problem throws `InvalidRouteResponseError`, a `502 INFERENCE_ERROR` with empty `details`. Its `problems` list names field paths for logging, never values. Colliding keys are rejected the same way.
   - **Regulatory rejection:** `allowed: false` with `allocations: []` maps normally; no rejection invariants are enforced (that's the engine's rule).
@@ -170,32 +173,74 @@ Every other path returns `404 NOT_FOUND`.
     - Slots are unique whole numbers (the `Allocation` table's unique key).
     - Not enforced, though they might be: that `policy_status` matches the policy (§2.2: default, baseline, experimental), that `ppo_projected` has a checkpoint, and that `share_before_projection` is set only for `ppo_projected`.
 
-### Implemented but not yet tested against a real PostgreSQL database
+- **Step 6E-3: `POST /api/v1/transactions` and transaction persistence** (`src/routes/transactions.ts`, `src/db/transactionPersistence.ts`, `src/audit/auditLog.ts`).
+  - **Order of checks:**
+    | Step | Outcome | Saved |
+    |---|---|---|
+    | Bearer token | `401 UNAUTHENTICATED` | nothing |
+    | JSON body (`jsonBody()`) | `400 MALFORMED_REQUEST` | nothing |
+    | Role: a viewer whose body asks for `ppoProjected` (checked on the raw value, before validation) | `403 FORBIDDEN_POLICY` | nothing |
+    | Validation (Step 6E-1) | `422 VALIDATION_ERROR` with `details.errors[]` | nothing |
+    | No `DATABASE_URL`, or no seeded `User` row for the caller (users are never created) | `500 INTERNAL_ERROR`, before inference is called | nothing |
+    | `POST /v1/route`, never retried, request ID forwarded | see below | |
+  - **Inference outcomes:**
+    | Outcome | Response | Saved, in one database transaction |
+    |---|---|---|
+    | HTTP 200 that the Step 6E-2 mapper accepts, **including a regulatory rejection** (`allowed: false`, no allocations) | `201` `{id, createdAt, createdBy, status: "routed", transaction, decision}` (§3.2) | `TransactionRequest` (`routed`), `RoutingDecision`, one `Allocation` per allocation, `AuditLog` `SUCCESS` |
+    | Unreachable, timeout, mock without an answer, or no inference client | `503 INFERENCE_UNAVAILABLE` | `TransactionRequest` (`failed`, `corridor` null, no decision), `AuditLog` `FAILED` |
+    | `ENGINE_BUSY` 503, `ENGINE_TIMEOUT` 504 | same status and code | as above |
+    | Any 5xx or 4xx not passed through, or an invalid body (including a 200 the mapper rejects) | `502 INFERENCE_ERROR` | as above |
+    | Engine 422 codes, `409 POLICY_DISABLED` (this call opts in to its pass-through; see Step 6A) | passed through, empty details | nothing, no audit |
+    - A failed transaction's error carries `details: {"transactionId": "<id>"}` (§3.2); its message and code are those of the Step 6A mapping. `Retry-After` is still not forwarded.
+    - A mapper rejection is logged as `inference response rejected` with field paths only.
+  - **What is stored:**
+    - `stateSpec`: the validated Application API state (camelCase; an omitted `history` is stored as `null`).
+    - `simulationDate`: `state.date`, or `state.referenceDate` in explicit mode.
+    - `requestedPolicy`: the policy after defaulting.
+    - `corridor`: the engine's `transaction.corridor` on a 200, otherwise `null`.
+    - `RoutingDecision` and `Allocation` columns: the mapper's copies of the response; nothing is computed. `engineResponse`: the inference body as received. PostgreSQL `jsonb` keeps its values but not its key order or whitespace.
+    - The persistence code re-checks that the decision's policy equals `requestedPolicy` before writing.
+  - **Audit rows** (team rules): `action` `TRANSACTION_CREATE`, `outcome` `SUCCESS` or `FAILED`, `entityType` `TransactionRequest`, `entityId` the saved transaction's ID, and the request ID. `id` (a UUID) and `at` are set by the backend, and `at` equals the transaction's `createdAt`. No token, hash, secret or payload is stored. `auditLogData()` takes the entity as one object, so `entityType` and `entityId` are always both set or both null; the database has no CHECK constraint for this.
+  - **Atomicity:** each outcome is one Prisma batch `$transaction`. Writes are inserts only, with no updates or deletes and no triggers. If any insert fails (an audit insert, an allocation, or the `User` foreign key if the user disappears after the check), nothing is saved and the response is `500 INTERNAL_ERROR`. That includes saving a failed transaction, in which case there is no `transactionId` to return.
+  - **Scenario IDs:** the six confirmed values pass through unchanged (see Step 6E-1).
 
-The unit tests use fake database clients or a fake repository, and no database has been involved so far:
-- **The migration** has not been applied to any database.
-- **Transaction history** (Step 6D) has been tested with a fake repository and a fake Prisma client only. Its Prisma queries (the relation filter on `completed`, the ordering, REPEATABLE READ) are type-checked against the generated client but haven't run against PostgreSQL.
-- **The seed** has not been run against a database. Only its token-file checks and its upsert calls have been tested, with a fake client.
-- **A successful database connection** has not been verified. Health has been checked live only with `DATABASE_URL` unset, or pointing at a closed port; both correctly report `database: "unavailable"`.
-- **Shutdown** is tested with fakes only. Windows can't deliver `SIGTERM` to another process, so a real signal-driven shutdown hasn't been exercised.
-- **One check is still to do:** whether Prisma's drift detection accepts the migration's manual `NOT NULL` on `Comparison.policies`. Run `prisma migrate dev`, or `prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <url>`, against a development database.
+### PostgreSQL validation
+
+- **Before Step 6E-3** (reported by Dev B, against a local PostgreSQL database): the migration was applied, the schema validated, the seed run and the Step 6D integration test passed.
+- **Step 6E-3 integration suite** (`POST /api/v1/transactions (PostgreSQL integration)`): covers routed saves, regulatory rejection, failed saves, 422 and 409 with nothing saved, a missing `User` row, and rollback when the audit insert, an allocation insert or the user foreign key fails.
+- **Verified after Step 6E-3** (reported by Dev B):
+  | Item | Result |
+  |---|---|
+  | Server | PostgreSQL 18.6 |
+  | Database | `cbdc_router_test` |
+  | Migration | `20261102110157_init` applied successfully |
+  | Full test run (unit and integration) | **691 passed, 0 failed, 0 skipped** |
+  | PostgreSQL integration tests | **16/16 passed**: 6 GET (`GET /api/v1/transactions (PostgreSQL integration)`), 10 POST (`POST /api/v1/transactions (PostgreSQL integration)`) |
+- **Running the integration tests:** `CBDC_TEST_DATABASE_URL` must point to a **disposable** database whose name ends in `_test`. The tests empty every table, `User` included, before and after they run, and refuse any other database name. Apply the migration first, then run the full suite from `services/backend/` (PowerShell):
+  ```powershell
+  $env:DATABASE_URL = "<test database URL>"; npx prisma migrate deploy
+  $env:CBDC_TEST_DATABASE_URL = "<test database URL>"; npm test
+  ```
+  These database URLs may contain credentials; never commit or log them.
+- **Still tested with fakes only:** shutdown (Windows can't deliver `SIGTERM` to another process), and the inference service itself (`INFERENCE_MODE=mock` handlers stand in for it).
+- **Still to check unless already covered by the schema validation above:** whether Prisma's drift detection accepts the migration's manual `NOT NULL` on `Comparison.policies` (`prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <url>`).
 
 ### Remaining work
 
-- **Database repositories:** reading the history list exists (Step 6D). Still to do: saving and reading single transactions, decisions, allocations, comparisons, explanations and audit log entries, append-only. Includes checking that the policy returned by inference matches `TransactionRequest.requestedPolicy` before saving.
-- **When the server requires `DATABASE_URL`:** it stays optional until the repositories need it.
+- **Database repositories:** the history list (Step 6D) and saving transactions with their decision, allocations and audit row (Step 6E-3) exist. Still to do: reading a single transaction, and saving comparisons and explanations with their audit rows, append-only.
+- **When the server requires `DATABASE_URL`:** it is still optional; without it the transaction endpoints return `500 INTERNAL_ERROR`.
 - **Inference client follow-ups:** load mock responses from `contracts/fixtures/inference/` once they exist; optionally the one GET retry §5 allows; whether and how to forward error `details` and `Retry-After`; a response-size limit; validating responses against `contracts/openapi/inference.v1.yaml` once it exists; caching of `version`, `network`, `calendar` and `scenarios` (§3.1, §5), pending when the backend checks `/v1/version`.
-- **Mappers:** the generic key mapper exists (Step 6C). Endpoint-specific mapping of enum values (§3.2, e.g. `historical_replay` → `historicalReplay`) is still to do, and which value fields are enums rather than IDs or tags needs confirmation.
+- **Mappers:** the generic key mapper (Step 6C) and the route request and response mappers (Steps 6E-1, 6E-2) exist. Enum mapping for the other endpoints is still to do, and which value fields are enums rather than IDs or tags needs confirmation.
 - **The remaining endpoints** (API contract §3.1):
   - **Read-only, via inference:** `/meta`, `/network`, `/state`, `/scenarios`;
-  - **Transactions:** `POST /transactions` (request side done in Step 6E-1, response side in 6E-2; persistence, audit and the route remain), `GET /transactions/:id`;
+  - **Transactions:** `GET /transactions/:id` (`POST /transactions` is done, Step 6E-3);
   - **Explanation:** `GET /transactions/:id/explanation`;
   - **Comparisons:** `POST /comparisons`, `GET /comparisons/:id`;
   - **Dashboard:** `GET /dashboard/summary`.
-- **Wiring the role check:** `authorizePolicies()` into the transaction and comparison endpoints.
+- **Wiring the role check:** `authorizePolicies()` into the comparison endpoint (the transaction endpoint uses it).
 - **Docker:** the backend `Dockerfile` and `.dockerignore`, including a configurable host for running inside Docker.
-- **Integration tests** in `test/integration/` against a real PostgreSQL database: the first one exists (Step 6D) but hasn't been run.
-- **Open team decisions:** several schema and health-response details (e.g. the health HTTP status code, the `meanFeeCostPct` source, the audit log rules) need agreement with Dev A, C and D.
+- **Integration tests** in `test/integration/` for the later endpoints.
+- **Open team decisions:** several schema and health-response details (e.g. the health HTTP status code, the `meanFeeCostPct` source, audit rules for comparisons and explanations) need agreement with Dev A, C and D. The transaction audit rules were agreed in Step 6E-3.
 
 ## Requirements
 
@@ -323,7 +368,8 @@ src/
   auth/policies.ts     analyst-only rule for ppoProjected
   routes/auth.ts       GET /api/v1/auth/me
   routes/replay.ts     GET /api/v1/replay/calendar
-  routes/transactions.ts GET /api/v1/transactions (query parsing, item mapping)
+  routes/transactions.ts GET /api/v1/transactions (query parsing, item mapping), POST /api/v1/transactions
+  audit/auditLog.ts    audit row rules and values (TRANSACTION_CREATE, SUCCESS/FAILED)
   mappers/camelCase.ts snake_case → camelCase key mapping
   mappers/routeRequest.ts  transaction request → inference RouteRequest
   mappers/routeResponse.ts inference RouteResponse → §3.2 decision and database column values
@@ -333,6 +379,7 @@ src/
   db/health.ts         database probe for /api/v1/health (one query at a time)
   db/errors.ts         safe descriptions of Prisma errors for logs (name, code, frames)
   db/transactions.ts   TransactionRepository and its Prisma implementation (history list)
+  db/transactionPersistence.ts  saving routed and failed transactions with their audit row, atomically
   inferenceClient/     client.ts (calls to /v1/*, live and mock), errors.ts (InferenceError, error mapping),
                        health.ts (inference status for /api/v1/health)
   lifecycle.ts         graceful shutdown
@@ -349,7 +396,7 @@ prisma/
 dev-tokens.example.json  placeholder token file (committed)
 ```
 
-`src/auth/`, `src/db/`, `src/inferenceClient/`, `src/mappers/`, `src/routes/`, `src/validation/` and `prisma/` already exist. Later steps add more repositories under `src/db/`, more mappers, `src/audit/`, more `src/routes/`, and more `test/integration/` tests (arch §4).
+`src/audit/`, `src/auth/`, `src/db/`, `src/inferenceClient/`, `src/mappers/`, `src/routes/`, `src/validation/` and `prisma/` already exist. Later steps add more repositories under `src/db/`, more mappers, more `src/routes/`, and more `test/integration/` tests (arch §4).
 
 ## Notes
 

@@ -11,7 +11,8 @@ describe("X-Request-Id", () => {
   // Hooks sit inside describe: Node 20.6's test runner doesn't run file-level
   // before() hooks ahead of tests in a describe block.
   before(async () => {
-    server = await startServer(createApp({ logger: capture.logger }));
+    // A reachable database, so /api/v1/health answers 200 (§3.9: 503 without one).
+    server = await startServer(createApp({ logger: capture.logger, database: { check: async () => "ok" } }));
   });
   after(() => server.close());
 

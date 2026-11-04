@@ -131,7 +131,7 @@ describe("mapRouteResponse: the contract examples", () => {
     assert.deepEqual(columns.decision, {
       decisionId: "sha256:9f2c", policy: "waterfall", policyStatus: "default", allowed: true, completed: true,
       completionRatio: 1.0, executedUsd: 300000.0, unroutedEnvUsd: 0.0, unroutedAmountBasedUsd: 0.0,
-      rewardEnv: -0.3078, rewardAmountBased: -0.3078, latencyTerm: 0.265, riskTerm: 0.087,
+      rewardEnv: -0.3078, rewardAmountBased: -0.3078, latencyTerm: 0.265, riskTerm: 0.087, feeCostUsd: 5100.0,
       valuesProvenance: "synthetic_simulation", stateFrameSha256: "<hex>", checkpointSha256: null,
       knowledgeSha256: "<hex>", gitCommit: "bc9905e",
     });
@@ -206,7 +206,8 @@ describe("mapRouteResponse: enum values and unchanged values", () => {
 });
 
 describe("mapRouteResponse: special cases", () => {
-  it("handles a regulatory rejection without metrics", () => {
+  // The §2.8 regulatory rejection: full metrics, fee and execution costs 0.
+  function rejection(): Record<string, unknown> {
     const body = engineExample();
     set(body, "feasibility.allowed", false);
     set(body, "feasibility.reason", "amount exceeds cap");
@@ -214,30 +215,104 @@ describe("mapRouteResponse: special cases", () => {
     set(body, "totals", { amount_usd: 900000.0, requested_usd: 0.0, executed_usd: 0.0, unrouted_env_usd: 0.0,
       unrouted_amount_based_usd: 900000.0, completion_ratio: 0.0, completed: false, bridges_used: 0 });
     set(body, "transaction.amount_usd", 900000.0);
-    set(body, "metrics", undefined);
-    const mapped = mapRouteResponse(body, request({ amountUsd: 900000.0 }));
+    set(body, "metrics", { fee_cost_usd: 0.0, baseline_cost_pct: 0.0612, cost_term: 0.0, latency_term: 0.0, risk_term: 0.0,
+      unrouted_term_env: 0.0, unrouted_term_amount_based: 1.0, reward_env: 0.0, reward_amount_based: -1.0,
+      reward_weights: { lambda_latency: 1.0, lambda_risk: 1.0, lambda_unrouted: 1.0, status: "placeholder" } });
+    return body;
+  }
+
+  it("maps a regulatory rejection with its full metrics, feeCostUsd 0 (§2.8)", () => {
+    const mapped = mapRouteResponse(rejection(), request({ amountUsd: 900000.0 }));
     assert.deepEqual(mapped.columns.allocations, []);
     assert.equal(mapped.columns.decision.allowed, false);
     assert.equal(mapped.columns.decision.completed, false);
+    const d = mapped.columns.decision;
     assert.deepEqual(
-      [mapped.columns.decision.rewardEnv, mapped.columns.decision.rewardAmountBased, mapped.columns.decision.latencyTerm, mapped.columns.decision.riskTerm],
-      [null, null, null, null],
+      [d.feeCostUsd, d.latencyTerm, d.riskTerm, d.rewardEnv, d.rewardAmountBased],
+      [0, 0, 0, 0, -1],
     );
-    assert.equal("metrics" in mapped.decision, false);
+    assert.equal((mapped.decision.metrics as Record<string, unknown>).unroutedTermAmountBased, 1.0);
     assert.deepEqual(mapped.decision.allocations, []);
   });
 
-  it("accepts null metrics, and null or missing reward and term values", () => {
-    const nullMetrics = mapRouteResponse(set(engineExample(), "metrics", null), request());
-    assert.equal(nullMetrics.columns.decision.rewardEnv, null);
-    assert.equal(nullMetrics.decision.metrics, null);
+  for (const [label, metrics] of [
+    ["missing", undefined],
+    ["null", null],
+    ["an array", []],
+    ["a number", 0],
+  ] as const) {
+    it(`rejects ${label} metrics, on an allowed decision and on a regulatory rejection`, () => {
+      assert.deepEqual(problemsOf(set(engineExample(), "metrics", metrics)), ["metrics: must be an object"]);
+      assert.deepEqual(problemsOf(set(rejection(), "metrics", metrics), request({ amountUsd: 900000.0 })), [
+        "metrics: must be an object",
+      ]);
+    });
+  }
+
+  const METRIC_KEYS = [
+    "fee_cost_usd", "baseline_cost_pct", "cost_term", "latency_term", "risk_term",
+    "unrouted_term_env", "unrouted_term_amount_based", "reward_env", "reward_amount_based",
+  ];
+  for (const key of METRIC_KEYS) {
+    for (const [label, value] of [["missing", undefined], ["null", null], ["a string", "1"], ["NaN", Number.NaN], ["true", true]] as const) {
+      it(`rejects metrics.${key} that is ${label}`, () => {
+        assert.deepEqual(problemsOf(set(engineExample(), `metrics.${key}`, value)), [`metrics.${key}: must be a finite number`]);
+      });
+    }
+  }
+
+  for (const [label, value] of [["missing", undefined], ["null", null], ["an array", []], ["a string", "placeholder"]] as const) {
+    it(`rejects metrics.reward_weights that is ${label}`, () => {
+      assert.deepEqual(problemsOf(set(engineExample(), "metrics.reward_weights", value)), [
+        "metrics.reward_weights: must be an object",
+      ]);
+    });
+  }
+
+  for (const key of ["lambda_latency", "lambda_risk", "lambda_unrouted"]) {
+    for (const value of [undefined, null, "1.0"]) {
+      it(`rejects metrics.reward_weights.${key} = ${JSON.stringify(value) ?? "missing"}`, () => {
+        assert.deepEqual(problemsOf(set(engineExample(), `metrics.reward_weights.${key}`, value)), [
+          `metrics.reward_weights.${key}: must be a finite number`,
+        ]);
+      });
+    }
+  }
+
+  for (const value of [undefined, null, "", 1, true, "calibrated", "Placeholder", "PLACEHOLDER", " placeholder", "placeholder ", "placeholder\n", ["placeholder"], { value: "placeholder" }]) {
+    it(`rejects metrics.reward_weights.status = ${JSON.stringify(value) ?? "missing"}`, () => {
+      assert.deepEqual(problemsOf(set(engineExample(), "metrics.reward_weights.status", value)), [
+        'metrics.reward_weights.status: must be "placeholder"',
+      ]);
+    });
+  }
+
+  it('accepts metrics.reward_weights.status "placeholder", on an allowed decision and a rejection', () => {
+    assert.equal(mapRouteResponse(engineExample(), request()).columns.decision.allowed, true);
+    assert.equal(mapRouteResponse(rejection(), request({ amountUsd: 900000.0 })).columns.decision.allowed, false);
+  });
+
+  it("rejects a regulatory rejection whose reward_weights.status isn't placeholder", () => {
+    assert.deepEqual(problemsOf(set(rejection(), "metrics.reward_weights.status", "calibrated"), request({ amountUsd: 900000.0 })), [
+      'metrics.reward_weights.status: must be "placeholder"',
+    ]);
+  });
+
+  it("reports every metrics problem at once", () => {
     const body = engineExample();
-    set(body, "metrics.reward_env", null);
-    set(body, "metrics.latency_term", undefined);
-    const partial = mapRouteResponse(body, request());
-    assert.equal(partial.columns.decision.rewardEnv, null);
-    assert.equal(partial.columns.decision.latencyTerm, null);
-    assert.equal(partial.columns.decision.rewardAmountBased, -0.3078);
+    set(body, "metrics.fee_cost_usd", null);
+    set(body, "metrics.cost_term", undefined);
+    set(body, "metrics.reward_weights.status", undefined);
+    assert.deepEqual(problemsOf(body), [
+      "metrics.fee_cost_usd: must be a finite number",
+      "metrics.cost_term: must be a finite number",
+      'metrics.reward_weights.status: must be "placeholder"',
+    ]);
+  });
+
+  it("copies metrics.fee_cost_usd to feeCostUsd, including 0", () => {
+    assert.equal(mapRouteResponse(set(engineExample(), "metrics.fee_cost_usd", 0), request()).columns.decision.feeCostUsd, 0);
+    assert.equal(mapRouteResponse(engineExample(), request()).columns.decision.feeCostUsd, 5100.0);
   });
 
   it("maps a PPO projection with share_before_projection and a checkpoint", () => {

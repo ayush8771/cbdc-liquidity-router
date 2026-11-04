@@ -258,8 +258,8 @@ describe("GET /api/v1/health with the inference client", () => {
     const res = await health("mock", { mockHandler: () => undefined });
     assert.equal(res.status, 200);
     assert.equal(res.body.inference, "mock");
-    // §3.9: status is ok only when database and inference are both ok.
-    assert.equal(res.body.status, "degraded");
+    // §3.9: mock mode is a deliberate configuration, not a fault, so status is ok.
+    assert.equal(res.body.status, "ok");
     assert.equal(requests.length, 0);
   });
 });

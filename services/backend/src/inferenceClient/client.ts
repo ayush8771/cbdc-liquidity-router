@@ -3,11 +3,17 @@ import type { Logger } from "../logger.js";
 import { REQUEST_ID_HEADER } from "../middleware/requestId.js";
 import {
   InferenceError,
+  OPT_IN_PASSTHROUGH_CODES,
   PASSTHROUGH_CODES,
+  RETRY_AFTER_CODES,
   inferenceInvalid,
+  inferenceNotReady,
   inferenceUnavailable,
+  retryAfterSeconds,
   type InferenceFailure,
+  type OptInPassthroughCode,
 } from "./errors.js";
+import { mapEngineFieldPath } from "./fieldPaths.js";
 
 // The only module that calls the inference service (arch §5.2; API contract §2,
 // §4, §5). It returns the engine's snake_case JSON unchanged: mapping to
@@ -22,7 +28,10 @@ import {
 //   §5, but that isn't done yet.
 // - Redirects are not followed; a 3xx is an invalid response.
 // - Errors: only documented codes pass through, with the backend's own message
-//   and empty details (errors.ts). Response size is bounded only by the
+//   (errors.ts). A 422 keeps its field paths, mapped (fieldPaths.ts); other
+//   details are dropped. A post() call may also name opt-in codes
+//   (passThrough, e.g. POLICY_DISABLED) to pass through; no call does by
+//   default, and get() and health() can't. Response size is bounded only by the
 //   timeout; a limit awaits expected response sizes from Dev A.
 // - health() is the one exception to "only HTTP 200 succeeds": /v1/health
 //   answers 503 when not ready (§2.1), so it also accepts 503, returns the
@@ -76,7 +85,12 @@ export interface InferenceHealthResponse {
 export interface InferenceClient {
   readonly mode: InferenceMode;
   get(path: InferenceGetPath, options?: { query?: Record<string, QueryValue>; requestId?: string }): Promise<JsonObject>;
-  post(path: InferencePostPath, body: JsonObject, options?: { requestId?: string }): Promise<JsonObject>;
+  /** passThrough: opt-in error codes (errors.ts) this call passes through instead of mapping to 502. */
+  post(
+    path: InferencePostPath,
+    body: JsonObject,
+    options?: { requestId?: string; passThrough?: readonly OptInPassthroughCode[] },
+  ): Promise<JsonObject>;
   /** GET /v1/health. Any other status, or a failure, throws as get() does, without logging. */
   health(options?: { requestId?: string }): Promise<InferenceHealthResponse>;
 }
@@ -135,12 +149,16 @@ export function createInferenceClient(config: Config["inference"], options: Infe
 
   const call = async (
     request: InferenceRequest,
-    { accepted = OK_ONLY, log = true }: { accepted?: readonly number[]; log?: boolean } = {},
+    {
+      accepted = OK_ONLY,
+      log = true,
+      passThrough = [],
+    }: { accepted?: readonly number[]; log?: boolean; passThrough?: readonly OptInPassthroughCode[] } = {},
   ): Promise<{ status: number; body: JsonObject }> => {
     const started = Date.now();
     try {
       const answer = await (config.mode === "mock" ? sendMock(request) : sendLive(request));
-      return interpret(answer, accepted);
+      return interpret(answer, accepted, passThrough);
     } catch (error) {
       if (log && error instanceof InferenceError) {
         // A passed-through inference error is usually the caller's input
@@ -170,9 +188,9 @@ export function createInferenceClient(config: Config["inference"], options: Infe
       assertPath(INFERENCE_GET_PATHS, path);
       return (await call({ method: "GET", path, query, requestId })).body;
     },
-    async post(path, body, { requestId } = {}) {
+    async post(path, body, { requestId, passThrough } = {}) {
       assertPath(INFERENCE_POST_PATHS, path);
-      return (await call({ method: "POST", path, body, requestId })).body;
+      return (await call({ method: "POST", path, body, requestId }, { passThrough })).body;
     },
     async health({ requestId } = {}) {
       // The probe logs status changes itself, so failures aren't logged per call.
@@ -193,22 +211,35 @@ const HEALTH_STATUSES: readonly number[] = [200, 503];
 function interpret(
   { status, body, retryAfter }: Answer,
   accepted: readonly number[],
+  optIn: readonly OptInPassthroughCode[],
 ): { status: number; body: JsonObject } {
   if (accepted.includes(status)) {
     if (isPlainObject(body)) return { status, body };
     throw inferenceInvalid("invalid_response", status);
   }
-  const code = readEnvelopeCode(body);
+  const envelope = readEnvelope(body);
+  const code = envelope?.code;
   const upstreamCode = code !== undefined && LOGGABLE_CODE.test(code) ? code : undefined;
-  const passthrough = code !== undefined && Object.hasOwn(PASSTHROUGH_CODES, code) ? PASSTHROUGH_CODES[code] : undefined;
+  let passthrough = code !== undefined && Object.hasOwn(PASSTHROUGH_CODES, code) ? PASSTHROUGH_CODES[code] : undefined;
+  if (code !== undefined && (optIn as readonly string[]).includes(code) && Object.hasOwn(OPT_IN_PASSTHROUGH_CODES, code)) {
+    passthrough = OPT_IN_PASSTHROUGH_CODES[code as OptInPassthroughCode];
+  }
+  // Retry-After only for the §4 codes, and only as valid integer seconds.
+  const forwardedRetryAfter =
+    code !== undefined && RETRY_AFTER_CODES.includes(code) ? retryAfterSeconds(retryAfter) : undefined;
   if (code !== undefined && passthrough?.status === status) {
-    // Only the code is kept; the message is the backend's own and details stay empty.
+    // The code is kept and the message is the backend's own. For a 422, only
+    // the mapped field paths of details are kept (§4); otherwise details stay empty.
     throw new InferenceError(status, code, passthrough.message, "upstream_error", {
       upstreamStatus: status,
       upstreamCode,
-      retryAfter,
+      retryAfter: forwardedRetryAfter,
+      details: status === 422 ? mapped422Details(code, envelope?.details) : {},
     });
   }
+  // NOT_READY with its documented 503 (§3.2, §4). Any other status is an
+  // inconsistent envelope, handled below like any other.
+  if (code === "NOT_READY" && status === 503) throw inferenceNotReady(forwardedRetryAfter);
   let failure: InferenceFailure = "invalid_response";
   if (status >= 500) failure = "upstream_5xx";
   else if (status >= 400 && code !== undefined) failure = "upstream_4xx";
@@ -219,15 +250,38 @@ function interpret(
 // response text never reaches the logs.
 const LOGGABLE_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
-// The code of an inference error envelope (API contract §4), or undefined when
-// the body isn't one. Only the code is read: the message, details and
-// request_id are checked for shape and then dropped.
-function readEnvelopeCode(body: unknown): string | undefined {
+// The code and details of an inference error envelope (API contract §4), or
+// undefined when the body isn't one. The message and request_id are checked
+// for shape and then dropped; details are read only by mapped422Details.
+function readEnvelope(body: unknown): { code: string; details: JsonObject | undefined } | undefined {
   if (!isPlainObject(body) || !isPlainObject(body.error)) return undefined;
   const { code, message, details } = body.error;
   if (typeof code !== "string" || typeof message !== "string") return undefined;
   if (details !== undefined && !isPlainObject(details)) return undefined;
-  return code;
+  return { code, details };
+}
+
+/** The fixed message for each forwarded engine VALIDATION_ERROR item (§4: never the engine's). */
+export const ENGINE_ITEM_MESSAGE = "Rejected by the routing engine.";
+
+// App details for a passed-through engine 422 (§4): VALIDATION_ERROR keeps
+// details.errors[] with every field mapped; any other 422 keeps details.field,
+// mapped. An unmappable path is dropped (the item becomes form-level), and
+// everything else in the engine details, and every engine message, is dropped.
+// Every item is forwarded, never truncated: §4 defines no maximum and no
+// truncation marker. Any size limit belongs on the whole response body.
+function mapped422Details(code: string, details: JsonObject | undefined): Record<string, unknown> {
+  if (code === "VALIDATION_ERROR") {
+    const items: unknown[] = Array.isArray(details?.errors) ? details.errors : [];
+    const errors = items.map((item) => {
+      const field = isPlainObject(item) ? mapEngineFieldPath(item.field) : undefined;
+      return field === undefined ? { message: ENGINE_ITEM_MESSAGE } : { field, message: ENGINE_ITEM_MESSAGE };
+    });
+    // §4: errors is a non-empty array, so a missing list becomes one form-level item.
+    return { errors: errors.length > 0 ? errors : [{ message: ENGINE_ITEM_MESSAGE }] };
+  }
+  const field = mapEngineFieldPath(details?.field);
+  return field === undefined ? {} : { field };
 }
 
 function parseJson(text: string): unknown {

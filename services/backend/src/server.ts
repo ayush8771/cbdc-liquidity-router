@@ -2,6 +2,8 @@ import { createApp } from "./app.js";
 import { ConfigError, loadConfig, type Config } from "./config/config.js";
 import { createDatabaseProbe } from "./db/health.js";
 import { disconnectPrismaClient, getPrismaClient } from "./db/prisma.js";
+import { createPrismaExplanationStore } from "./db/explanations.js";
+import { createPrismaTransactionPersistence } from "./db/transactionPersistence.js";
 import { createPrismaTransactionRepository } from "./db/transactions.js";
 import { createInferenceClient } from "./inferenceClient/client.js";
 import { createInferenceHealthProbe } from "./inferenceClient/health.js";
@@ -28,13 +30,24 @@ const logger = createLogger();
 const prisma = config.databaseUrl === undefined ? undefined : getPrismaClient(config.databaseUrl, logger);
 const database = createDatabaseProbe(prisma, logger);
 const transactions = prisma === undefined ? undefined : createPrismaTransactionRepository(prisma);
+const transactionPersistence = prisma === undefined ? undefined : createPrismaTransactionPersistence(prisma);
+const explanations = prisma === undefined ? undefined : createPrismaExplanationStore(prisma);
 // One inference client for health and the routes. Mock mode never calls the
 // inference service; health reports "mock".
 const inferenceClient = createInferenceClient(config.inference, { logger });
 const inference = createInferenceHealthProbe(inferenceClient, logger);
 
 // No listen() callback: Express 5 would also route startup errors into it.
-const server = createApp({ logger, users: config.auth.users, database, inference, inferenceClient, transactions }).listen(PORT, HOST);
+const server = createApp({
+  logger,
+  users: config.auth.users,
+  database,
+  inference,
+  inferenceClient,
+  transactions,
+  transactionPersistence,
+  explanations,
+}).listen(PORT, HOST);
 
 server.once("listening", () => {
   console.log(`Backend listening on http://${HOST}:${PORT}`);

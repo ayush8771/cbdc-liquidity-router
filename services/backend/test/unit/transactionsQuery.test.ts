@@ -73,7 +73,7 @@ describe("parseTransactionListQuery", () => {
   it("accepts pageSize 1 and 100 and rejects 101", () => {
     assert.ok(parse("pageSize=1").ok);
     assert.ok(parse("pageSize=100").ok);
-    assert.deepEqual(errorsOf("pageSize=101"), [{ field: "pageSize", message: "must be at most 100" }]);
+    assert.deepEqual(errorsOf("pageSize=101"), [{ field: "pageSize", message: "Must be at most 100." }]);
   });
 
   it("rejects a page whose row offset isn't exact", () => {
@@ -108,7 +108,7 @@ describe("parseTransactionListQuery", () => {
       const value = { page: "1", pageSize: "1", corridor: "USA->IND", policy: "waterfall", stateMode: "explicit",
         completed: "true", from: "2026-01-01T00:00:00Z", to: "2026-01-01T00:00:00Z", sort: "createdAt:desc" }[name]!;
       const query = new URLSearchParams([[name, value], [name, value]]).toString();
-      assert.deepEqual(errorsOf(query), [{ field: name, message: "must be given at most once" }]);
+      assert.deepEqual(errorsOf(query), [{ field: name, message: "Must be given at most once." }]);
     });
   }
 
@@ -119,7 +119,7 @@ describe("parseTransactionListQuery", () => {
   it("accepts from equal to to (an empty range), and rejects from later than to", () => {
     assert.ok(parse("from=2026-11-02T00:00:00Z&to=2026-11-02T00:00:00Z").ok);
     assert.deepEqual(errorsOf("from=2026-11-02T00:00:00.001Z&to=2026-11-02T00:00:00Z"), [
-      { field: "from", message: "must not be later than to" },
+      { field: "from", message: "Must not be later than to." },
     ]);
   });
 

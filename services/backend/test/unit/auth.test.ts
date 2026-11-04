@@ -142,8 +142,13 @@ describe("protected routes over HTTP", () => {
   }
 
   it("keeps /api/v1/health public, with or without a token", async () => {
+    // This app has no database, so readiness is 503 with the Health body, never 401 (§3.9).
     for (const authorization of [undefined, "Bearer nonsense", `Bearer ${analystToken}`]) {
-      assert.equal((await get("/api/v1/health", authorization)).status, 200);
+      const res = await get("/api/v1/health", authorization);
+      assert.equal(res.status, 503);
+      const body = (await res.json()) as Record<string, unknown>;
+      assert.equal(body.status, "unavailable");
+      assert.equal("error" in body, false);
     }
   });
 
@@ -159,10 +164,13 @@ describe("protected routes over HTTP", () => {
     for (const [method, path] of [
       ["POST", "/api/v1/auth/login"],
       ["POST", "/api/v1/auth/logout"],
-      ["POST", "/api/v1/auth/me"],
     ] as const) {
       assert.equal((await get(path, `Bearer ${analystToken}`, method)).status, 404, `${method} ${path}`);
     }
+    // /auth/me exists, so another method is 405, not 404 (§4).
+    const me = await get("/api/v1/auth/me", `Bearer ${analystToken}`, "POST");
+    assert.equal(me.status, 405);
+    assert.equal(me.headers.get("allow"), "GET, HEAD");
   });
 
   it("never logs the token or its hash", () => {

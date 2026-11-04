@@ -10,13 +10,22 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details: Record<string, unknown>;
+  /** Response headers sent with the envelope, e.g. Retry-After (§4). */
+  readonly headers: Readonly<Record<string, string>>;
 
-  constructor(status: number, code: string, message: string, details: Record<string, unknown> = {}) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details: Record<string, unknown> = {},
+    headers: Record<string, string> = {},
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.headers = headers;
   }
 }
 
@@ -45,6 +54,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
       error = new ApiError(500, "INTERNAL_ERROR", "An unexpected error occurred.");
     }
 
+    res.set(error.headers);
     res.status(error.status).json({
       error: { code: error.code, message: error.message, details: error.details, requestId: req.requestId },
     });

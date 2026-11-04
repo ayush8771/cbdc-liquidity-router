@@ -187,7 +187,6 @@ describe("GET /api/v1/replay/calendar", () => {
     const leaky = "Traceback: postgresql://user:pass@db token=abc";
     const cases: Array<[string, (res: ServerResponse) => void, number, string, number?]> = [
       ["inference 500", (res) => json(res, 500, { error: { code: "INTERNAL_ERROR", message: leaky } }), 502, "INFERENCE_ERROR"],
-      ["inference 503 NOT_READY", (res) => json(res, 503, { error: { code: "NOT_READY", message: leaky } }), 502, "INFERENCE_ERROR"],
       ["a non-JSON body", (res) => res.writeHead(200, { "Content-Type": "text/html" }).end(leaky), 502, "INFERENCE_ERROR"],
       ["a JSON array", (res) => json(res, 200, [engineCalendar]), 502, "INFERENCE_ERROR"],
       ["JSON null", (res) => json(res, 200, null), 502, "INFERENCE_ERROR"],
@@ -205,6 +204,25 @@ describe("GET /api/v1/replay/calendar", () => {
         assert.doesNotMatch(res.text, /Traceback|postgresql|token=|NOT_READY|INTERNAL_ERROR/);
       });
     }
+
+    it("returns 503 INFERENCE_UNAVAILABLE with cause NOT_READY and Retry-After for inference NOT_READY", async () => {
+      respond = (res) => {
+        res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "3" });
+        res.end(JSON.stringify({ error: { code: "NOT_READY", message: leaky, details: { trace: leaky } } }));
+      };
+      const res = await call(client("live"), { headers: { ...auth(viewerToken), "X-Request-Id": "err-req" } });
+      assert.equal(res.status, 503);
+      assert.equal(res.headers.get("retry-after"), "3");
+      assert.deepEqual(JSON.parse(res.text), {
+        error: {
+          code: "INFERENCE_UNAVAILABLE",
+          message: "The inference service is unavailable.",
+          details: { cause: "NOT_READY" },
+          requestId: "err-req",
+        },
+      });
+      assert.doesNotMatch(res.text, /Traceback|postgresql|token=/);
+    });
 
     it("returns 503 INFERENCE_UNAVAILABLE when inference is unreachable", async () => {
       const closed = createServer();
@@ -242,10 +260,11 @@ describe("GET /api/v1/replay/calendar", () => {
     });
 
     for (const method of ["POST", "PUT", "DELETE"]) {
-      it(`returns 404 NOT_FOUND for ${method}, without calling inference`, async () => {
+      it(`returns 405 METHOD_NOT_ALLOWED with Allow for ${method}, without calling inference`, async () => {
         const res = await call(client(), { method, headers: auth(analystToken) });
-        assert.equal(res.status, 404);
-        assert.equal((JSON.parse(res.text) as { error: { code: string } }).error.code, "NOT_FOUND");
+        assert.equal(res.status, 405);
+        assert.equal(res.headers.get("allow"), "GET, HEAD");
+        assert.equal((JSON.parse(res.text) as { error: { code: string } }).error.code, "METHOD_NOT_ALLOWED");
         assert.equal(received.length, 0);
       });
     }

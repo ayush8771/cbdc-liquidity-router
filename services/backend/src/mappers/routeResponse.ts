@@ -24,10 +24,12 @@ import { KeyCollisionError, toCamelCase } from "./camelCase.js";
 // - The input is never mutated, so the caller can store it verbatim as
 //   engineResponse (§6.1).
 //
+// - metrics is required on every 200, including a regulatory rejection, with
+//   every §2.8 field a finite number (reward_weights: three lambda_* numbers
+//   and status exactly "placeholder"). Anything else is an invalid body.
+//   Calibrated weights would need a contract change and this check updated.
+//
 // ASSUMPTIONS about fields §2.8 doesn't pin down (to confirm with Dev A):
-// - metrics may be absent or null (e.g. on a regulatory rejection); then the
-//   reward and term columns are null. When present, reward_env,
-//   reward_amount_based, latency_term and risk_term are numbers or null.
 // - provenance.checkpoint is null or an object with a sha256 string (the
 //   §2.2 checkpoint shape).
 // - transaction echoes the request: same sender, receiver, amount and
@@ -51,6 +53,14 @@ export const STATE_MODE_FROM_ENGINE: Readonly<Record<string, StateSpec["mode"]>>
 });
 
 const POLICY_STATUSES: readonly PolicyStatus[] = ["default", "baseline", "experimental"];
+
+// §2.8 metrics fields that have no column but must still be present, finite
+// numbers. The stored ones (fee_cost_usd, latency_term, risk_term, reward_env,
+// reward_amount_based) are read in validate().
+const METRIC_NUMBERS_NOT_STORED = ["baseline_cost_pct", "cost_term", "unrouted_term_env", "unrouted_term_amount_based"];
+const REWARD_WEIGHT_NUMBERS = ["lambda_latency", "lambda_risk", "lambda_unrouted"];
+/** The only reward_weights.status §2.8 allows: the weights are uncalibrated. */
+export const REWARD_WEIGHTS_STATUS = "placeholder";
 const VALUES_PROVENANCES: readonly ValuesProvenance[] = [
   "synthetic_simulation",
   "synthetic_scenario",
@@ -67,10 +77,14 @@ export interface DecisionColumns {
   executedUsd: number;
   unroutedEnvUsd: number;
   unroutedAmountBasedUsd: number;
-  rewardEnv: number | null;
-  rewardAmountBased: number | null;
-  latencyTerm: number | null;
-  riskTerm: number | null;
+  // Always set for new rows (metrics is required, §2.8). The database columns
+  // stay nullable for rows saved before this rule.
+  rewardEnv: number;
+  rewardAmountBased: number;
+  latencyTerm: number;
+  riskTerm: number;
+  /** metrics.fee_cost_usd, copied (§2.8, §3.8). */
+  feeCostUsd: number;
   valuesProvenance: ValuesProvenance;
   stateFrameSha256: string;
   checkpointSha256: string | null;
@@ -207,20 +221,28 @@ function validate(body: JsonObject, request: TransactionRequest): MappedRouteRes
   const unroutedEnvUsd = totals && number(totals.unrouted_env_usd, "totals.unrouted_env_usd");
   const unroutedAmountBasedUsd = totals && number(totals.unrouted_amount_based_usd, "totals.unrouted_amount_based_usd");
 
-  // metrics: absent or null allowed (assumption); each column value may be null.
-  let rewardEnv: number | null | undefined = null;
-  let rewardAmountBased: number | null | undefined = null;
-  let latencyTerm: number | null | undefined = null;
-  let riskTerm: number | null | undefined = null;
-  if (body.metrics !== undefined && body.metrics !== null) {
-    const metrics = object(body.metrics, "metrics");
-    if (metrics) {
-      const optional = (key: string) =>
-        metrics[key] === undefined ? null : nullableNumber(metrics[key], `metrics.${key}`);
-      rewardEnv = optional("reward_env");
-      rewardAmountBased = optional("reward_amount_based");
-      latencyTerm = optional("latency_term");
-      riskTerm = optional("risk_term");
+  // metrics: always present, every field non-null, including on a regulatory
+  // rejection (§2.8). Missing, null or mistyped values make the body invalid.
+  let rewardEnv: number | undefined;
+  let rewardAmountBased: number | undefined;
+  let latencyTerm: number | undefined;
+  let riskTerm: number | undefined;
+  let feeCostUsd: number | undefined;
+  const metrics = object(body.metrics, "metrics");
+  if (metrics) {
+    const metric = (key: string) => number(metrics[key], `metrics.${key}`);
+    feeCostUsd = metric("fee_cost_usd");
+    latencyTerm = metric("latency_term");
+    riskTerm = metric("risk_term");
+    rewardEnv = metric("reward_env");
+    rewardAmountBased = metric("reward_amount_based");
+    // Checked, not stored as columns: they stay in engineResponse and decision.
+    for (const key of METRIC_NUMBERS_NOT_STORED) metric(key);
+    const weights = object(metrics.reward_weights, "metrics.reward_weights");
+    if (weights) {
+      for (const key of REWARD_WEIGHT_NUMBERS) number(weights[key], `metrics.reward_weights.${key}`);
+      // §2.8: "The weights are always included, with status: placeholder".
+      if (weights.status !== REWARD_WEIGHTS_STATUS) problem("metrics.reward_weights.status", 'must be "placeholder"');
     }
   }
 
@@ -299,6 +321,7 @@ function validate(body: JsonObject, request: TransactionRequest): MappedRouteRes
       rewardAmountBased: rewardAmountBased!,
       latencyTerm: latencyTerm!,
       riskTerm: riskTerm!,
+      feeCostUsd: feeCostUsd!,
       valuesProvenance: valuesProvenance!,
       stateFrameSha256: stateFrameSha256!,
       checkpointSha256: checkpointSha256!,
