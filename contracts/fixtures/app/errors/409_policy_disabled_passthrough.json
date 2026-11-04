@@ -1,5 +1,5 @@
 {
-  "description": "An analyst requests ppoProjected while it is disabled. Passed through with the same code and status; the engine's 4xx message is forwarded and its other details dropped. Not persisted, so no transactionId (§3.2, §4).",
+  "description": "An analyst requests ppoProjected while it is disabled. Passed through with the same code and status; the message is the backend's fixed text, never the engine's, and the engine details are dropped. Not persisted, so no transactionId and no audit row (§3.2, §4, §6.2).",
   "source": "illustrative",
   "derived_from": {
     "kind": "error",
@@ -31,7 +31,7 @@
     "body": {
       "error": {
         "code": "POLICY_DISABLED",
-        "message": "ppo_projected is disabled: no approved checkpoint configured.",
+        "message": "The experimental PPO policy is disabled.",
         "details": {},
         "requestId": "fixture-409_policy_disabled_passthrough"
       }

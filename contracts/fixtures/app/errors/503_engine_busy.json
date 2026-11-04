@@ -31,7 +31,7 @@
     "body": {
       "error": {
         "code": "ENGINE_BUSY",
-        "message": "Engine queue is full; retry later.",
+        "message": "The routing engine is busy. Try again later.",
         "details": {
           "transactionId": "a121dc5c-b250-5b30-8025-f9e07e76d4e0"
         },
