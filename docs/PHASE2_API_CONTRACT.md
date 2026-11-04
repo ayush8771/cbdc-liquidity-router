@@ -477,7 +477,8 @@ Field definitions:
   - no infeasible venue or padding slot received a non-zero weight in the policy's action.
 
   If either check fails, the task returns `500 INTERNAL_ERROR` with no result. A wrong allocation is never returned.
-- `metrics`:
+- `metrics` (confirmed by Ayush): **always present, with every field non-null**, including on a regulatory rejection.
+  - `fee_cost_usd` = Σ `allocations[].amount_executed_usd × fee_pct`. It uses executed amounts only (never requested or clipped amounts), and `fee_pct` exactly as the bridge network defines it: a fraction, so 0.015 means 1.5% (§2.3).
   - `cost_term`, `latency_term`, `risk_term` and `reward_env` are the environment's `reward_components`, unchanged.
   - `reward_amount_based` replaces the unrouted term with the amount-based one, as in Stage 1F.
   - The weights are always included, with `status: "placeholder"`.
@@ -499,7 +500,14 @@ Field definitions:
 - `feasibility.allowed = false`, `reason` set to Phase 1's reason string, and `decisive_fact_ids` filled;
 - `allocations = []`;
 - `totals.requested_usd = 0`, every executed amount 0, and `completed = false`;
-- no `PARTIAL_COMPLETION` warning.
+- the full `metrics` object (confirmed by Ayush):
+  - `executed_usd = 0`, `fee_cost_usd = 0`, `completion_ratio = 0`;
+  - every execution-related cost is 0: `cost_term`, `latency_term`, `risk_term`;
+  - **the two unrouted figures differ, deliberately** (confirmed by Ayush). Both are always present and non-null:
+    - `unrouted_amount_based_usd` = the full amount the caller asked to route (`amount_usd`), because nothing was executed. So `unrouted_term_amount_based = 1` and `reward_amount_based = −λ_unrouted`.
+    - `unrouted_env_usd` = **0**, because it is requested − executed and `requested_usd = 0`. So `unrouted_term_env = 0` and `reward_env = 0`. This preserves the Phase 1 environment's accounting unchanged;
+- no `PARTIAL_COMPLETION` warning;
+- no `RISK_FALLBACK_USED`: a rejection does no risk lookup, and the warning appears only when the fallback was actually used.
 
 ### 2.9 `POST /v1/compare`
 
@@ -575,7 +583,7 @@ Each result's `decision_id` is computed for that one policy (§2.11), never over
 
 ### 2.11 `decision_id`
 
-`decision_id` identifies a decision's *inputs*, not its outputs. It is `"sha256:"` followed by the lowercase hex SHA-256 of a canonical JSON document. The backend treats it as an opaque string: it stores it and compares it by exact equality, and never computes or parses it.
+`decision_id` identifies a decision's *inputs*, not its outputs. It is `"sha256:"` followed by the lowercase hex SHA-256 of a canonical JSON document. The backend treats it as an opaque string: it stores it and compares it by exact equality, and **never computes, recalculates or parses it** (confirmed by Ayush). Producing it is Dev A's inference responsibility (§9.1 A-1).
 
 **Approved rules:**
 - **Canonical form.** The document is serialised with RFC 8785, the JSON Canonicalization Scheme (JCS), and hashed as UTF-8 bytes. The implementation uses the pinned, pure-Python `rfc8785` package (arch §7.2).
@@ -694,6 +702,7 @@ History, comparisons and the dashboard return every user's records to any authen
 - `clientReference` is optional: a string of at most 200 characters (Unicode code points), or null. A longer value returns `422 VALIDATION_ERROR` with `field: "clientReference"`.
 - `policy: null` is rejected with `422 VALIDATION_ERROR`. An omitted `policy` means `waterfall`.
 - `senderCountry` and `receiverCountry` must be three upper-case letters, or the backend returns `422 VALIDATION_ERROR`. `amountUsd` must be greater than 0, or the backend returns **`422 INVALID_AMOUNT`**: the code is preserved for zero or negative amounts (owner decision), not turned into `VALIDATION_ERROR`. Both checks run before inference is called, and nothing is saved.
+- **Precedence** (approved): the backend first collects **every** schema problem (country codes, types, unknown fields, `policy: null`, history length, the `clientReference` limit) and returns them together as one `422 VALIDATION_ERROR` with `details.errors[]`. It returns `422 INVALID_AMOUNT` **only** when the body is otherwise valid. A body with a bad country code and a zero amount therefore gets `VALIDATION_ERROR`, listing the country problem and not the amount (fixture `app/errors/422_validation_error_precedence.json`).
   - This is the chosen fix for a frontend review finding: a request that inference never validated (because it was unavailable) is still saved as a failed record, and that record must match the response schema (`CountryCode`, positive `amountUsd`).
   - So the backend's checks are tightened, rather than the failed-record schema relaxed. `INVALID_AMOUNT` is therefore raised by the backend itself (§4), with `details.field: "amountUsd"`.
   - Whether a valid-shaped but unsupported corridor (e.g. `FRA->DEU`) is also checked by the backend is not required: a failed record keeps `corridor: null` in that case.
@@ -880,7 +889,7 @@ The aggregates are computed from stored decision fields only, never recomputed f
   - database `ok` and `inference` `degraded` or `unavailable` → HTTP 200, `status: "degraded"`.
 - **The 503 body is the `Health` object, not the §4 error envelope.** Its component fields name what failed (`"database": "unavailable"`), so the UI can still say which component is down.
 - **Liveness is separate.** Liveness asks only whether the backend process is running, and checks no dependency. It stays 200 while the database or inference is down, so a container orchestrator doesn't restart the backend for a database outage.
-  - `GET /api/v1/health/live` (approved by the owner) is public, with no auth, and returns HTTP 200 `{"status": "ok"}` while the process can serve HTTP. It checks no dependency. Dev B implements it and confirms this body (coordination item in `docs/TEAM_REVIEW_RESOLUTION.md`).
+  - `GET /api/v1/health/live` (approved by the owner) is public, with no auth, and returns HTTP 200 with exactly `{"status": "ok"}`, no other field, while the process can serve HTTP. It checks no dependency: not the database, not inference. The path and body are final.
 - The backend checks inference health with its own short timeout, not the 15 s routing timeout (§5).
 
 `meta`: the camelCase mapping of `/v1/version`, plus `"backendVersion"` and `"inferenceMode": "live"|"mock"`.
@@ -919,8 +928,7 @@ The Application API uses `requestId` in place of `request_id`. The `code` values
   - a domain 422's `details.field` (for example `state.date` on `DATE_IN_GAP_BUFFER`) is forwarded as app `details.field`, mapped.
   - A path the table can't map is dropped, so the item becomes a form-level error with no `field`. A raw engine path never reaches the app.
 - **Everything else in engine `details` is dropped.**
-- **Message.** The app `message` is free text for people. Consumers key their behaviour on `code`, never on `message`, and the checker treats it as free text. For 5xx the backend uses its own fixed message.
-  - For a passed-through 4xx, whether the backend forwards the sanitised engine message, capped at 500 characters, or uses its own fixed message is open (§10, Q16). The v0.4 draft forwarded it, and the backend review recommends not exposing engine messages.
+- **Message** (approved, Q16 closed). Every app error `message` is the **backend's fixed text for its code**, for passed-through 4xx codes as much as for 5xx and stored failures. **Engine messages are never forwarded.** Consumers key their behaviour on `code`, never on `message`. The checker rejects an app passthrough fixture that copies the engine's message.
 - **`Retry-After`.** When inference sends it, with `ENGINE_BUSY` or `NOT_READY`, the backend copies it, in integer seconds, onto the app response.
 
 | HTTP | `code` | Raised by | When |
@@ -983,7 +991,11 @@ The optional `details.cause: "NOT_READY"` is described above.
 - Records are append-only. Corrections create new records.
 
 ### 6.2 What is persisted
-Each transaction request (including the full state spec, so explicit states can be replayed, and, for a failed transaction, its failure code), its routing decision, each allocation row, comparisons (as independent records), explanations, and an audit log entry for each of those writes. Whether rejected requests (401, 403, 422, and errors that save nothing) also get an audit row is not decided (§10, Q19); the v0.3 wording "every mutating call" implied it. The backend review asked for the wording to match what the backend persists, and the backend branch has no audit code yet, so Dev B confirms the rule.
+Each transaction request (including the full state spec, so explicit states can be replayed, and, for a failed transaction, its failure code), its routing decision, each allocation row, comparisons (as independent records), explanations, and an audit log entry for each of those writes.
+- **Audit rule** (approved, Q19 closed).
+  - An audit row is written **only together with a persisted record**: a transaction (routed or failed), a comparison or an explanation. It is written in the **same database transaction** as that record, so neither exists without the other.
+  - A request that persists nothing creates **no** audit row. That includes 401, 403, 405, 422, a passed-through 409, and an error on an endpoint that saves nothing.
+  - The v0.3 wording "an audit log entry for every mutating call" no longer applies.
 
 ### 6.3 Prisma models (outline; Dev B finalises)
 
@@ -1067,7 +1079,7 @@ Each suite lives in its owner's folder and runs in that owner's path-filtered CI
 | A (`services/inference/tests/`) | **Golden hashes (required on Windows and Linux):** fixed inputs must produce identical artefact fingerprints, daily-state fingerprints and `decision_id`s on both platforms, including a CRLF checkout of the text artefacts. Until this passes on both, no cross-platform determinism is claimed (§1). |
 | A (`services/inference/tests/`) | **Invariants and ranges:** an allocation that breaks the §2.8 invariant, or weights an infeasible or padding slot, returns `500 INTERNAL_ERROR` with no result. `STATE_OUTSIDE_TRAINING_RANGE` is raised in all three modes and never blocks a baseline policy. |
 | A (`services/inference/tests/concurrency/`) | **Deadlines and workers:** a request whose deadline expires while queued gets `503 ENGINE_BUSY` and never runs; one that expires while running gets `504 ENGINE_TIMEOUT` and its worker is **not** killed; a task past the 10 s execution timeout recycles only its worker. `ENGINE_BUSY` while a worker is rebuilding. Workers start within `CBDC_ENGINE_STARTUP_TIMEOUT_S`; `ready_workers` reports them. |
-| B (`services/backend/test/` · `phase2-backend.yml`) | Mapping completeness (every engine field maps to an app field, unknown engine fields included), persistence round trip, error passthrough, timeout → 503, mock mode. **Also:**<br>• failed transactions: `failureCode` and `failure`, the null fields, `409 TRANSACTION_FAILED`;<br>• `POLICY_DISABLED` and 4xx message forwarding (capped at 500), the field-path mapping table, `NOT_READY` → `INFERENCE_UNAVAILABLE`, and `Retry-After` forwarding;<br>• strict request bodies, the 200-character `clientReference`, `policy: null` → 422, and 405 with `Allow`.<br>**Auth:** startup refusal in each forbidden configuration; 401 for missing, malformed or unknown tokens; 403 for a viewer requesting `ppoProjected`; `Authorization` never logged or persisted. |
+| B (`services/backend/test/` · `phase2-backend.yml`) | Mapping completeness (every engine field maps to an app field, unknown engine fields included), persistence round trip, error passthrough, timeout → 503, mock mode. **Also:**<br>• failed transactions: `failureCode` and `failure`, the null fields, `409 TRANSACTION_FAILED`;<br>• `POLICY_DISABLED` passthrough with fixed messages (engine text never forwarded), the field-path mapping table, `NOT_READY` → `INFERENCE_UNAVAILABLE`, and `Retry-After` forwarding;<br>• strict request bodies, the 200-character `clientReference`, `policy: null` → 422, `VALIDATION_ERROR` before `INVALID_AMOUNT`, and 405 with `Allow`;<br>• an audit row only in the same transaction as a persisted record, and none for a rejected request.<br>**Auth:** startup refusal in each forbidden configuration; 401 for missing, malformed or unknown tokens; 403 for a viewer requesting `ppoProjected`; `Authorization` never logged or persisted. |
 | C (`services/web/test/` · `phase2-web.yml`) | Rendering from every fixture, including rejection, partial completion, the disabled experimental policy, an explicit state, a failed transaction (null fields, `failure`), 401, 403, 409 and 503 with `Retry-After`. Mandatory labels and the dev-auth banner present. Token absent from `localStorage`, URLs and the built bundle; cleared on 401 and sign-out. |
 | D (`e2e/`, `infra/scripts/` · `phase2-integration.yml`) | Every fixture in `contracts/fixtures/` validates against `contracts/openapi/`, and `infra/scripts/check_contracts.py` applies the §2.8, §3.2 and §4 rules the schemas can't express. It also verifies the `decision_id` test vectors (§2.11). Lock drift and install checks on Linux and Windows, including the dependency checks of arch §7.2. Docker images build. The `infra/compose.yaml` `full` profile end to end: sign in → submit → route → persist → read back → explain. |
 
@@ -1085,8 +1097,8 @@ These are **requirements** that Dev A's inference service and its tests must mee
 | A-5b | `405 METHOD_NOT_ALLOWED` with an `Allow` header listing the path's methods | §4 | `inference/errors/405_method_not_allowed.json` |
 | A-6 | `ready_workers` in health | §2.1 | Health fixtures; changes during warm-up and recycling |
 | A-7 | `STATE_OUTSIDE_TRAINING_RANGE`: a warning only, from route and compare only, on the policy-consumed values | §2.4 | One case per state mode; never from `/v1/state`; never blocks a baseline |
-| A-8 | Regulatory rejection: `requested_usd = 0`, `allocations = []`, no `PARTIAL_COMPLETION`, and no `RISK_FALLBACK_USED`, because the rejection prevents the risk lookup. On allowed decisions, `RISK_FALLBACK_USED` appears exactly when the proxy lookup falls back | §2.8 | Rejection fixtures; a fallback month and a non-fallback month |
-| A-9 | Consistent `decision_id` across route, compare and explain | §2.9–§2.11 | The same request gives the same ID on all three; a compare entry equals its route |
+| A-8 | Regulatory rejection: `requested_usd = 0`, `allocations = []`, the full non-null `metrics` with zero fee cost, zero execution costs and zero completion, no `PARTIAL_COMPLETION`, and no `RISK_FALLBACK_USED`, because the rejection prevents the risk lookup. On allowed decisions, `RISK_FALLBACK_USED` appears exactly when the proxy lookup falls back | §2.8 | Rejection fixtures; a fallback month and a non-fallback month |
+| A-9 | Consistent `decision_id` across route, compare and explain. `fee_cost_usd` = Σ executed × `fee_pct` on every decision, with `metrics` always non-null | §2.9–§2.11 | The same request gives the same ID on all three; a compare entry equals its route |
 
 ---
 
@@ -1099,8 +1111,6 @@ Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A
 | # | Question | Positions | Decides |
 |---|---|---|---|
 | Q11-dep | `meanFeeCostPct` needs a `feeCostUsd` column on `RoutingDecision`, added by a Prisma migration (§3.8) | Formula decided by the owner; the migration is not made | Anvesh (implementation) |
-| Q16 | For a passed-through engine 4xx, does the app forward the sanitised engine `message` (capped at 500) or use its own fixed message? | **v0.4 draft:** forward. **B (review):** don't expose engine messages. **C:** shows the 422 message as detail text if present. The checker now treats messages as free text, so either works for fixtures. | Anvesh and Varshini (Ayush if they don't agree) |
-| Q19 | Audit rows: only with a persisted record, or also for rejected requests (401, 403, 422, errors that save nothing)? The `AuditLog.userId` column is required, which rules out 401 rows as the schema stands. | Not decided | Anvesh (Ayush informed) |
 
 **Non-blocking: they can follow v0.4**
 

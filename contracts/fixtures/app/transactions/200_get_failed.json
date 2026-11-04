@@ -29,7 +29,7 @@
       },
       "failure": {
         "code": "ENGINE_BUSY",
-        "message": "Engine queue is full; retry later."
+        "message": "The routing engine is busy. Try again later."
       },
       "decision": null
     }
