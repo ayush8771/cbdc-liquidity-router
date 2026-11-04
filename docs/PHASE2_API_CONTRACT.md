@@ -1,7 +1,7 @@
 # Major Phase 2 — API Contract
 
 **Status:** v0.4, **approved**. The project owner merged it into `feature/phase2-platform` through PR #3 on 4 November 2026. Further approved corrections are in the follow-up PR #4, which applies on top of v0.4 once it is merged. `docs/TEAM_REVIEW_RESOLUTION.md` records what each review changed and what is still open.
-**Normative source.** This document and the OpenAPI files in `contracts/openapi/` were merged together and describe one contract: they must be kept in sync, and a difference between them is a bug (`contracts/README.md`). v0.3 planned for the OpenAPI files to become the normative source once approved and merged; whether that switch now applies is for the project owner to confirm (`docs/TEAM_REVIEW_RESOLUTION.md` §15). Until then, this document is the reference.
+**Normative source.** This document is the authoritative, approved Phase 2 v0.4 specification. Both OpenAPI files in `contracts/openapi/` remain DRAFT pending separate approval; they are machine-readable representations, not independently normative. The approved contract takes precedence over any discrepancy (`docs/TEAM_REVIEW_RESOLUTION.md` §15).
 **Architecture and roles:** `docs/PHASE2_ARCHITECTURE.md`. Section references written "arch §n" point there.
 
 **How to read v0.4.** Rules without a marker are approved. Rules marked **proposed** need the named person's approval before they're implemented. A question that is still disputed or undecided is not stated as a rule: the text says it is open and points to §10, which gives each side's position and who decides.
