@@ -1,0 +1,64 @@
+{
+  "description": "Exact definitions from src/backtesting/scenarios.py SCENARIOS. Sorted by scenario id (§2.7).",
+  "source": "phase1_derived",
+  "request": {
+    "method": "GET",
+    "path": "/v1/scenarios",
+    "headers": {
+      "X-Request-Id": "fixture-200_scenarios"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_scenarios"
+    },
+    "body": {
+      "scenarios": [
+        {
+          "scenario_id": "baseline",
+          "description": "Unmodified synthetic bridge state.",
+          "liquidity_multiplier": 1.0,
+          "congestion_multiplier": 1.0,
+          "cheapest_venue_liquidity_multiplier": 1.0
+        },
+        {
+          "scenario_id": "cheapest_venue_outage",
+          "description": "Fee-cheapest venue of each corridor at 10% liquidity.",
+          "liquidity_multiplier": 1.0,
+          "congestion_multiplier": 1.0,
+          "cheapest_venue_liquidity_multiplier": 0.1
+        },
+        {
+          "scenario_id": "combined_stress",
+          "description": "Liquidity x0.7 and congestion x1.5 on all venues.",
+          "liquidity_multiplier": 0.7,
+          "congestion_multiplier": 1.5,
+          "cheapest_venue_liquidity_multiplier": 1.0
+        },
+        {
+          "scenario_id": "congestion_x2",
+          "description": "All venues' congestion doubled.",
+          "liquidity_multiplier": 1.0,
+          "congestion_multiplier": 2.0,
+          "cheapest_venue_liquidity_multiplier": 1.0
+        },
+        {
+          "scenario_id": "liquidity_minus30",
+          "description": "All venues' liquidity scaled by 0.7.",
+          "liquidity_multiplier": 0.7,
+          "congestion_multiplier": 1.0,
+          "cheapest_venue_liquidity_multiplier": 1.0
+        },
+        {
+          "scenario_id": "liquidity_minus50",
+          "description": "All venues' liquidity scaled by 0.5.",
+          "liquidity_multiplier": 0.5,
+          "congestion_multiplier": 1.0,
+          "cheapest_venue_liquidity_multiplier": 1.0
+        }
+      ],
+      "note": "Uniform multipliers from Stage 1F, applied to the whole series. Not calibrated historical shocks."
+    }
+  }
+}

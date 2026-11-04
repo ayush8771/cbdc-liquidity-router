@@ -1,0 +1,6 @@
+# Phase 2 paths only (arch §7.4). No global rule, so no Phase 1 file is renormalised.
+services/** text=auto eol=lf
+infra/** text=auto eol=lf
+contracts/** text=auto eol=lf
+e2e/** text=auto eol=lf
+.github/workflows/phase2-*.yml text=auto eol=lf

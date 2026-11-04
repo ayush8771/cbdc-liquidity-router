@@ -1,0 +1,36 @@
+{
+  "description": "Healthy; ppo_checkpoint disabled does not degrade the service.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/v1/health",
+    "headers": {
+      "X-Request-Id": "fixture-200_health_ok"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_health_ok"
+    },
+    "body": {
+      "status": "ok",
+      "ready": true,
+      "checks": {
+        "structured_data": "ok",
+        "daily_state": "ok",
+        "knowledge_base": "ok",
+        "engine_workers": "ok",
+        "ppo_checkpoint": "disabled"
+      },
+      "engine_pool": {
+        "workers": 2,
+        "ready_workers": 2,
+        "queued": 0,
+        "max_queue": 32,
+        "rebuilds_since_start": 0
+      },
+      "time": "2026-11-02T10:00:00Z"
+    }
+  }
+}

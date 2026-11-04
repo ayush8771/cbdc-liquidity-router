@@ -1,0 +1,38 @@
+{
+  "description": "Corridor not in the network.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-422_unsupported_corridor"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "USA",
+        "receiver_country": "PHL",
+        "amount_usd": 1000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_unsupported_corridor"
+    },
+    "body": {
+      "error": {
+        "code": "UNSUPPORTED_CORRIDOR",
+        "message": "Corridor USA->PHL is not in the network.",
+        "details": {
+          "field": "transaction"
+        },
+        "request_id": "fixture-422_unsupported_corridor"
+      }
+    }
+  }
+}

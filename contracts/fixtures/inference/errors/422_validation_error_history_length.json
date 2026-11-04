@@ -1,0 +1,128 @@
+{
+  "description": "Explicit history with 29 liquidity values: a schema rule, so VALIDATION_ERROR, not INVALID_STATE_VALUE (owner decision).",
+  "source": "illustrative",
+  "request_valid": false,
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-422_validation_error_history_length"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "explicit",
+        "reference_date": "2024-06-14",
+        "venues": [
+          {
+            "bridge_uid": "GBR->PHL#0",
+            "liquidity_usd": 210000.0,
+            "congestion": 0.35,
+            "history": {
+              "liquidity_usd": [
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0,
+                210000.0
+              ],
+              "congestion": [
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35
+              ]
+            }
+          },
+          {
+            "bridge_uid": "GBR->PHL#1",
+            "liquidity_usd": 60000.0,
+            "congestion": 0.2,
+            "history": null
+          },
+          {
+            "bridge_uid": "GBR->PHL#2",
+            "liquidity_usd": 90000.0,
+            "congestion": 0.5,
+            "history": null
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_validation_error_history_length"
+    },
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Request failed validation.",
+        "details": {
+          "errors": [
+            {
+              "field": "state.venues[0].history.liquidity_usd",
+              "message": "Must have exactly 30 items."
+            }
+          ]
+        },
+        "request_id": "fixture-422_validation_error_history_length"
+      }
+    }
+  }
+}

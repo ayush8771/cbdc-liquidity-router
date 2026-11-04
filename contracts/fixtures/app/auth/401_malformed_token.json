@@ -1,0 +1,26 @@
+{
+  "description": "Token is not 64 hex characters; rejected before any lookup.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "headers": {
+      "Authorization": "Bearer not-a-real-token",
+      "X-Request-Id": "fixture-401_malformed_token"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "X-Request-Id": "fixture-401_malformed_token"
+    },
+    "body": {
+      "error": {
+        "code": "UNAUTHENTICATED",
+        "message": "Missing or invalid token.",
+        "details": {},
+        "requestId": "fixture-401_malformed_token"
+      }
+    }
+  }
+}
