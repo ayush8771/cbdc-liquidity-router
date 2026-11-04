@@ -1,6 +1,7 @@
 # Major Phase 2 — API Contract
 
-**Status:** v0.4, revised on 4 November 2026 after the team reviews, proposed for a second team review. `docs/TEAM_REVIEW_RESOLUTION.md` lists what each review changed and what is still open. This document is normative until `contracts/openapi/inference.v1.yaml` and `contracts/openapi/app.v1.yaml` are approved and merged; after that the OpenAPI files are, and this document must be kept in sync with them.
+**Status:** v0.4, **approved**. The project owner merged it into `feature/phase2-platform` through PR #3 on 4 November 2026. Further approved corrections are in the follow-up PR #4, which applies on top of v0.4 once it is merged. `docs/TEAM_REVIEW_RESOLUTION.md` records what each review changed and what is still open.
+**Normative source.** This document and the OpenAPI files in `contracts/openapi/` were merged together and describe one contract: they must be kept in sync, and a difference between them is a bug (`contracts/README.md`). v0.3 planned for the OpenAPI files to become the normative source once approved and merged; whether that switch now applies is for the project owner to confirm (`docs/TEAM_REVIEW_RESOLUTION.md` §15). Until then, this document is the reference.
 **Architecture and roles:** `docs/PHASE2_ARCHITECTURE.md`. Section references written "arch §n" point there.
 
 **How to read v0.4.** Rules without a marker are approved. Rules marked **proposed** need the named person's approval before they're implemented. A question that is still disputed or undecided is not stated as a rule: the text says it is open and points to §10, which gives each side's position and who decides.
@@ -702,8 +703,13 @@ History, comparisons and the dashboard return every user's records to any authen
 - The body is strict (§1): only the fields shown here, plus the `state` fields below, are accepted.
 - `clientReference` is optional: a string of at most 200 characters (Unicode code points), or null. A longer value returns `422 VALIDATION_ERROR` with `field: "clientReference"`.
 - `policy: null` is rejected with `422 VALIDATION_ERROR`. An omitted `policy` means `waterfall`.
-- `senderCountry` and `receiverCountry` must be three upper-case letters, or the backend returns `422 VALIDATION_ERROR`. `amountUsd` must be greater than 0, or the backend returns **`422 INVALID_AMOUNT`**: the code is preserved for zero or negative amounts (owner decision), not turned into `VALIDATION_ERROR`. Both checks run before inference is called, and nothing is saved.
-- **Precedence** (approved): the backend first collects **every** schema problem (country codes, types, unknown fields, `policy: null`, history length, the `clientReference` limit) and returns them together as one `422 VALIDATION_ERROR` with `details.errors[]`. It returns `422 INVALID_AMOUNT` **only** when the body is otherwise valid. A body with a bad country code and a zero amount therefore gets `VALIDATION_ERROR`, listing the country problem and not the amount (fixture `app/errors/422_validation_error_precedence.json`).
+- `senderCountry` and `receiverCountry` must be three upper-case letters, or the backend returns `422 VALIDATION_ERROR`. `amountUsd` must be a finite number greater than 0. A finite `amountUsd` of zero or less returns **`422 INVALID_AMOUNT`**: the code is preserved for zero and negative amounts (owner decision), not turned into `VALIDATION_ERROR`. A value that is not a number, or not finite, is a schema problem and returns `VALIDATION_ERROR` (see Precedence). Both checks run before inference is called, and nothing is saved.
+- **Precedence** (approved). The backend checks in this order:
+  1. **Every schema problem is collected and returned together** as one `422 VALIDATION_ERROR` with `details.errors[]`. That covers country codes, types, unknown fields, `policy: null`, history length and the `clientReference` limit. It also covers an `amountUsd` that is missing, is not a number (a string, `null`, an object), or is not finite (a literal that overflows binary64, such as `1e400`). Such an `amountUsd` is listed with `field: "amountUsd"`.
+  2. **Only if the body is otherwise valid**: a finite `amountUsd` of zero or less returns `422 INVALID_AMOUNT`, with `details.field: "amountUsd"`.
+
+  So a body with a bad country code and a zero amount gets `VALIDATION_ERROR`, listing the country problem and not the amount (fixture `app/errors/422_validation_error_precedence.json`).
+  - **No echoing.** None of these errors repeats a caller-supplied value, and no error forwards an engine message. Every `message`, including each `details.errors[].message`, is the backend's fixed text for the problem, such as "Must be three upper-case letters." or "The amount must be greater than 0 and finite." (§4).
   - This is the chosen fix for a frontend review finding: a request that inference never validated (because it was unavailable) is still saved as a failed record, and that record must match the response schema (`CountryCode`, positive `amountUsd`).
   - So the backend's checks are tightened, rather than the failed-record schema relaxed. `INVALID_AMOUNT` is therefore raised by the backend itself (§4), with `details.field: "amountUsd"`.
   - Whether a valid-shaped but unsupported corridor (e.g. `FRA->DEU`) is also checked by the backend is not required: a failed record keeps `corridor: null` in that case.
@@ -912,7 +918,7 @@ Both APIs use one envelope:
 }
 ```
 
-The Application API uses `requestId` in place of `request_id`. The `code` values are identical in both, and messages never include tokens or stack traces.
+The Application API uses `requestId` in place of `request_id`. The `code` values are identical in both, and messages never include tokens, stack traces or caller-supplied values.
 
 **`details`:**
 - `VALIDATION_ERROR` carries `details.errors`: a non-empty array of `{"field", "message"}`.
@@ -944,7 +950,7 @@ The Application API uses `requestId` in place of `request_id`. The `code` values
 | 409 | `TRANSACTION_FAILED` | app | Explanation requested for a transaction whose `status` is `failed` |
 | 422 | `VALIDATION_ERROR` | both | Schema or type error, including any unknown request field (§1), `policy: null`, explicit `history` of the wrong length, and an integer-valued number outside ±(2⁵³ − 1) in `transaction` or `state` (§2.11). `details.errors[]` lists them. |
 | 422 | `UNSUPPORTED_CORRIDOR` | inference | Corridor not in the network |
-| 422 | `INVALID_AMOUNT` | both | Amount ≤ 0 or not finite. The app raises it itself for `amountUsd` ≤ 0 (§3.2). |
+| 422 | `INVALID_AMOUNT` | both | Inference: amount ≤ 0 or not finite. App: raised by the backend itself, only for a finite `amountUsd` ≤ 0 in an otherwise valid body (§3.2). In the app, a non-number or non-finite `amountUsd` is `VALIDATION_ERROR`. |
 | 422 | `DATE_OUT_OF_RANGE` | inference | Outside 2011-01-01 to 2025-09-30 |
 | 422 | `DATE_IN_GAP_BUFFER` | inference | Within a gap buffer |
 | 422 | `UNKNOWN_SCENARIO` | inference | `scenario_id` not defined |
@@ -993,8 +999,10 @@ The optional `details.cause: "NOT_READY"` is described above.
 
 ### 6.2 What is persisted
 Each transaction request (including the full state spec, so explicit states can be replayed, and, for a failed transaction, its failure code), its routing decision, each allocation row, comparisons (as independent records), explanations, and an audit log entry for each of those writes.
-- **Audit rule** (approved, Q19 closed).
-  - An audit row is written **only together with a persisted record**: a transaction (routed or failed), a comparison or an explanation. It is written in the **same database transaction** as that record, so neither exists without the other.
+- **Audit rule** (approved team decision, Q19 closed).
+  - An audit row is written **only together with a persisted record**: a transaction (routed or failed), a comparison or an explanation.
+  - **Atomicity.** The record and its audit row are written in the **same database transaction**, so neither exists without the other.
+  - **Rollback.** If the audit-row write fails, the whole transaction is rolled back: the record is not persisted either. If the record's write fails, no audit row is written. How such a database failure is reported to the caller is not defined here (it is the open database-failure item for Dev B in `docs/TEAM_REVIEW_RESOLUTION.md` §6).
   - A request that persists nothing creates **no** audit row. That includes 401, 403, 405, 422, a passed-through 409, and an error on an endpoint that saves nothing.
   - The v0.3 wording "an audit log entry for every mutating call" no longer applies.
 

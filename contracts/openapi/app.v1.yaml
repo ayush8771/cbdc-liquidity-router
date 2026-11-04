@@ -784,7 +784,10 @@ components:
         senderCountry: {$ref: '#/components/schemas/CountryCode'}
         receiverCountry: {$ref: '#/components/schemas/CountryCode'}
         amountUsd:
-          description: Must be > 0; the backend returns 422 INVALID_AMOUNT otherwise (§3.2), not VALIDATION_ERROR.
+          description: |
+            A finite number > 0. A non-number or non-finite value is VALIDATION_ERROR, reported with the other
+            schema problems. Only in an otherwise valid body, a finite value <= 0 returns 422 INVALID_AMOUNT
+            (§3.2), not VALIDATION_ERROR. Messages never echo the caller's value.
           type: number
         state: {$ref: '#/components/schemas/StateSpec'}
         policy:
@@ -804,7 +807,10 @@ components:
         senderCountry: {$ref: '#/components/schemas/CountryCode'}
         receiverCountry: {$ref: '#/components/schemas/CountryCode'}
         amountUsd:
-          description: Must be > 0; the backend returns 422 INVALID_AMOUNT otherwise (§3.2), not VALIDATION_ERROR.
+          description: |
+            A finite number > 0. A non-number or non-finite value is VALIDATION_ERROR, reported with the other
+            schema problems. Only in an otherwise valid body, a finite value <= 0 returns 422 INVALID_AMOUNT
+            (§3.2), not VALIDATION_ERROR. Messages never echo the caller's value.
           type: number
         state: {$ref: '#/components/schemas/StateSpec'}
         policies:

@@ -1,6 +1,6 @@
 # Major Phase 2 — Team Architecture
 
-**Status:** v0.4, revised on 4 November 2026 after the team reviews (see `docs/TEAM_REVIEW_RESOLUTION.md`), proposed for a second team review. Parts of the inference service and backend are implemented on their feature branches. This document describes the agreed design, not their current state.
+**Status:** v0.4, **approved**: merged into `feature/phase2-platform` by the project owner through PR #3 on 4 November 2026, with the follow-up corrections in PR #4 (see `docs/TEAM_REVIEW_RESOLUTION.md`). Parts of the inference service and backend are implemented on their feature branches. This document describes the agreed design, not their current state.
 **Companion document:** `docs/PHASE2_API_CONTRACT.md`, which defines the endpoints, schemas and error codes. Its "How to read v0.4" note applies here too: **proposed** marks a rule awaiting the named person's approval, and open questions are listed in §11 and in contract §10.
 **Baseline:** tag `phase1-complete` (`bc9905e`). Phase 1 code, data, checkpoints and results are read-only for Phase 2.
 
