@@ -71,6 +71,66 @@ ID_ARTEFACTS = ("knowledge_sha256", "daily_state_sha256", "bridge_network_sha256
 SCENARIO_FIELDS = ("liquidity_multiplier", "congestion_multiplier", "cheapest_venue_liquidity_multiplier")
 REWARD_FIELDS = ("lambda_latency", "lambda_risk", "lambda_unrouted")
 
+# §2.11 numeric rule: an integer-valued number above this magnitude is rejected, never rounded.
+MAX_SAFE_INTEGER = 2 ** 53 - 1
+
+
+class UnsafeNumberError(ValueError):
+    """§2.11: an integer-valued number in transaction or state with |x| > 2^53 − 1 (422 VALIDATION_ERROR)."""
+
+    def __init__(self, field: str, value):
+        super().__init__(f"{field}: {value!r} is an integer-valued number outside ±(2^53 − 1)")
+        self.field = field
+
+
+def binary64(value, field: str) -> float:
+    """§2.11: the normalised binary64 value used for both execution and hashing.
+
+    The rule is value-based: an integer, a decimal and a scientific-notation spelling of the same value are
+    treated alike. An integer-valued result with |x| > 2^53 − 1 raises UnsafeNumberError instead of rounding.
+    """
+    x = float(value)
+    if x.is_integer() and abs(x) > MAX_SAFE_INTEGER:
+        raise UnsafeNumberError(field, value)
+    return x
+
+
+def unsafe_numbers(node, path: str) -> list[str]:
+    """Paths of the integer-valued numbers outside ±(2^53 − 1) anywhere under node (§2.11)."""
+    found = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            found += unsafe_numbers(value, f"{path}.{key}" if path else key)
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            found += unsafe_numbers(value, f"{path}[{i}]")
+    elif isinstance(node, (int, float)) and not isinstance(node, bool):
+        try:
+            binary64(node, path)
+        except UnsafeNumberError:
+            found.append(path)
+    return found
+
+
+def normalised_state(raw: dict) -> dict:
+    """The §2.11 `state` member. Venues are sorted ordinally by bridge_uid for hashing only."""
+    if raw["mode"] == "explicit":
+        indexed = list(enumerate(raw["venues"]))  # i is the request position, used in error field paths
+        venues = []
+        for i, v in sorted(indexed, key=lambda iv: iv[1]["bridge_uid"]):
+            at = f"state.venues[{i}]"
+            h = v.get("history")
+            venues.append({"bridge_uid": v["bridge_uid"],
+                           "liquidity_usd": binary64(v["liquidity_usd"], f"{at}.liquidity_usd"),
+                           "congestion": binary64(v["congestion"], f"{at}.congestion"),
+                           "history": None if h is None else {
+                               k: [binary64(x, f"{at}.history.{k}[{j}]") for j, x in enumerate(h[k])]
+                               for k in ("liquidity_usd", "congestion")}})
+        return {"mode": "explicit", "reference_date": raw["reference_date"], "venues": venues}
+    if raw["mode"] == "scenario":
+        return {"mode": "scenario", "date": raw["date"], "scenario_id": raw["scenario_id"]}
+    return {"mode": "historical_replay", "date": raw["date"]}
+
 
 def decision_document(inputs: dict) -> dict:
     """The §2.11 canonical document (id_scheme 1) for one policy, from a raw engine request and its context.
@@ -82,19 +142,8 @@ def decision_document(inputs: dict) -> dict:
     req = inputs["request"]
     policy = inputs.get("policy") or req.get("policy") or "waterfall"
     tx, raw = req["transaction"], req["state"]
-    if raw["mode"] == "explicit":
-        venues = []
-        for v in sorted(raw["venues"], key=lambda v: v["bridge_uid"]):
-            h = v.get("history")
-            venues.append({"bridge_uid": v["bridge_uid"], "liquidity_usd": float(v["liquidity_usd"]),
-                           "congestion": float(v["congestion"]),
-                           "history": None if h is None else {k: [float(x) for x in h[k]]
-                                                              for k in ("liquidity_usd", "congestion")}})
-        state = {"mode": "explicit", "reference_date": raw["reference_date"], "venues": venues}
-    elif raw["mode"] == "scenario":
-        state = {"mode": "scenario", "date": raw["date"], "scenario_id": raw["scenario_id"]}
-    else:
-        state = {"mode": "historical_replay", "date": raw["date"]}
+    amount = binary64(tx["amount_usd"], "transaction.amount_usd")
+    state = normalised_state(raw)
     scenario = None
     if raw["mode"] == "scenario":
         definition = inputs["scenario"]
@@ -107,7 +156,7 @@ def decision_document(inputs: dict) -> dict:
         "id_scheme": ID_SCHEME,
         "engine_version": inputs["engine_version"],
         "transaction": {"sender_country": tx["sender_country"], "receiver_country": tx["receiver_country"],
-                        "amount_usd": float(tx["amount_usd"])},
+                        "amount_usd": amount},
         "state": state,
         "policy": policy,
         "scenario": scenario,
@@ -305,6 +354,8 @@ class Checker:
 
         self.check_query(rel, api, op, req.get("query", {}))
         request_ok = self.check_request_body(rel, api, op, req, fx.get("request_valid", True), status, body)
+        if isinstance(req.get("body"), dict) and not self.check_safe_numbers(rel, req["body"], status, body):
+            request_ok = False  # the semantic checks normalise numbers, so they need a safe request
 
         responses = op.get("responses", {})
         if str(status) not in responses:
@@ -322,6 +373,27 @@ class Checker:
             self.check_semantics(rel, api, template, req, body)
         elif api == "app" and template == "/api/v1/health" and response_ok:  # a 503 readiness body is a Health object
             self.check_health(rel, body)
+
+    def check_safe_numbers(self, rel, request_body, status, body) -> bool:
+        """§2.11: an unsafe integer-valued number in transaction or state is a 422 VALIDATION_ERROR naming its path.
+
+        Returns False when the request contains one, so semantic checks that normalise numbers are skipped.
+        """
+        paths = unsafe_numbers(request_body.get("transaction"), "transaction") + \
+            unsafe_numbers(request_body.get("state"), "state")
+        if "amountUsd" in request_body:  # the app request keeps the transaction fields at the top level
+            paths += unsafe_numbers(request_body["amountUsd"], "amountUsd")
+        if not paths:
+            return True
+        err = body.get("error", {}) if isinstance(body, dict) else {}
+        if status != 422 or err.get("code") != "VALIDATION_ERROR":
+            self.fail(rel, f"unsafe integer at {', '.join(paths)} must return 422 VALIDATION_ERROR, never be rounded")
+            return False
+        fields = {e.get("field") for e in err.get("details", {}).get("errors", [])}
+        for path in paths:
+            if path not in fields:
+                self.fail(rel, f"VALIDATION_ERROR must name the unsafe integer's field path {path!r}")
+        return False
 
     def check_schema(self, rel, api, schema, instance, label) -> bool:
         errors = self.schema_errors(api, schema, instance)
@@ -524,8 +596,11 @@ class Checker:
 
     def register_decision(self, rel, request, policy, decision_id) -> None:
         tx = request["transaction"]
-        key = json.dumps({"transaction": {k: tx[k] for k in ("sender_country", "receiver_country", "amount_usd")},
-                          "state": request["state"], "policy": policy}, sort_keys=True)
+        # The §2.11 normalised form, so a request that only reorders explicit venues is the same request.
+        key = json.dumps({"transaction": {"sender_country": tx["sender_country"],
+                                          "receiver_country": tx["receiver_country"],
+                                          "amount_usd": binary64(tx["amount_usd"], "transaction.amount_usd")},
+                          "state": normalised_state(request["state"]), "policy": policy}, sort_keys=True)
         seen = self.decision_ids.get(key)
         if seen is None:
             for other_key, (other_id, other_rel) in self.decision_ids.items():
@@ -578,6 +653,7 @@ class Checker:
         slots = [a["slot"] for a in allocs]
         if slots != sorted(set(slots)):
             self.fail(at, "allocations must be sorted by slot, each slot once")
+        self.check_slot_order(at, corridor, state, allocs)
         for a in allocs:
             where = f"{at} slot {a['slot']}"
             if not a["bridge_uid"].startswith(corridor + "#"):
@@ -672,6 +748,31 @@ class Checker:
             self.fail(at, "DATE_IN_TRAINING_SPLIT only applies to ppo_projected on a train-split date")
         if policy == "ppo_projected" and prov["split"] == "train" and "DATE_IN_TRAINING_SPLIT" not in codes:
             self.fail(at, "ppo_projected on a train-split date must warn DATE_IN_TRAINING_SPLIT")
+
+    def check_slot_order(self, at, corridor, state, allocs) -> None:
+        """§2.4, §2.11: slots follow Phase 1's bridge_network order, never the order of the request's venues.
+
+        The ordinal bridge_uid sort is for hashing only. In explicit mode each slot carries the values the request
+        gave for that bridge_uid, wherever it appeared in the request.
+        """
+        network = self.fixtures.get("inference/meta/200_network.json")
+        if network is not None:
+            venues = next((c["venues"] for c in network["response"]["body"]["corridors"]
+                           if c["corridor"] == corridor), None)
+            if venues is not None:
+                by_slot = {v["slot"]: v["bridge_uid"] for v in venues}
+                for a in allocs:
+                    if by_slot.get(a["slot"]) != a["bridge_uid"]:
+                        self.fail(at, f"slot {a['slot']} must be {by_slot.get(a['slot'])} (Phase 1 bridge_network "
+                                      f"slot order), not {a['bridge_uid']}; venue sorting is for hashing only")
+        if state["mode"] == "explicit":
+            given = {v["bridge_uid"]: v for v in state["venues"]}
+            for a in allocs:
+                v = given.get(a["bridge_uid"])
+                if v is not None and not (close(a["liquidity_usd"], v["liquidity_usd"])
+                                          and close(a["congestion"], v["congestion"])):
+                    self.fail(at, f"slot {a['slot']} ({a['bridge_uid']}) must carry the request's values for that "
+                                  f"bridge_uid, whatever the venues' order in the request")
 
     def check_compare(self, rel, request, body) -> None:
         requested = request.get("policies")
@@ -790,6 +891,14 @@ class Checker:
         listing = self.fixtures.get("inference/meta/200_scenarios.json")
         if listing is None:
             return
+        for rel, key in (("inference/meta/200_scenarios.json", "scenario_id"), ("app/meta/200_scenarios.json", "scenarioId")):
+            fx = self.fixtures.get(rel)
+            if fx is None:
+                continue
+            seen = [s[key] for s in fx["response"]["body"]["scenarios"]]
+            dupes = sorted({i for i in seen if seen.count(i) > 1})
+            if dupes:
+                self.fail(rel, f"duplicate scenario_id {dupes}: scenario IDs must be unique (§2.7)")
         ids = [s["scenario_id"] for s in listing["response"]["body"]["scenarios"]]
         if ids != sorted(ids):
             self.fail("inference/meta/200_scenarios.json", "/v1/scenarios must list scenarios sorted by scenario_id (§2.7)")

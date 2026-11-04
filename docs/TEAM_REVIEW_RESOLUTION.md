@@ -221,9 +221,19 @@ Dev A's requirements A-1 to A-9 are documented only; Dev A implements them separ
 
 | Item | Resolution | Where |
 |---|---|---|
-| Numeric normalisation | Finite transaction and state numbers are converted to binary64 during validation. Execution and `decision_id` use the identical values. Tests: a large integer (2⁵³+1 → 2⁵³), and four numeric equivalences (`300000`/`300000.0`, `1e21`/integer, `1.5e-7`/decimal, `0`/`-0.0`) | Contract §2.11; checker tests |
+| Numeric normalisation | Finite transaction and state numbers are converted to binary64 during validation. Execution and `decision_id` use the identical values. *Revision 5 rounded unsafe integers (2⁵³+1 → 2⁵³); revision 6 replaces that with rejection (§11).* | Contract §2.11; checker tests |
 | Daily-state fingerprint | Exact scheme 1: the RFC 8785 descriptor; pandas 2.3.3 `hash_pandas_object(index=True, categorize=False, hash_key="0123456789123456")`; `<u8` row hashes; a domain separator plus 8-byte little-endian length-prefixed descriptor and row bytes; SHA-256. Golden vector `contracts/test-vectors/daily_state_fingerprint.v1.json`, verified by the checker. Six tests show that the index, column order, dtype, names, row count and values each change it | Contract §2.11, §9.1 A-2; arch §6.2, §7.4; checker `daily_state_fingerprint`; tests |
 | Venue order | Ascending ordinal (code-point) `bridge_uid`, no natural or locale sort; a test shows `#1, #10, #2` | Contract §2.11; test |
 | Scenario order | `scenarios_sha256` hashes the list sorted by `scenario_id`, and `/v1/scenarios` returns that order. The fixtures are re-sorted, `scenarios_sha256` is recomputed, and the checker rejects an unsorted list. A test shows the hash ignores insertion order | Contract §2.2, §2.7; scenario, version and meta fixtures; checker; tests |
 
 The seven `decision_id` vectors are unchanged: their venues already sort the same way under ordinal order. The tooling now pins `pandas==2.3.3` and `numpy==2.2.6`, the same pins as Phase 1's `requirements.txt`, so CI can run the fingerprint vector.
+
+## 11. Ayush's final corrections (revision 6)
+
+| Correction | Resolution | Where |
+|---|---|---|
+| **Unsafe integers rejected, not rounded** | An integer-valued number in `transaction` or `state` with absolute value above 2⁵³ − 1 returns `422 VALIDATION_ERROR`, with the value's request path in `details.errors[].field`. The rule depends on the value, not the spelling (integer, decimal or scientific notation), so the backend, whose `JSON.parse` can't tell the spellings apart, and the engine agree. The revision 5 rounding test and the `1e21` equivalence case are replaced by rejection tests. A checker rule reports any fixture that accepts an unsafe integer, or rejects one without naming its field | Contract §2.4, §2.11, §4, §9.1 A-1; checker `binary64`, `check_safe_numbers`; tests |
+| **Venue sort for hashing only** | The ordinal `bridge_uid` sort builds the `decision_id` document only. Execution, `allocations[].slot`, the PPO observation and the explanations keep Phase 1's `bridge_network` slot order, matching request venues by `bridge_uid`. The checker verifies each allocation's slot against `/v1/network` and, in explicit mode, its values against the request venue with that `bridge_uid`. A request that only reorders venues is now treated as the same request in the cross-fixture `decision_id` check. A test reorders an explicit fixture's venues: same `decision_id`, identical allocations by slot, no problems. Another relabels slots in request order, and is reported | Contract §2.4, §2.11; checker `check_slot_order`, `register_decision`; tests |
+| **Unique scenario IDs** | `scenario_id` values in `/v1/scenarios` are unique. The checker reports a duplicate in the inference and app scenario fixtures; tests cover both | Contract §2.7; checker `check_version_fingerprints`; tests |
+
+The seven `decision_id` vectors and the daily-state fingerprint golden vector are unchanged: none of their inputs is an unsafe integer, and their venues are already in slot order.

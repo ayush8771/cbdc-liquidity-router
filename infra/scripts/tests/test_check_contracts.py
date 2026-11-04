@@ -517,21 +517,64 @@ def test_scenarios_fingerprint_must_match_the_scenario_list(root):
 
 # ---------------------------------------------------------------- numeric normalisation, ordering, fingerprint
 
-def test_numbers_are_normalised_to_binary64_before_hashing():
+@pytest.mark.parametrize("value", [
+    9007199254740992,          # 2**53, integer form
+    9007199254740993,          # 2**53 + 1: would round to 2**53 in binary64
+    9007199254740992.0,        # decimal form
+    9.007199254740992e15,      # scientific notation
+    1e21,
+    1000000000000000000000,
+    -9007199254740992,
+])
+def test_unsafe_integer_amount_is_rejected_not_rounded(value):
+    # §2.11: an integer-valued number with |x| > 2^53 − 1 is a VALIDATION_ERROR, whatever its spelling.
+    vec = _vector("replay_waterfall_default_policy")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    inputs["request"]["transaction"]["amount_usd"] = value
+    with pytest.raises(check_contracts.UnsafeNumberError) as err:
+        check_contracts.decision_document(inputs)
+    assert err.value.field == "transaction.amount_usd"
+
+
+@pytest.mark.parametrize("change, field", [
+    (lambda s: s["venues"][1].update(liquidity_usd=2 ** 53), "state.venues[1].liquidity_usd"),
+    (lambda s: s["venues"][2].update(congestion=1e300), "state.venues[2].congestion"),
+])
+def test_unsafe_integer_in_explicit_state_is_rejected_with_its_path(change, field):
+    vec = _vector("explicit_waterfall_history_missing")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    change(inputs["request"]["state"])
+    with pytest.raises(check_contracts.UnsafeNumberError) as err:
+        check_contracts.decision_document(inputs)
+    assert err.value.field == field  # the path is the venue's position in the request, not its sorted position
+
+
+def test_largest_safe_integer_is_accepted():
     vec = _vector("replay_waterfall_default_policy")
     a = json.loads(json.dumps(vec["inputs"]))
     b = json.loads(json.dumps(vec["inputs"]))
-    a["request"]["transaction"]["amount_usd"] = 9007199254740993  # 2**53 + 1: not representable in binary64
-    b["request"]["transaction"]["amount_usd"] = 9007199254740992.0  # the binary64 value it normalises to
+    a["request"]["transaction"]["amount_usd"] = 9007199254740991  # 2**53 − 1
+    b["request"]["transaction"]["amount_usd"] = 9007199254740991.0
     assert check_contracts.decision_id(a) == check_contracts.decision_id(b)
-    doc = check_contracts.decision_document(a)
-    assert doc["transaction"]["amount_usd"] == 9007199254740992.0
-    assert '"amount_usd":9007199254740992' in check_contracts.canonical(doc)
+
+
+def test_route_fixture_accepting_an_unsafe_integer_is_reported(root):
+    edit(root, "inference/route/200_waterfall_replay.json",
+         lambda d: d["request"]["body"]["transaction"].update(amount_usd=9007199254740993))
+    assert_reported(problems(root), "200_waterfall_replay", "unsafe integer", "transaction.amount_usd")
+
+
+def test_unsafe_integer_validation_error_must_name_the_field(root):
+    def change(d):
+        d["request"]["body"]["state"]["venues"][0]["liquidity_usd"] = 1e21
+        d["response"]["body"]["error"]["details"]["errors"] = [{"field": "state.venues[0].congestion",
+                                                                 "message": "wrong field"}]
+    edit(root, "inference/errors/422_validation_error_history_length.json", change)
+    assert_reported(problems(root), "422_validation_error_history_length", "state.venues[0].liquidity_usd")
 
 
 @pytest.mark.parametrize("x, y", [
     (300000, 300000.0),
-    (1e21, 1000000000000000000000),
     (1.5e-7, 0.00000015),
     (0, -0.0),
 ])
@@ -551,6 +594,38 @@ def test_venues_are_sorted_ordinally_not_naturally():
     venues[0]["bridge_uid"], venues[1]["bridge_uid"], venues[2]["bridge_uid"] = "GBR->PHL#2", "GBR->PHL#10", "GBR->PHL#1"
     order = [v["bridge_uid"] for v in check_contracts.decision_document(inputs)["state"]["venues"]]
     assert order == ["GBR->PHL#1", "GBR->PHL#10", "GBR->PHL#2"]  # ordinal code-point order, not 1, 2, 10
+
+
+def test_reordered_explicit_venues_keep_decision_id_and_slot_allocations(root):
+    # §2.4, §2.11: the bridge_uid sort is for hashing only; slots keep Phase 1 bridge_network order.
+    eng, app = "inference/route/200_waterfall_explicit_exceeds_combined.json", "app/transactions/201_explicit_exceeds_combined.json"
+    before = json.loads((root / FIX / eng).read_text(encoding="utf-8"))
+    edit(root, eng, lambda d: d["request"]["body"]["state"]["venues"].reverse())
+    edit(root, app, lambda d: d["request"]["body"]["state"]["venues"].reverse())
+    after = json.loads((root / FIX / eng).read_text(encoding="utf-8"))
+    context = {k: v for k, v in _vector("explicit_waterfall_history_missing")["inputs"].items() if k != "request"}
+    assert check_contracts.decision_id({**context, "request": before["request"]["body"]}) == \
+        check_contracts.decision_id({**context, "request": after["request"]["body"]})
+    assert after["response"]["body"]["allocations"] == before["response"]["body"]["allocations"]
+    assert problems(root) == []  # the unchanged slot-ordered allocations are accepted for the reordered request
+
+
+def test_allocations_in_request_order_instead_of_slot_order_are_reported(root):
+    def change(d):
+        d["request"]["body"]["state"]["venues"].reverse()
+        allocs = d["response"]["body"]["allocations"]
+        uids = [a["bridge_uid"] for a in allocs][::-1]  # slots relabelled to follow the reversed request
+        for a, uid in zip(allocs, uids):
+            a["bridge_uid"] = uid
+    edit(root, "inference/route/200_waterfall_explicit_exceeds_combined.json", change)
+    assert_reported(problems(root), "200_waterfall_explicit_exceeds_combined", "slot order")
+
+
+@pytest.mark.parametrize("rel", ["inference/meta/200_scenarios.json", "app/meta/200_scenarios.json"])
+def test_duplicate_scenario_id_is_reported(root, rel):
+    edit(root, rel, lambda d: d["response"]["body"]["scenarios"].insert(
+        0, json.loads(json.dumps(d["response"]["body"]["scenarios"][0]))))
+    assert_reported(problems(root), "200_scenarios.json", "duplicate scenario_id")
 
 
 def test_scenarios_hash_ignores_insertion_order():

@@ -263,6 +263,8 @@ The `/* … */` comments stand in for the arrays; they aren't valid JSON.
 
 - **Dates.** `date` and `reference_date` must pass Phase 1's `validate_simulation_date()`: between 2011-01-01 and 2025-09-30, and not within 30 days of a split boundary. The boundaries include the dataset start, 2011-01-01, and its end, 2025-09-30. Failures return `DATE_OUT_OF_RANGE` or `DATE_IN_GAP_BUFFER`. `/v1/replay/calendar` lists every excluded range.
 - **Explicit venues** must list **exactly** the corridor's venues, each once, or the error is `STATE_VENUE_MISMATCH`. An empty `venues` list is a mismatched venue set: it returns `STATE_VENUE_MISMATCH`, not `VALIDATION_ERROR`. The schemas therefore set no `minItems` on `venues`.
+- **Venue order doesn't matter.** The caller may list explicit venues in any order. Each venue's values are matched to its slot by `bridge_uid`. Execution, `allocations[].slot`, the PPO observation and the explanations always use Phase 1's `bridge_network` slot order for the corridor, whatever order the request uses. The ordinal `bridge_uid` sort in §2.11 applies to hashing only.
+- **Unsafe integers.** An integer-valued number in `transaction` or `state` whose absolute value exceeds 2⁵³ − 1 (9007199254740991) returns `422 VALIDATION_ERROR`, with `details.errors[].field` giving its path. It is never rounded (§2.11).
 - **Explicit values.** `liquidity_usd` ≥ 0 and `congestion` ≥ 0, both finite. Otherwise the error is `INVALID_STATE_VALUE`.
 - **Explicit history**, when given, has exactly 30 numbers per channel (oldest first).
   - A wrong **length** is a schema rule (`minItems`/`maxItems` 30) and returns `VALIDATION_ERROR` in both APIs (owner decision).
@@ -356,6 +358,8 @@ With `include_history=true`, each venue also has `"history": {"dates": [30 dates
 ```
 
 `scenarios` is always sorted by `scenario_id`, in ascending ordinal (code-point) order, whatever the order of the Phase 1 definitions or of any dictionary they pass through. That is the same order `scenarios_sha256` hashes (§2.2).
+
+`scenario_id` values are **unique**: each appears at most once in `scenarios`. A duplicate is an error in the service's scenario definitions, not something a client handles; the contract checker rejects a fixture that has one. Uniqueness also keeps the sorted order, and so `scenarios_sha256`, well defined.
 
 ### 2.8 `POST /v1/route`
 
@@ -602,17 +606,22 @@ Each result's `decision_id` is computed for that one policy (§2.11), never over
 | `id_scheme` | `1` |
 | `engine_version` | The `/v1/version` `engine_version` string (§2.2) |
 | `transaction` | `{"sender_country", "receiver_country", "amount_usd"}`. `amount_usd` is the normalised binary64 value (see below), so `300000` and `300000.0` both serialise as `300000` |
-| `state` | Replay: `{"mode": "historical_replay", "date"}`. Scenario: `{"mode": "scenario", "date", "scenario_id"}`. Explicit: `{"mode": "explicit", "reference_date", "venues"}`, with each venue `{"bridge_uid", "liquidity_usd", "congestion", "history"}`. `history` is `{"liquidity_usd": [30], "congestion": [30]}` or `null`; an omitted history is written as `null`. `venues` are sorted by `bridge_uid` in ascending **ordinal** (Unicode code-point) order: no natural or locale-aware sorting, so `#10` sorts before `#2` |
+| `state` | Replay: `{"mode": "historical_replay", "date"}`. Scenario: `{"mode": "scenario", "date", "scenario_id"}`. Explicit: `{"mode": "explicit", "reference_date", "venues"}`, with each venue `{"bridge_uid", "liquidity_usd", "congestion", "history"}`. `history` is `{"liquidity_usd": [30], "congestion": [30]}` or `null`; an omitted history is written as `null`. `venues` are sorted by `bridge_uid` in ascending **ordinal** (Unicode code-point) order: no natural or locale-aware sorting, so `#10` sorts before `#2`. This sort is for hashing only (see "Venue order" below) |
 | `policy` | The one policy, after defaulting (`waterfall` when omitted). In `/v1/compare`, each result's own policy; never the `policies` list |
 | `scenario` | Scenario mode: `{"scenario_id", "liquidity_multiplier", "congestion_multiplier", "cheapest_venue_liquidity_multiplier"}`, as `/v1/scenarios` defines them. The `description` is excluded. Other modes: `null` |
 | `reward_weights` | `{"lambda_latency", "lambda_risk", "lambda_unrouted"}`. The `status` label is excluded |
 | `artefacts` | `{"knowledge_sha256", "daily_state_sha256", "bridge_network_sha256", "normalization_stats_sha256", "macro_risk_proxy_sha256", "rpw_corridor_quarterly_sha256"}`: exactly the fingerprints `/v1/version` reports (§2.2) |
 | `checkpoint_sha256` | For `ppo_projected`: the enabled checkpoint's SHA-256. A `ppo_projected` request without one is `POLICY_DISABLED` and gets no ID. For every other policy: `null`, so a checkpoint change never changes a baseline ID |
 
-- **Numeric normalisation** (owner-confirmed). During request validation, every finite number in `transaction` and `state` (amount, liquidity, congestion, history values) is converted to an IEEE 754 **binary64** value. JSON integers are converted too: `9007199254740993` becomes `9007199254740992.0`.
+- **Numeric normalisation** (owner-confirmed). During request validation, every finite number in `transaction` and `state` (amount, liquidity, congestion, history values) is converted to an IEEE 754 **binary64** value.
+  - **Unsafe integers are rejected, never rounded** (owner decision). If the value is integer-valued and its absolute value exceeds 2⁵³ − 1 (9007199254740991), the request fails with `422 VALIDATION_ERROR`, and `details.errors[].field` is the value's path in the request, for example `transaction.amount_usd` or `state.venues[1].liquidity_usd` (the venue's position as sent).
+    - The rule depends on the **value**, not its spelling. `9007199254740993`, `9007199254740992.0`, `9.007199254740992e15` and `1e21` are all rejected. This matters because a JSON parser such as the backend's `JSON.parse` doesn't preserve whether a number was written as an integer, so a token-based rule could make the app and the engine disagree.
+    - Every binary64 value at or above 2⁵³ is integer-valued, so in practice this rejects any magnitude above 2⁵³ − 1.
+    - Both APIs apply it: the backend before calling inference, using the app path (`amountUsd`, `state.venues[1].liquidityUsd`), and the inference service.
   - **Execution and hashing use the identical normalised values.** There is no separate "hash form", so a request can't hash one value and route with another.
   - Non-finite values can't occur: JSON has no NaN or Infinity, and validation rejects anything that overflows.
-  - Numerically equal inputs therefore give the same ID: `300000` = `300000.0`, `1e21` = `1000000000000000000000`, `0` = `-0.0`. The checker tests cover these and a large integer.
+  - Numerically equal safe inputs therefore give the same ID: `300000` = `300000.0`, `1.5e-7` = `0.00000015`, `0` = `-0.0`, and `9007199254740991` = `9007199254740991.0`. The checker tests cover these, and rejection of unsafe values in each spelling.
+- **Venue order** (owner decision). The ordinal `bridge_uid` sort of `state.venues` above is used **only to build this document**. It never changes how the request is executed: execution, `allocations[].slot`, the PPO observation and the explanations keep Phase 1's `bridge_network` slot order for the corridor, matching each request venue to its slot by `bridge_uid` (§2.4). So reordering an explicit request's venues gives the same `decision_id` **and** identical allocations by slot. The checker verifies the slot order against `/v1/network`, and a test reorders a fixture's venues.
 - **Serialisation and hash.** The document is serialised with RFC 8785 (JCS: sorted keys, no whitespace, ECMAScript number formatting) and hashed as UTF-8 bytes. `decision_id` = `"sha256:"` + the lowercase hex SHA-256.
 - **Never hashed:** `api_version`, `git_commit`, `client_reference`, the scenario `description`, the reward-weight `status`, `request_id`, `device`, `platform`, and every output field.
 - **A new input means a new scheme.** Adding or removing a member, or changing how one is written, requires `id_scheme` 2. Any other change that can alter outputs must bump `engine_version`.
@@ -924,7 +933,7 @@ The Application API uses `requestId` in place of `request_id`. The `code` values
 | 409 | `DECISION_MISMATCH` | app | Recomputed `decision_id` differs from the stored one |
 | 409 | `POLICY_DISABLED` | inference (passed through by app) | `ppo_projected` requested but no approved checkpoint is enabled. The app doesn't persist it. In comparisons it appears in `skipped`, not as an error. |
 | 409 | `TRANSACTION_FAILED` | app | Explanation requested for a transaction whose `status` is `failed` |
-| 422 | `VALIDATION_ERROR` | both | Schema or type error, including any unknown request field (§1), `policy: null`, and explicit `history` of the wrong length. `details.errors[]` lists them. |
+| 422 | `VALIDATION_ERROR` | both | Schema or type error, including any unknown request field (§1), `policy: null`, explicit `history` of the wrong length, and an integer-valued number outside ±(2⁵³ − 1) in `transaction` or `state` (§2.11). `details.errors[]` lists them. |
 | 422 | `UNSUPPORTED_CORRIDOR` | inference | Corridor not in the network |
 | 422 | `INVALID_AMOUNT` | both | Amount ≤ 0 or not finite. The app raises it itself for `amountUsd` ≤ 0 (§3.2). |
 | 422 | `DATE_OUT_OF_RANGE` | inference | Outside 2011-01-01 to 2025-09-30 |
@@ -1068,7 +1077,7 @@ These are **requirements** that Dev A's inference service and its tests must mee
 
 | # | Requirement | Contract | Test that shows it |
 |---|---|---|---|
-| A-1 | Deterministic `decision_id`: RFC 8785 over the §2.11 document, covering every output-affecting input; numbers normalised to binary64 during validation and the same values used for execution; venues in ordinal `bridge_uid` order; checkpoint hash for `ppo_projected` only; `engine_version` bumped when an imported Phase 1 constant affecting outputs changes | §2.2, §2.11 | Reproduce every vector in `contracts/test-vectors/decision_id.v1.json` byte for byte |
+| A-1 | Deterministic `decision_id`: RFC 8785 over the §2.11 document, covering every output-affecting input; numbers normalised to binary64 during validation and the same values used for execution, with integer-valued numbers outside ±(2⁵³ − 1) rejected as `VALIDATION_ERROR`, never rounded; venues in ordinal `bridge_uid` order for hashing only, while execution keeps Phase 1 slot order; checkpoint hash for `ppo_projected` only; `engine_version` bumped when an imported Phase 1 constant affecting outputs changes | §2.2, §2.11 | Reproduce every vector in `contracts/test-vectors/decision_id.v1.json` byte for byte |
 | A-2 | Cross-platform artefact and daily-state hashing (text files CRLF→LF, binaries raw, little-endian row hashes with column names and dtypes). Covers the **six** `decision_id` artefact fingerprints: knowledge, daily state, bridge network, normalisation stats, macro-risk proxy and RPW cost baseline. Also `scenarios_sha256` in `/v1/version` | §2.2, §2.11; arch §6.2, §7.4 | Golden-hash test, identical on Windows and Linux CI: reproduce `contracts/test-vectors/daily_state_fingerprint.v1.json` exactly with pandas 2.3.3. The service `knowledge_sha256` equals the LF-normalised hash, not Phase 1's raw-byte `KnowledgeBase.sha256` |
 | A-3 | 10 s worker execution timeout; 12 s request deadline (`CBDC_ENGINE_REQUEST_DEADLINE_S`); 1 s minimum start budget (`CBDC_ENGINE_MIN_START_BUDGET_S`), with startup refused unless `0 <= budget < deadline` | §5, §8 | Queued expiry and under-budget → `ENGINE_BUSY`, never run; deadline while running → `ENGINE_TIMEOUT` with the worker kept; past 10 s → only that worker recycled |
 | A-4 | Configurable worker startup timeout, default 180 s (`CBDC_ENGINE_STARTUP_TIMEOUT_S`) | §8; arch §6.2 | Before readiness, `NOT_READY` and `ready: false` |
