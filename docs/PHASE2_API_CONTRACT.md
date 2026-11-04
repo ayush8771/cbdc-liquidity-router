@@ -479,6 +479,7 @@ Field definitions:
   If either check fails, the task returns `500 INTERNAL_ERROR` with no result. A wrong allocation is never returned.
 - `metrics` (confirmed by Ayush): **always present, with every field non-null**, including on a regulatory rejection.
   - `fee_cost_usd` = Σ `allocations[].amount_executed_usd × fee_pct`. It uses executed amounts only (never requested or clipped amounts), and `fee_pct` exactly as the bridge network defines it: a fraction, so 0.015 means 1.5% (§2.3).
+  - `baseline_cost_pct` is the value Phase 1's lagged RPW lookup returns, **unchanged**: no conversion is applied. Its unit is an open Phase 1 finding (F1, §10, `docs/TEAM_REVIEW_RESOLUTION.md` §14). The `0.0612` in the example is illustrative.
   - `cost_term`, `latency_term`, `risk_term` and `reward_env` are the environment's `reward_components`, unchanged.
   - `reward_amount_based` replaces the unrouted term with the amount-based one, as in Stage 1F.
   - The weights are always included, with `status: "placeholder"`.
@@ -499,9 +500,9 @@ Field definitions:
 **Regulatory rejection:** HTTP 200, with:
 - `feasibility.allowed = false`, `reason` set to Phase 1's reason string, and `decisive_fact_ids` filled;
 - `allocations = []`;
-- `totals.requested_usd = 0`, every executed amount 0, and `completed = false`;
-- the full `metrics` object (confirmed by Ayush):
-  - `executed_usd = 0`, `fee_cost_usd = 0`, `completion_ratio = 0`;
+- in `totals`: `requested_usd = 0`, **`executed_usd = 0`**, **`completion_ratio = 0`** and `completed = false`;
+- the full `metrics` object (confirmed by Ayush), separate from `totals`:
+  - **`fee_cost_usd = 0`**;
   - every execution-related cost is 0: `cost_term`, `latency_term`, `risk_term`;
   - **the two unrouted figures differ, deliberately** (confirmed by Ayush). Both are always present and non-null:
     - `unrouted_amount_based_usd` = the full amount the caller asked to route (`amount_usd`), because nothing was executed. So `unrouted_term_amount_based = 1` and `reward_amount_based = −λ_unrouted`.
@@ -1097,7 +1098,7 @@ These are **requirements** that Dev A's inference service and its tests must mee
 | A-5b | `405 METHOD_NOT_ALLOWED` with an `Allow` header listing the path's methods | §4 | `inference/errors/405_method_not_allowed.json` |
 | A-6 | `ready_workers` in health | §2.1 | Health fixtures; changes during warm-up and recycling |
 | A-7 | `STATE_OUTSIDE_TRAINING_RANGE`: a warning only, from route and compare only, on the policy-consumed values | §2.4 | One case per state mode; never from `/v1/state`; never blocks a baseline |
-| A-8 | Regulatory rejection: `requested_usd = 0`, `allocations = []`, the full non-null `metrics` with zero fee cost, zero execution costs and zero completion, no `PARTIAL_COMPLETION`, and no `RISK_FALLBACK_USED`, because the rejection prevents the risk lookup. On allowed decisions, `RISK_FALLBACK_USED` appears exactly when the proxy lookup falls back | §2.8 | Rejection fixtures; a fallback month and a non-fallback month |
+| A-8 | Regulatory rejection: `requested_usd = 0`, `allocations = []`, the full non-null `metrics` with zero fee cost and zero execution costs, `totals.executed_usd = 0` and `totals.completion_ratio = 0`, no `PARTIAL_COMPLETION`, and no `RISK_FALLBACK_USED`, because the rejection prevents the risk lookup. On allowed decisions, `RISK_FALLBACK_USED` appears exactly when the proxy lookup falls back | §2.8 | Rejection fixtures; a fallback month and a non-fallback month |
 | A-9 | Consistent `decision_id` across route, compare and explain. `fee_cost_usd` = Σ executed × `fee_pct` on every decision, with `metrics` always non-null | §2.9–§2.11 | The same request gives the same ID on all three; a compare entry equals its route |
 
 ---
@@ -1119,4 +1120,5 @@ Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A
 | Q11a | A non-UUID `:id`: `404 NOT_FOUND` or `422 VALIDATION_ERROR`? | Not implemented yet | Anvesh |
 | Q14 | Is `405` checked before or after authentication in the app? | The fixtures send a token, so they don't depend on it | Anvesh |
 | Q18 | Comparisons: the analyst default for an omitted `policies`, the order of `results`, and whether the record echoes `state` and `policies` | Both are already persisted (§6.3) | Anvesh and Varshini |
+| F1 | **Phase 1 cost-baseline unit** (a technical finding, not a Phase 2 contract change). `real_cost_baseline` looks like percentage points but is used as a fraction in the reward. Any correction would change Phase 1 rewards, so it needs a separately reviewed and versioned change. Phase 2 passes the value through unchanged | Evidence and the open points: `docs/TEAM_REVIEW_RESOLUTION.md` §14 | Ayush |
 | Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback | Nisarga, Anvesh, Varshini |
