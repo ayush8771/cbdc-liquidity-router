@@ -216,3 +216,14 @@ Dev A's requirements A-1 to A-9 are documented only; Dev A implements them separ
 - `phase2-integration.yml` runs only on `pull_request` and on pushes to `main`, so **it has never run on this branch.**
 - The last Ubuntu run of the contract checks was PR #2 at `9fd9353`, which passed.
 - Ubuntu CI for v0.4 will run once a PR from `docs/phase2-v0.4` into `feature/phase2-platform` is opened.
+
+## 10. Ayush's confirmed hashing specification (revision 5)
+
+| Item | Resolution | Where |
+|---|---|---|
+| Numeric normalisation | Finite transaction and state numbers are converted to binary64 during validation. Execution and `decision_id` use the identical values. Tests: a large integer (2⁵³+1 → 2⁵³), and four numeric equivalences (`300000`/`300000.0`, `1e21`/integer, `1.5e-7`/decimal, `0`/`-0.0`) | Contract §2.11; checker tests |
+| Daily-state fingerprint | Exact scheme 1: the RFC 8785 descriptor; pandas 2.3.3 `hash_pandas_object(index=True, categorize=False, hash_key="0123456789123456")`; `<u8` row hashes; a domain separator plus 8-byte little-endian length-prefixed descriptor and row bytes; SHA-256. Golden vector `contracts/test-vectors/daily_state_fingerprint.v1.json`, verified by the checker. Six tests show that the index, column order, dtype, names, row count and values each change it | Contract §2.11, §9.1 A-2; arch §6.2, §7.4; checker `daily_state_fingerprint`; tests |
+| Venue order | Ascending ordinal (code-point) `bridge_uid`, no natural or locale sort; a test shows `#1, #10, #2` | Contract §2.11; test |
+| Scenario order | `scenarios_sha256` hashes the list sorted by `scenario_id`, and `/v1/scenarios` returns that order. The fixtures are re-sorted, `scenarios_sha256` is recomputed, and the checker rejects an unsorted list. A test shows the hash ignores insertion order | Contract §2.2, §2.7; scenario, version and meta fixtures; checker; tests |
+
+The seven `decision_id` vectors are unchanged: their venues already sort the same way under ordinal order. The tooling now pins `pandas==2.3.3` and `numpy==2.2.6`, the same pins as Phase 1's `requirements.txt`, so CI can run the fingerprint vector.

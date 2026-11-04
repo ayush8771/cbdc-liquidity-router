@@ -118,8 +118,57 @@ def decision_document(inputs: dict) -> dict:
 
 
 def scenarios_sha256(scenarios: list) -> str:
-    """§2.2: SHA-256 of the RFC 8785 serialisation of the /v1/scenarios `scenarios` array."""
-    return hashlib.sha256(rfc8785.dumps(scenarios)).hexdigest()
+    """§2.2: SHA-256 of the RFC 8785 serialisation of the scenarios array, sorted by scenario_id
+    (ordinal), so insertion order never matters."""
+    return hashlib.sha256(rfc8785.dumps(sorted(scenarios, key=lambda s: s["scenario_id"]))).hexdigest()
+
+
+# §2.11 daily-state fingerprint (scheme 1).
+FINGERPRINT_DOMAIN = b"cbdc-liquidity-router/daily-state-fingerprint/v1"
+FINGERPRINT_PANDAS = "2.3.3"
+FINGERPRINT_HASH_KEY = "0123456789123456"
+
+
+def daily_state_descriptor(frame) -> dict:
+    """The schema descriptor that is serialised with RFC 8785 and hashed with the row hashes."""
+    return {
+        "scheme": 1,
+        "columns": [{"name": str(c), "dtype": str(frame[c].dtype)} for c in frame.columns],
+        "index": {"names": [None if n is None else str(n) for n in frame.index.names],
+                  "dtypes": [str(frame.index.get_level_values(i).dtype) for i in range(frame.index.nlevels)]},
+        "row_count": int(len(frame)),
+        "pandas_version": FINGERPRINT_PANDAS,
+        "hashing": {"function": "pandas.util.hash_pandas_object", "index": True, "categorize": False,
+                    "hash_key": FINGERPRINT_HASH_KEY, "row_hash_dtype": "<u8"},
+    }
+
+
+def daily_state_fingerprint(frame) -> str:
+    """SHA-256 over: domain || u64le(len(schema)) || schema || u64le(len(rows)) || rows (§2.11)."""
+    import pandas as pd  # only the fingerprint needs pandas
+    if pd.__version__ != FINGERPRINT_PANDAS:
+        raise RuntimeError(f"the daily-state fingerprint is defined for pandas {FINGERPRINT_PANDAS}, not {pd.__version__}")
+    schema = rfc8785.dumps(daily_state_descriptor(frame))
+    rows = pd.util.hash_pandas_object(frame, index=True, categorize=False,
+                                      hash_key=FINGERPRINT_HASH_KEY).to_numpy().astype("<u8").tobytes()
+    h = hashlib.sha256(FINGERPRINT_DOMAIN)
+    for part in (schema, rows):
+        h.update(len(part).to_bytes(8, "little"))
+        h.update(part)
+    return h.hexdigest()
+
+
+def frame_from_spec(spec: dict):
+    """Build the fixed DataFrame of a fingerprint test vector."""
+    import pandas as pd
+    data = {}
+    for col in spec["columns"]:
+        values = pd.to_datetime(col["values"]) if col["dtype"].startswith("datetime64") else col["values"]
+        data[col["name"]] = pd.Series(values).astype(col["dtype"])
+    index = pd.Index(spec["index"]["values"], dtype=spec["index"]["dtype"], name=spec["index"]["name"])
+    frame = pd.DataFrame(data)
+    frame.index = index
+    return frame
 
 
 def canonical(doc: dict) -> str:
@@ -741,11 +790,28 @@ class Checker:
         listing = self.fixtures.get("inference/meta/200_scenarios.json")
         if listing is None:
             return
+        ids = [s["scenario_id"] for s in listing["response"]["body"]["scenarios"]]
+        if ids != sorted(ids):
+            self.fail("inference/meta/200_scenarios.json", "/v1/scenarios must list scenarios sorted by scenario_id (§2.7)")
         want = scenarios_sha256(listing["response"]["body"]["scenarios"])
         for rel in ("inference/meta/200_version.json", "inference/meta/200_version_ppo_enabled.json"):
             fx = self.fixtures.get(rel)
             if fx is not None and fx["response"]["body"]["data"].get("scenarios_sha256") != want:
                 self.fail(rel, f"data.scenarios_sha256 must be the RFC 8785 hash of /v1/scenarios ({want})")
+
+    def check_fingerprint_vectors(self) -> None:
+        """§2.11 daily-state fingerprint: the fixed DataFrame gives the recorded descriptor and hash."""
+        path = self.contracts / "test-vectors" / "daily_state_fingerprint.v1.json"
+        if not path.exists():
+            self.fail("test-vectors", "daily_state_fingerprint.v1.json is missing")
+            return
+        for vec in json.loads(path.read_text(encoding="utf-8"))["vectors"]:
+            frame = frame_from_spec(vec["frame"])
+            where = f"test-vectors/{vec['name']}"
+            if canonical(daily_state_descriptor(frame)) != vec["descriptor"]:
+                self.fail(where, "descriptor is not the RFC 8785 serialisation of the §2.11 schema descriptor")
+            if daily_state_fingerprint(frame) != vec["sha256"]:
+                self.fail(where, "sha256 is not the §2.11 daily-state fingerprint")
 
     def check_vectors(self) -> None:
         """§2.11 test vectors: each canonical string and decision_id follows from its inputs."""
@@ -781,6 +847,7 @@ class Checker:
         self.check_failures()
         self.check_vectors()
         self.check_version_fingerprints()
+        self.check_fingerprint_vectors()
         self.check_coverage()
         self.check_secrets()
         return self.problems

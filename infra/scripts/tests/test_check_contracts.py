@@ -513,3 +513,87 @@ def test_scenarios_fingerprint_must_match_the_scenario_list(root):
     edit(root, "inference/meta/200_scenarios.json",
          lambda d: d["response"]["body"]["scenarios"][0].update(liquidity_multiplier=0.5))
     assert_reported(problems(root), "200_version.json", "scenarios_sha256")
+
+
+# ---------------------------------------------------------------- numeric normalisation, ordering, fingerprint
+
+def test_numbers_are_normalised_to_binary64_before_hashing():
+    vec = _vector("replay_waterfall_default_policy")
+    a = json.loads(json.dumps(vec["inputs"]))
+    b = json.loads(json.dumps(vec["inputs"]))
+    a["request"]["transaction"]["amount_usd"] = 9007199254740993  # 2**53 + 1: not representable in binary64
+    b["request"]["transaction"]["amount_usd"] = 9007199254740992.0  # the binary64 value it normalises to
+    assert check_contracts.decision_id(a) == check_contracts.decision_id(b)
+    doc = check_contracts.decision_document(a)
+    assert doc["transaction"]["amount_usd"] == 9007199254740992.0
+    assert '"amount_usd":9007199254740992' in check_contracts.canonical(doc)
+
+
+@pytest.mark.parametrize("x, y", [
+    (300000, 300000.0),
+    (1e21, 1000000000000000000000),
+    (1.5e-7, 0.00000015),
+    (0, -0.0),
+])
+def test_numerically_equal_inputs_give_the_same_decision_id(x, y):
+    vec = _vector("replay_waterfall_default_policy")
+    a = json.loads(json.dumps(vec["inputs"]))
+    b = json.loads(json.dumps(vec["inputs"]))
+    a["request"]["transaction"]["amount_usd"] = x
+    b["request"]["transaction"]["amount_usd"] = y
+    assert check_contracts.decision_id(a) == check_contracts.decision_id(b)
+
+
+def test_venues_are_sorted_ordinally_not_naturally():
+    vec = _vector("explicit_waterfall_history_missing")
+    inputs = json.loads(json.dumps(vec["inputs"]))
+    venues = inputs["request"]["state"]["venues"]
+    venues[0]["bridge_uid"], venues[1]["bridge_uid"], venues[2]["bridge_uid"] = "GBR->PHL#2", "GBR->PHL#10", "GBR->PHL#1"
+    order = [v["bridge_uid"] for v in check_contracts.decision_document(inputs)["state"]["venues"]]
+    assert order == ["GBR->PHL#1", "GBR->PHL#10", "GBR->PHL#2"]  # ordinal code-point order, not 1, 2, 10
+
+
+def test_scenarios_hash_ignores_insertion_order():
+    data = json.loads((REPO / FIX / "inference/meta/200_scenarios.json").read_text(encoding="utf-8"))
+    scenarios = data["response"]["body"]["scenarios"]
+    assert check_contracts.scenarios_sha256(scenarios) == check_contracts.scenarios_sha256(list(reversed(scenarios)))
+
+
+def test_unsorted_scenario_list_is_reported(root):
+    edit(root, "inference/meta/200_scenarios.json",
+         lambda d: d["response"]["body"]["scenarios"].reverse())
+    assert_reported(problems(root), "200_scenarios.json", "sorted by scenario_id")
+
+
+def _fingerprint_vector():
+    data = json.loads((REPO / "contracts/test-vectors/daily_state_fingerprint.v1.json").read_text(encoding="utf-8"))
+    return data["vectors"][0]
+
+
+def test_daily_state_golden_fingerprint():
+    # Run on Windows and Ubuntu CI: the recorded value must match on both.
+    vec = _fingerprint_vector()
+    frame = check_contracts.frame_from_spec(vec["frame"])
+    assert check_contracts.daily_state_fingerprint(frame) == vec["sha256"]
+
+
+@pytest.mark.parametrize("change", [
+    lambda f: f.set_axis([5, 6, 7]),                              # index values are hashed
+    lambda f: f[list(reversed(f.columns))],                      # column order is in the descriptor
+    lambda f: f.astype({"congestion": "float32"}),               # dtype is in the descriptor
+    lambda f: f.rename(columns={"congestion": "cong"}),          # column names are in the descriptor
+    lambda f: f.iloc[:2],                                        # row count and rows
+    lambda f: f.assign(liquidity_usd=f["liquidity_usd"] + 1.0),  # a value
+])
+def test_daily_state_fingerprint_detects_changes(change):
+    vec = _fingerprint_vector()
+    frame = check_contracts.frame_from_spec(vec["frame"])
+    assert check_contracts.daily_state_fingerprint(change(frame)) != vec["sha256"]
+
+
+def test_tampered_fingerprint_vector_is_reported(root):
+    path = root / "contracts/test-vectors/daily_state_fingerprint.v1.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["vectors"][0]["sha256"] = "0" * 64
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    assert_reported(problems(root), "fixed_frame_3_rows", "daily-state fingerprint")

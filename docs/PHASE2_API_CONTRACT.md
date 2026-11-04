@@ -200,7 +200,7 @@ When a checkpoint is enabled, `checkpoint` is `{"checkpoint_id": "...", "sha256"
 - `engine_version` is the semantic version of the inference logic that can change routing outputs. It must be bumped whenever a code change can change any output for the same request and artefacts, and it enters `decision_id` (§2.11). A change that can't affect outputs, such as logging or error text, needn't bump it.
 - `api_version` does **not** enter `decision_id`.
 - The hashes in `knowledge` and `data` are computed as §2.11 describes. They include `macro_risk_proxy_sha256` (`data/processed/macro_risk_proxy.parquet`) and `rpw_corridor_quarterly_sha256` (`data/processed/rpw_corridor_quarterly.parquet`). Both are binary, so they are hashed as committed, and both enter `decision_id` (R4).
-- `data.scenarios_sha256` is the SHA-256 of the RFC 8785 serialisation of the `scenarios` array that `/v1/scenarios` returns. It is a cache key (§5). It doesn't enter `decision_id`, because the scenario fields that affect a decision (`scenario_id` and its three multipliers) are hashed directly (§2.11).
+- `data.scenarios_sha256` is the SHA-256 of the RFC 8785 serialisation of the `scenarios` array that `/v1/scenarios` returns, **sorted by `scenario_id`** in ascending ordinal (code-point) order. It is therefore independent of the order in which scenarios are defined or inserted. It is a cache key (§5). It doesn't enter `decision_id`, because the scenario fields that affect a decision (`scenario_id` and its three multipliers) are hashed directly (§2.11).
 - **Two knowledge hashes; don't mix them up.**
   - `knowledge.sha256` here, and `knowledge_sha256` in `decision_id`, is the **Phase 2 service hash**: SHA-256 of `data/knowledge/regulatory_facts.json` after CRLF→LF normalisation (§2.11). It is identical on Windows and Linux.
   - Phase 1's `KnowledgeBase.sha256` (`src/memory/knowledge.py`) is SHA-256 of the **raw file bytes**, so on a Windows CRLF checkout it differs from the committed blob. Phase 2 never reports or hashes the Phase 1 value; the service computes its own.
@@ -354,6 +354,8 @@ With `include_history=true`, each venue also has `"history": {"dates": [30 dates
   "note": "Uniform multipliers from Stage 1F, applied to the whole series. Not calibrated historical shocks."
 }
 ```
+
+`scenarios` is always sorted by `scenario_id`, in ascending ordinal (code-point) order, whatever the order of the Phase 1 definitions or of any dictionary they pass through. That is the same order `scenarios_sha256` hashes (§2.2).
 
 ### 2.8 `POST /v1/route`
 
@@ -575,11 +577,23 @@ Each result's `decision_id` is computed for that one policy (§2.11), never over
 - **Canonical form.** The document is serialised with RFC 8785, the JSON Canonicalization Scheme (JCS), and hashed as UTF-8 bytes. The implementation uses the pinned, pure-Python `rfc8785` package (arch §7.2).
 - **Excluded:** `git_commit` (provenance only, §2.2), and every output field.
 - **Text artefacts.** Artefact hashes of text files (CSV, JSON) are computed after converting CRLF line endings to LF. A Windows checkout made with `core.autocrlf=true` therefore hashes the same as the committed blob. Binary files are hashed as they are. No `.gitattributes` rule is added for `data/`.
-- **Daily-state fingerprint** (`daily_state_sha256`, `state_frame_sha256`): SHA-256 over:
-  1. the frame's column names and dtypes, in column order;
-  2. pandas' per-row `uint64` hashes, written explicitly as **little-endian** bytes.
+- **Daily-state fingerprint** (`daily_state_sha256`, `state_frame_sha256`; owner-confirmed, scheme 1). For a frame `F`:
+  1. **Descriptor.** A JSON object with exactly these members:
+     - `"scheme": 1`;
+     - `"columns"`: one `{"name": str(column), "dtype": str(F[column].dtype)}` per column, in column order;
+     - `"index"`: `{"names": [each level's name, or null], "dtypes": [str(dtype) of each level]}`;
+     - `"row_count"`: `len(F)`;
+     - `"pandas_version": "2.3.3"`;
+     - `"hashing": {"function": "pandas.util.hash_pandas_object", "index": true, "categorize": false, "hash_key": "0123456789123456", "row_hash_dtype": "<u8"}`.
 
-  pandas stays pinned. Dev A fixes the exact byte layout in code, and a golden-hash test pins it (§9).
+     It is serialised with RFC 8785 and encoded as UTF-8: `schema_bytes`.
+  2. **Row hashes.** With **pandas 2.3.3**: `pandas.util.hash_pandas_object(F, index=True, categorize=False, hash_key="0123456789123456")`. That is one `uint64` per row, **index included**. They are converted with `.to_numpy().astype("<u8")` (explicitly little-endian) and concatenated: `row_bytes`.
+  3. **Combine.** SHA-256 of `DOMAIN || u64le(len(schema_bytes)) || schema_bytes || u64le(len(row_bytes)) || row_bytes`.
+     - `DOMAIN` is the ASCII bytes `cbdc-liquidity-router/daily-state-fingerprint/v1`.
+     - `u64le(n)` is `n` as 8 bytes, little-endian.
+     - The result is lowercase hex.
+  4. **Pinning.** Any other pandas version is an error, not a silent difference. A change to any of these rules needs a new scheme number.
+  5. **Golden vector.** `contracts/test-vectors/daily_state_fingerprint.v1.json` records a fixed DataFrame with its descriptor and fingerprint. The contract checker verifies it on Windows and Ubuntu CI, and Dev A's implementation must reproduce it (§9.1). The checker's tests also show that index values, column order, dtypes, column names, row count and values each change the fingerprint.
 
 **The canonical document (`id_scheme` 1)** (owner decision, A1/R3). It is a JSON object with exactly these members. Every member is always present, so `null` is written out, never omitted:
 
@@ -587,14 +601,18 @@ Each result's `decision_id` is computed for that one policy (§2.11), never over
 |---|---|
 | `id_scheme` | `1` |
 | `engine_version` | The `/v1/version` `engine_version` string (§2.2) |
-| `transaction` | `{"sender_country", "receiver_country", "amount_usd"}`. `amount_usd` is the parsed number, so `300000` and `300000.0` both serialise as `300000` |
-| `state` | Replay: `{"mode": "historical_replay", "date"}`. Scenario: `{"mode": "scenario", "date", "scenario_id"}`. Explicit: `{"mode": "explicit", "reference_date", "venues"}`, with each venue `{"bridge_uid", "liquidity_usd", "congestion", "history"}`. `history` is `{"liquidity_usd": [30], "congestion": [30]}` or `null`; an omitted history is written as `null`. `venues` are sorted by `bridge_uid` |
+| `transaction` | `{"sender_country", "receiver_country", "amount_usd"}`. `amount_usd` is the normalised binary64 value (see below), so `300000` and `300000.0` both serialise as `300000` |
+| `state` | Replay: `{"mode": "historical_replay", "date"}`. Scenario: `{"mode": "scenario", "date", "scenario_id"}`. Explicit: `{"mode": "explicit", "reference_date", "venues"}`, with each venue `{"bridge_uid", "liquidity_usd", "congestion", "history"}`. `history` is `{"liquidity_usd": [30], "congestion": [30]}` or `null`; an omitted history is written as `null`. `venues` are sorted by `bridge_uid` in ascending **ordinal** (Unicode code-point) order: no natural or locale-aware sorting, so `#10` sorts before `#2` |
 | `policy` | The one policy, after defaulting (`waterfall` when omitted). In `/v1/compare`, each result's own policy; never the `policies` list |
 | `scenario` | Scenario mode: `{"scenario_id", "liquidity_multiplier", "congestion_multiplier", "cheapest_venue_liquidity_multiplier"}`, as `/v1/scenarios` defines them. The `description` is excluded. Other modes: `null` |
 | `reward_weights` | `{"lambda_latency", "lambda_risk", "lambda_unrouted"}`. The `status` label is excluded |
 | `artefacts` | `{"knowledge_sha256", "daily_state_sha256", "bridge_network_sha256", "normalization_stats_sha256", "macro_risk_proxy_sha256", "rpw_corridor_quarterly_sha256"}`: exactly the fingerprints `/v1/version` reports (§2.2) |
 | `checkpoint_sha256` | For `ppo_projected`: the enabled checkpoint's SHA-256. A `ppo_projected` request without one is `POLICY_DISABLED` and gets no ID. For every other policy: `null`, so a checkpoint change never changes a baseline ID |
 
+- **Numeric normalisation** (owner-confirmed). During request validation, every finite number in `transaction` and `state` (amount, liquidity, congestion, history values) is converted to an IEEE 754 **binary64** value. JSON integers are converted too: `9007199254740993` becomes `9007199254740992.0`.
+  - **Execution and hashing use the identical normalised values.** There is no separate "hash form", so a request can't hash one value and route with another.
+  - Non-finite values can't occur: JSON has no NaN or Infinity, and validation rejects anything that overflows.
+  - Numerically equal inputs therefore give the same ID: `300000` = `300000.0`, `1e21` = `1000000000000000000000`, `0` = `-0.0`. The checker tests cover these and a large integer.
 - **Serialisation and hash.** The document is serialised with RFC 8785 (JCS: sorted keys, no whitespace, ECMAScript number formatting) and hashed as UTF-8 bytes. `decision_id` = `"sha256:"` + the lowercase hex SHA-256.
 - **Never hashed:** `api_version`, `git_commit`, `client_reference`, the scenario `description`, the reward-weight `status`, `request_id`, `device`, `platform`, and every output field.
 - **A new input means a new scheme.** Adding or removing a member, or changing how one is written, requires `id_scheme` 2. Any other change that can alter outputs must bump `engine_version`.
@@ -1050,8 +1068,8 @@ These are **requirements** that Dev A's inference service and its tests must mee
 
 | # | Requirement | Contract | Test that shows it |
 |---|---|---|---|
-| A-1 | Deterministic `decision_id`: RFC 8785 over the §2.11 document, covering every output-affecting input; checkpoint hash for `ppo_projected` only; `engine_version` bumped when an imported Phase 1 constant affecting outputs changes | §2.2, §2.11 | Reproduce every vector in `contracts/test-vectors/decision_id.v1.json` byte for byte |
-| A-2 | Cross-platform artefact and daily-state hashing (text files CRLF→LF, binaries raw, little-endian row hashes with column names and dtypes). Covers the **six** `decision_id` artefact fingerprints: knowledge, daily state, bridge network, normalisation stats, macro-risk proxy and RPW cost baseline. Also `scenarios_sha256` in `/v1/version` | §2.2, §2.11; arch §6.2, §7.4 | Golden-hash test, identical on Windows and Linux CI; the service `knowledge_sha256` equals the LF-normalised hash, not Phase 1's raw-byte `KnowledgeBase.sha256` |
+| A-1 | Deterministic `decision_id`: RFC 8785 over the §2.11 document, covering every output-affecting input; numbers normalised to binary64 during validation and the same values used for execution; venues in ordinal `bridge_uid` order; checkpoint hash for `ppo_projected` only; `engine_version` bumped when an imported Phase 1 constant affecting outputs changes | §2.2, §2.11 | Reproduce every vector in `contracts/test-vectors/decision_id.v1.json` byte for byte |
+| A-2 | Cross-platform artefact and daily-state hashing (text files CRLF→LF, binaries raw, little-endian row hashes with column names and dtypes). Covers the **six** `decision_id` artefact fingerprints: knowledge, daily state, bridge network, normalisation stats, macro-risk proxy and RPW cost baseline. Also `scenarios_sha256` in `/v1/version` | §2.2, §2.11; arch §6.2, §7.4 | Golden-hash test, identical on Windows and Linux CI: reproduce `contracts/test-vectors/daily_state_fingerprint.v1.json` exactly with pandas 2.3.3. The service `knowledge_sha256` equals the LF-normalised hash, not Phase 1's raw-byte `KnowledgeBase.sha256` |
 | A-3 | 10 s worker execution timeout; 12 s request deadline (`CBDC_ENGINE_REQUEST_DEADLINE_S`); 1 s minimum start budget (`CBDC_ENGINE_MIN_START_BUDGET_S`), with startup refused unless `0 <= budget < deadline` | §5, §8 | Queued expiry and under-budget → `ENGINE_BUSY`, never run; deadline while running → `ENGINE_TIMEOUT` with the worker kept; past 10 s → only that worker recycled |
 | A-4 | Configurable worker startup timeout, default 180 s (`CBDC_ENGINE_STARTUP_TIMEOUT_S`) | §8; arch §6.2 | Before readiness, `NOT_READY` and `ready: false` |
 | A-5 | Strict request validation and the agreed error formats (`details.errors[]`, `field` omitted for form-level errors, sanitised 4xx messages, `VALIDATION_ERROR` for wrong-length history) | §1, §2.4, §4 | Every inference error fixture |

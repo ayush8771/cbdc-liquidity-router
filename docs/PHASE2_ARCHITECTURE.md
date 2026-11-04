@@ -407,11 +407,12 @@ A single worker that handles one request at a time avoids interleaving, but it i
    - build the shared CNN;
    - load the approved checkpoint, if any, on the configured device, in `eval()` mode;
    - call `torch.set_num_threads(1)`;
-   - keep the baseline daily table as `BASELINE_FRAME` and record its fingerprint. The fingerprint is a SHA-256 over:
-     1. the column names and dtypes, in column order;
-     2. pandas' per-row `uint64` hashes (`pandas.util.hash_pandas_object`), written explicitly as **little-endian** bytes, so that byte order never depends on the machine.
+   - keep the baseline daily table as `BASELINE_FRAME` and record its fingerprint. The fingerprint is defined exactly in API contract §2.11 (scheme 1):
+     - an RFC 8785 descriptor of the column names, `str(dtype)`, index metadata, row count, pandas version and hashing parameters;
+     - row hashes from pandas 2.3.3 `hash_pandas_object(frame, index=True, categorize=False, hash_key="0123456789123456")`, as little-endian `<u8`;
+     - combined as a domain separator plus length-prefixed descriptor and row bytes, then SHA-256.
 
-     pandas stays pinned. The same function gives `daily_state_sha256` and `state_frame_sha256` (API contract §2.11), and the golden-hash test pins its output (§7.4).
+     The index is included, and pandas is pinned to 2.3.3. The same function gives `daily_state_sha256` and `state_frame_sha256`, and the golden vector `contracts/test-vectors/daily_state_fingerprint.v1.json` pins its output (§7.4).
 4. **State is scoped to the request:**
    - Replay uses `BASELINE_FRAME` as is.
    - A scenario uses `perturb(BASELINE_FRAME, scenario)`, which returns a new frame. Each worker memoises at most 6 such frames, one per scenario; they are read-only.
@@ -506,7 +507,8 @@ The root `requirements-lock.txt` is a `pip freeze` of the Windows development ve
 - **Golden-hash test (required).** Fixed inputs must give identical results on Windows and Linux CI:
   - artefact fingerprints;
   - the daily-state fingerprint (§6.2);
-  - `decision_id`s, including every vector in `contracts/test-vectors/decision_id.v1.json`.
+  - `decision_id`s, including every vector in `contracts/test-vectors/decision_id.v1.json`;
+  - the daily-state fingerprint of `contracts/test-vectors/daily_state_fingerprint.v1.json`. The contract checker already verifies it on Windows and Ubuntu CI with pandas 2.3.3.
 
   Until it passes on both, documents and responses don't claim cross-platform determinism.
 - **Case and length.** Use lower-case folder and file names; Linux CI catches imports with the wrong case. Set `git config core.longpaths true` on Windows to handle deep `node_modules` paths.
