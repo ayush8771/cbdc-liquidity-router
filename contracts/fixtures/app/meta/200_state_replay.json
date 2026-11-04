@@ -31,7 +31,7 @@
         "split": "test",
         "scenarioId": null
       },
-      "corridorRisk": 0.087,
+      "corridorRisk": 0.0,
       "baselineCostPct": 0.0612,
       "venues": [
         {
@@ -62,7 +62,12 @@
           "valuesProvenance": "synthetic_simulation"
         }
       ],
-      "warnings": []
+      "warnings": [
+        {
+          "code": "RISK_FALLBACK_USED",
+          "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+        }
+      ]
     }
   }
 }

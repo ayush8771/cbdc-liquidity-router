@@ -1,19 +1,25 @@
 openapi: 3.1.0
 info:
   title: CBDC Liquidity Router — Inference API (internal)
-  version: 0.3.0
+  version: 0.4.0
   description: |
-    Machine-readable form of docs/PHASE2_API_CONTRACT.md v0.3, §1, §2, §4 and §7.
+    Machine-readable form of docs/PHASE2_API_CONTRACT.md v0.4, §1, §2, §4 and §7.
     Producer: Dev A (FastAPI, services/inference/). Consumer: Dev B only.
     Field case: snake_case. Internal Compose network only; no authentication.
 
     Status: DRAFT pending approval by Dev A, B and C (arch §10). Until it is
     approved, docs/PHASE2_API_CONTRACT.md stays normative; any difference
-    between the two is a bug in this file.
+    between the two is a bug in this file. Questions the contract still
+    leaves open (contract §10) are left open here.
 
-    Response schemas are closed (additionalProperties: false) so the
-    conformance check catches undocumented fields. Adding an optional field is
-    still non-breaking for consumers (§1), but it must be added here first.
+    CI rules (owner decision): request schemas are strict at every level, and
+    response schemas are closed (additionalProperties: false), so the
+    conformance check catches undocumented fields. At run time the consumer
+    still ignores unknown response fields (§1); adding an optional field is
+    non-breaking, but it must be added here first.
+
+    405 METHOD_NOT_ALLOWED (with an Allow header) is returned for any method a
+    documented path doesn't define; see components.responses.MethodNotAllowed.
 servers:
   - url: http://inference:8000
     description: Compose-internal (arch §5.5). Never published to the host in the full profile.
@@ -83,8 +89,10 @@ paths:
         - name: scenario_id
           in: query
           required: false
-          description: Required when mode=scenario.
-          schema: {$ref: '#/components/schemas/ScenarioId'}
+          description: |
+            Required when mode=scenario, rejected otherwise (VALIDATION_ERROR). Any string is
+            accepted by the schema; an unknown value returns UNKNOWN_SCENARIO, as on /v1/route.
+          schema: {type: string}
         - {name: include_history, in: query, required: false, schema: {type: boolean, default: false}}
       responses:
         '200':
@@ -199,6 +207,9 @@ components:
     RetryAfter:
       description: Seconds. Sent with ENGINE_BUSY and NOT_READY (§4).
       schema: {type: integer, minimum: 0}
+    Allow:
+      description: The methods the path supports (RFC 9110), e.g. "POST".
+      schema: {type: string}
 
   responses:
     Malformed:
@@ -214,18 +225,30 @@ components:
         INVALID_STATE_VALUE or POLICY_UNAVAILABLE_FOR_STATE.
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     InternalError:
-      description: INTERNAL_ERROR — including a failed engine integrity check. No result is returned.
+      description: |
+        INTERNAL_ERROR — including a failed engine integrity check and a failed allocation
+        invariant (§2.8). No result is returned.
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     ServiceUnavailable:
-      description: ENGINE_BUSY (queue full) or NOT_READY. Both send Retry-After.
+      description: |
+        ENGINE_BUSY: the queue is full, or the request's deadline (CBDC_ENGINE_REQUEST_DEADLINE_S,
+        default 12 s) expired while it was still queued, so it never ran. NOT_READY: no worker is
+        ready yet. Both send Retry-After.
       headers: {Retry-After: {$ref: '#/components/headers/RetryAfter'}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     NotReady:
-      description: NOT_READY — required artefacts failed to load.
+      description: NOT_READY — no engine worker is ready yet, or required artefacts failed to load.
       headers: {Retry-After: {$ref: '#/components/headers/RetryAfter'}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     EngineTimeout:
-      description: ENGINE_TIMEOUT — the engine task exceeded CBDC_ENGINE_TASK_TIMEOUT_S.
+      description: |
+        ENGINE_TIMEOUT — the request's deadline expired while its task was running. The worker is
+        not killed for that; it is replaced only if the task also exceeds its own execution timeout
+        (CBDC_ENGINE_TASK_TIMEOUT_S, 10 s) (§5).
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    MethodNotAllowed:
+      description: METHOD_NOT_ALLOWED. The path exists but not with this method (§4).
+      headers: {Allow: {$ref: '#/components/headers/Allow'}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
 
   schemas:
@@ -301,20 +324,24 @@ components:
           additionalProperties: false
           required: [structured_data, daily_state, knowledge_base, engine_workers, ppo_checkpoint]
           properties:
-            structured_data: {type: string, enum: [ok, error]}
-            daily_state: {type: string, enum: [ok, error]}
-            knowledge_base: {type: string, enum: [ok, error]}
+            structured_data: {type: string, enum: [ok, error], description: 'Exactly ok or error (Q12 closed).'}
+            daily_state: {type: string, enum: [ok, error], description: 'Exactly ok or error (Q12 closed).'}
+            knowledge_base: {type: string, enum: [ok, error], description: 'Exactly ok or error (Q12 closed).'}
             engine_workers: {type: string, enum: [ok, rebuilding, error]}
             ppo_checkpoint: {type: string, enum: [ok, disabled, error]}
         engine_pool:
           type: object
           additionalProperties: false
-          required: [workers, queued, max_queue, rebuilds_since_start]
+          required: [workers, ready_workers, queued, max_queue, rebuilds_since_start]
           properties:
             workers: {type: integer, minimum: 0}
+            ready_workers:
+              description: Workers that have finished warming up and can take a task.
+              type: integer
+              minimum: 0
             queued: {type: integer, minimum: 0}
             max_queue: {type: integer, minimum: 0}
-            rebuilds_since_start: {type: integer, minimum: 0}
+            rebuilds_since_start: {type: integer, minimum: 0, description: Individual worker replacements.}
         time: {$ref: '#/components/schemas/Timestamp'}
 
     RewardWeights:
@@ -375,11 +402,23 @@ components:
         data:
           type: object
           additionalProperties: false
-          required: [daily_state_sha256, bridge_network_sha256, normalization_stats_sha256, date_range]
+          required: [daily_state_sha256, bridge_network_sha256, normalization_stats_sha256, macro_risk_proxy_sha256,
+                     rpw_corridor_quarterly_sha256, scenarios_sha256, date_range]
           properties:
             daily_state_sha256: {$ref: '#/components/schemas/Sha256Hex'}
             bridge_network_sha256: {$ref: '#/components/schemas/Sha256Hex'}
             normalization_stats_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+            macro_risk_proxy_sha256:
+              description: data/processed/macro_risk_proxy.parquet, hashed as committed (binary, §2.11). Enters decision_id.
+              allOf: [{$ref: '#/components/schemas/Sha256Hex'}]
+            rpw_corridor_quarterly_sha256:
+              description: data/processed/rpw_corridor_quarterly.parquet, hashed as committed (binary, §2.11). Enters decision_id.
+              allOf: [{$ref: '#/components/schemas/Sha256Hex'}]
+            scenarios_sha256:
+              description: |
+                SHA-256 of the RFC 8785 serialisation of the /v1/scenarios `scenarios` array (§2.2). A cache
+                key only; the scenario fields that affect a decision enter decision_id directly (§2.11).
+              allOf: [{$ref: '#/components/schemas/Sha256Hex'}]
             date_range: {$ref: '#/components/schemas/DateRange'}
         reward_weights: {$ref: '#/components/schemas/RewardWeights'}
         runtime:
@@ -458,6 +497,10 @@ components:
         history: {$ref: '#/components/schemas/VenueHistory'}
 
     StateView:
+      description: |
+        warnings never contains STATE_OUTSIDE_TRAINING_RANGE: that depends on the policy, so only
+        /v1/route and /v1/compare emit it (owner decision). RISK_FALLBACK_USED appears when
+        corridor_risk is the 0.0 fallback.
       type: object
       additionalProperties: false
       required: [corridor, state, corridor_risk, baseline_cost_pct, venues, warnings]
@@ -563,9 +606,10 @@ components:
         mode: {type: string, const: explicit}
         reference_date: {$ref: '#/components/schemas/Date'}
         venues:
-          description: Exactly the corridor's venues, each once (STATE_VENUE_MISMATCH otherwise).
+          description: |
+            Exactly the corridor's venues, each once (STATE_VENUE_MISMATCH otherwise, including an
+            empty list; hence no minItems).
           type: array
-          minItems: 1
           items: {$ref: '#/components/schemas/ExplicitVenue'}
 
     ExplicitVenue:
@@ -584,20 +628,23 @@ components:
 
     ExplicitHistory:
       description: |
-        30 finite, non-negative numbers per channel, oldest first; the last
-        equals the current value within 1e-9 relative. Length and value rules
-        are enforced by the service as INVALID_STATE_VALUE, so the schema
-        does not constrain them.
+        Exactly 30 numbers per channel, oldest first. A wrong length is a
+        schema rule and returns VALIDATION_ERROR (owner decision). The value
+        rules (finite, >= 0, last value equal to the current one within 1e-9
+        relative) return INVALID_STATE_VALUE. null and an omitted history mean
+        the same.
       type: object
       additionalProperties: false
       required: [liquidity_usd, congestion]
       properties:
-        liquidity_usd: {type: array, items: {type: number}}
-        congestion: {type: array, items: {type: number}}
+        liquidity_usd: {type: array, minItems: 30, maxItems: 30, items: {type: number}}
+        congestion: {type: array, minItems: 30, maxItems: 30, items: {type: number}}
 
     # ---------- route / compare / explain ----------
     TransactionInput:
+      description: Strict (§1).
       type: object
+      additionalProperties: false
       required: [sender_country, receiver_country, amount_usd]
       properties:
         sender_country: {type: string}
@@ -605,10 +652,15 @@ components:
         amount_usd:
           type: number
           description: '> 0 and finite (INVALID_AMOUNT). Above the $500K cap is not an error: 200 with feasibility.allowed=false.'
-        client_reference: {type: ['string', 'null'], maxLength: 200}
+        client_reference:
+          description: Echoed unchanged; not part of decision_id. At most 200 characters, counted as Unicode code points.
+          type: ['string', 'null']
+          maxLength: 200
 
     RouteRequest:
+      description: Strict (§1). policy null is rejected.
       type: object
+      additionalProperties: false
       required: [transaction, state]
       properties:
         transaction: {$ref: '#/components/schemas/TransactionInput'}
@@ -618,8 +670,11 @@ components:
           default: waterfall
 
     ExplainRequest:
-      description: The /v1/route body plus an optional flag that does not enter decision_id.
+      description: |
+        The same body as /v1/route. Strict (§1). include_semantic_context was removed in v1
+        (owner decision): semantic_context is always null, so sending it returns VALIDATION_ERROR.
       type: object
+      additionalProperties: false
       required: [transaction, state]
       properties:
         transaction: {$ref: '#/components/schemas/TransactionInput'}
@@ -627,10 +682,11 @@ components:
         policy:
           allOf: [{$ref: '#/components/schemas/Policy'}]
           default: waterfall
-        include_semantic_context: {type: boolean, default: false}
 
     CompareRequest:
+      description: Strict (§1).
       type: object
+      additionalProperties: false
       required: [transaction, state]
       properties:
         transaction: {$ref: '#/components/schemas/TransactionInput'}
@@ -861,19 +917,16 @@ components:
           items: {$ref: '#/components/schemas/VenueExplanation'}
         policy_notes: {type: array, items: {type: string}}
         semantic_context:
-          description: Null unless Cognee is enabled and include_semantic_context is true. Never changes feasibility.
-          # Inner shape not yet defined by the contract (contracts/README.md, issue C6).
-          oneOf:
-            - {type: 'null'}
-            - {type: object}
+          description: Reserved; always null in v1 (C6, §2.10). Never changes feasibility.
+          type: 'null'
         limitations: {type: array, items: {type: string}, minItems: 1}
 
     # ---------- errors (§4) ----------
     ErrorCode:
       type: string
-      enum: [MALFORMED_REQUEST, NOT_FOUND, POLICY_DISABLED, VALIDATION_ERROR, UNSUPPORTED_CORRIDOR, INVALID_AMOUNT,
-             DATE_OUT_OF_RANGE, DATE_IN_GAP_BUFFER, UNKNOWN_SCENARIO, STATE_VENUE_MISMATCH, INVALID_STATE_VALUE,
-             POLICY_UNAVAILABLE_FOR_STATE, INTERNAL_ERROR, ENGINE_BUSY, NOT_READY, ENGINE_TIMEOUT]
+      enum: [MALFORMED_REQUEST, NOT_FOUND, METHOD_NOT_ALLOWED, POLICY_DISABLED, VALIDATION_ERROR, UNSUPPORTED_CORRIDOR,
+             INVALID_AMOUNT, DATE_OUT_OF_RANGE, DATE_IN_GAP_BUFFER, UNKNOWN_SCENARIO, STATE_VENUE_MISMATCH,
+             INVALID_STATE_VALUE, POLICY_UNAVAILABLE_FOR_STATE, INTERNAL_ERROR, ENGINE_BUSY, NOT_READY, ENGINE_TIMEOUT]
 
     ErrorResponse:
       type: object
@@ -886,7 +939,12 @@ components:
           required: [code, message, details, request_id]
           properties:
             code: {$ref: '#/components/schemas/ErrorCode'}
-            message: {type: string, description: 'Never includes tokens or stack traces.'}
+            message:
+              description: |
+                Never includes tokens or stack traces. A 4xx message never exposes internal filesystem
+                paths, exception representations or internal configuration values; sanitised
+                caller-supplied values may be echoed.
+              type: string
             details:
               type: object
               properties:
@@ -894,9 +952,13 @@ components:
                 errors:
                   description: VALIDATION_ERROR only.
                   type: array
+                  minItems: 1
                   items:
                     type: object
-                    required: [field, message]
+                    description: |
+                      field: the request path, snake_case, dot/bracket form (e.g. state.venues[1].history.liquidity_usd).
+                      A form-level error (not about one field) omits field. An empty string is never used.
+                    required: [message]
                     properties:
                       field: {type: string}
                       message: {type: string}
@@ -906,6 +968,7 @@ components:
 x-error-status:
   MALFORMED_REQUEST: 400
   NOT_FOUND: 404
+  METHOD_NOT_ALLOWED: 405
   POLICY_DISABLED: 409
   VALIDATION_ERROR: 422
   UNSUPPORTED_CORRIDOR: 422

@@ -26,6 +26,7 @@
       },
       "engine_pool": {
         "workers": 2,
+        "ready_workers": 0,
         "queued": 0,
         "max_queue": 32,
         "rebuilds_since_start": 1

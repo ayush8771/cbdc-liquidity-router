@@ -1,6 +1,9 @@
 # Phase 2 contracts
 
-**Status: DRAFT v0.3.0, pending approval by Dev A, B and C** (arch §10). Until it is approved, `docs/PHASE2_API_CONTRACT.md` is normative. Any difference between that document and these files is a bug here, except for the open issues listed below, which need a decision.
+**Status: DRAFT v0.4.0, pending approval by Dev A, B and C** (arch §10). Until it is approved, `docs/PHASE2_API_CONTRACT.md` is normative. Any difference between that document and these files is a bug here.
+- Revised on 4 November 2026 after the team reviews. Ayush's owner decisions are applied; `docs/TEAM_REVIEW_RESOLUTION.md` lists what changed.
+- Questions the contract still leaves open (contract §10) are left open here.
+- **CI rule:** request schemas strict, response schemas closed, in both APIs. At run time, consumers ignore unknown response fields and enum values (contract §1).
 
 Owner: Dev D. Changes need approval from every consumer (arch §4.1).
 
@@ -10,6 +13,7 @@ Owner: Dev D. Changes need approval from every consumer (arch §4.1).
 | `openapi/app.v1.yaml` | Application API (`/api/v1`, camelCase). Producer B, consumer C. |
 | `fixtures/inference/` | `meta/ state/ route/ compare/ explain/ errors/`. Used by the backend's mock mode and by Prism. |
 | `fixtures/app/` | `meta/ auth/ transactions/ comparisons/ dashboard/ errors/`. Used by MSW in the web app. |
+| `test-vectors/decision_id.v1.json` | Exact `decision_id` canonical strings and IDs (contract §2.11). Dev A's implementation must reproduce them. |
 
 ## Fixture format
 
@@ -56,30 +60,47 @@ The checker:
 - validates both documents as OpenAPI 3.1;
 - validates every fixture's request and response against its operation;
 - checks that each error code uses its §4 HTTP status;
-- applies the §2.8 field definitions: execution, clipping, totals, reward terms, `completed`, the regime and warnings;
+- applies the §2.8 field definitions:
+  - execution, clipping and totals, including the allocation invariant `requested_usd = Σ amount_requested_usd`;
+  - reward terms;
+  - the Stage 1F `completed` rule and `bridges_used` above 1e-6;
+  - regulatory rejections (`requested_usd = 0`, `allocations = []`);
+  - the regime and warnings, including C14: no `PARTIAL_COMPLETION` on a rejection;
 - checks `decision_id` stability across route, explain and compare;
-- checks the app ↔ engine mapping;
+- checks failed transaction records (§3.2–§3.4):
+  - `decision` and `corridor` are null and `failure` is set;
+  - the list's decision-derived fields are null;
+  - `failure` repeats the code and message of the `POST` error that created it;
+- checks that a 405 sends an `Allow` header listing the path's methods;
+- checks health readiness: `unavailable` exactly when the database is, otherwise `ok` or `degraded` by inference, including on the 503 body;
+- checks the risk fallback: `RISK_FALLBACK_USED` is required where the Phase 1 lookup actually falls back. That is a recorded table of (corridor, month) pairs read from `macro_risk_proxy.parquet`, not an inference from risk 0.0. It also means risk 0.0, and never appears on a regulatory rejection. `/v1/state` never emits `STATE_OUTSIDE_TRAINING_RANGE`;
+- verifies the `decision_id` test vectors in `test-vectors/decision_id.v1.json`: each RFC 8785 canonical string and ID is rebuilt from its inputs (contract §2.11). This needs `rfc8785`, pinned in `infra/scripts/requirements.txt`;
+- gives the same result when `contracts/` files have CRLF line endings, as a Windows checkout may (tested);
+- checks that the dashboard totals and `completionRate` follow from the stored transactions in the list fixture;
+- checks the app ↔ engine mapping. Error messages are free text: a passthrough must keep the code and status only;
 - checks coverage: every operation has a success fixture, and every error code has a fixture.
 
 CI runs it in `.github/workflows/phase2-integration.yml`.
 
-## Open issues found while writing the contract (need a decision)
+## Issues found while writing the contract: status in v0.4
 
-| # | Issue | What these files do now | Who decides |
-|---|---|---|---|
-| C1 | App health `database`: the contract shows only `"ok"`, but the backend branch returns `"unavailable"`. | Enum `[ok, unavailable]` | B, C |
-| C2 | `ENGINE_TIMEOUT` through the app: §3.2 lists it with the 503s, while the §4 table says 504, passed through. | 504, per the §4 table. §3.2 needs a wording fix. | B |
-| C3 | `POLICY_DISABLED` (409) through the app is undefined. An analyst requesting a disabled `ppoProjected` gets a 409 from inference; §3.2 only says that 422s pass through. | Not in the app spec. Proposal: pass it through as 409, not persisted, like a 422. | B, C |
-| C4 | `GET /transactions/:id` for a `failed` transaction: §3.4 says "same body as the 201", but there is no decision. | `decision: null`; the list's decision fields are nullable | B, C |
-| C5 | **`decision_id` is not platform-independent if it hashes file bytes.** With `core.autocrlf=true`, a Windows checkout's SHA-256 of `bridge_network.csv`, `regulatory_facts.json` and `normalization_stats.json` differs from the committed bytes in the Linux image (measured). `src/memory/knowledge.py` hashes raw bytes. A decision stored from one platform and explained on the other would then return `409 DECISION_MISMATCH`. | Fixtures use the committed (LF) blob hashes | A (hash the committed or normalised content), or the owner (a `.gitattributes` rule for `data/`, which is a Phase 1 change) |
-| C6 | The `semantic_context` inner shape is undefined. | Any object, or null | A, C |
-| C7 | The `decision_id` canonical form is undefined: do `client_reference` and `include_semantic_context` enter it? The second must not, or explain can't match route. | Fixtures assume neither enters it | A |
-| C8 | Unknown fields outside `state`: §2.4 only requires rejecting them inside `state`. | Rejected inside `state` and its venues; the top level and `transaction` are open | A, B |
-| C9 | The item shape of `VALIDATION_ERROR` `details.errors[]` is undefined. FastAPI's default is `{loc, msg, type}`. | `{field, message}` | A, B, C |
-| C10 | Non-ok values of the health checks `structured_data`, `daily_state` and `knowledge_base` are undefined. | `[ok, error]` | A |
-| C11 | Explain `outcome` values: only `used` and `unused` are shown. | `[used, unused]`; a rejection uses `unused` + `INFEASIBLE_REGULATORY` | A, C |
-| C12 | Arch §4 has no fixture folder for health, version, network, calendar or scenarios. | Added `meta/` under both APIs | all (doc update) |
-| C13 | The §2.8 example request sends `client_reference` but the response shows null. | Fixtures echo the value as sent | doc fix |
-| C14 | Read literally, §2.8 gives a regulatory rejection the warning `PARTIAL_COMPLETION`, because `completed` is false. | Literal rule followed | A, C |
-| C15 | Arch §9.2 says the gap buffers are "the first 30 days" and "the last 30 days". Phase 1's `in_gap_buffer()` uses `<= 30`, so each buffer is 31 days: 2011-01-01..01-31 and 2025-08-31..09-30. | Calendar fixture uses the computed ranges | doc fix |
-| C16 | Phase 1 `validate_simulation_date()` raises one exception type for both "out of range" and "in a gap buffer". | Contract unchanged. Dev A must tell them apart, for example with `assign_split()`. | A (implementation note) |
+| # | Issue | v0.4 outcome |
+|---|---|---|
+| C1 | App health `database` values | **Resolved:** `[ok, unavailable]`; mock mode reports `ok`; database down → 503 with the Health body and `status: "unavailable"` (Ayush). The liveness path is a proposal (Q3a). |
+| C2 | `ENGINE_TIMEOUT` listed with the 503s in §3.2 | **Resolved:** 504 everywhere; §3.2 rewritten. |
+| C3 | `POLICY_DISABLED` through the app | **Resolved:** passed through as 409, not persisted; a viewer gets 403 first. |
+| C4 | `GET /transactions/:id` for a failed transaction | **Resolved:** `decision: null`, `corridor: null`, `failure: {code, message}`; `409 TRANSACTION_FAILED` for its explanation. |
+| C5 | `decision_id` and CRLF checkouts | **Resolved (Ayush):** text artefacts are hashed after CRLF→LF; binaries raw; no `.gitattributes` for `data/`. A golden-hash test on Windows and Linux is required. |
+| C6 | `semantic_context` inner shape | **Resolved (Ayush):** reserved, always null in v1. |
+| C7 | `decision_id` canonical form | **Resolved (Ayush):** RFC 8785, `id_scheme: 1`, `engine_version` and every output-affecting artefact included; the checkpoint only for `ppo_projected`; `api_version` and `git_commit` excluded (contract §2.11). |
+| C8 | Unknown fields outside `state` | **Resolved (Ayush):** requests strict at every level in both APIs, enforced in CI. |
+| C9 | `details.errors[]` item shape | **Resolved:** `{field, message}` with camelCase app paths; a form-level error omits `field` (Ayush). |
+| C10 | Non-ok values of three health checks | Open (Q12). Schema keeps `[ok, error]`. |
+| C11 | Explain `outcome` values | **Resolved (Ayush):** `used`/`unused`; a rejection uses `unused` + `INFEASIBLE_REGULATORY`. |
+| C12 | No fixture folder for metadata | **Resolved:** `meta/` added to arch §4. |
+| C13 | §2.8 example `client_reference` not echoed | **Resolved:** examples fixed. |
+| C14 | `PARTIAL_COMPLETION` on a regulatory rejection | **Resolved (Ayush):** omitted; fixtures and checker updated. |
+| C15 | Gap-buffer length in arch §9.2 | **Resolved:** arch §9.2 states the 31-day ranges computed by Phase 1. |
+| C16 | One Phase 1 exception for two date errors | **Resolved (Ayush):** no contract change; implementation note for Dev A. |
+
+New questions raised in the v0.4 reviews are tracked in `docs/PHASE2_API_CONTRACT.md` §10.

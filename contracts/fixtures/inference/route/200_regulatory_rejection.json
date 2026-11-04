@@ -93,12 +93,7 @@
         "device": "cpu",
         "platform": "linux-x86_64"
       },
-      "warnings": [
-        {
-          "code": "PARTIAL_COMPLETION",
-          "message": "Executed 0.0% of the amount; the rest is unrouted."
-        }
-      ]
+      "warnings": []
     }
   }
 }

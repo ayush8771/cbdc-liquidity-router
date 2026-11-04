@@ -28,7 +28,7 @@
         "split": "test",
         "scenario_id": "cheapest_venue_outage"
       },
-      "corridor_risk": 0.087,
+      "corridor_risk": 0.0,
       "baseline_cost_pct": 0.0612,
       "venues": [
         {
@@ -353,7 +353,12 @@
           }
         }
       ],
-      "warnings": []
+      "warnings": [
+        {
+          "code": "RISK_FALLBACK_USED",
+          "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+        }
+      ]
     }
   }
 }

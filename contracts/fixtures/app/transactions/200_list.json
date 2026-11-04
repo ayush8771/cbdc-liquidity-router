@@ -35,7 +35,7 @@
           "completed": true,
           "completionRatio": 1.0,
           "executedUsd": 300000.0,
-          "rewardAmountBased": -0.3078
+          "rewardAmountBased": -0.2208
         },
         {
           "id": "30bfe62e-365d-533c-8da6-3cefa289f713",
@@ -52,7 +52,7 @@
           "completed": false,
           "completionRatio": 0.5,
           "executedUsd": 150000.0,
-          "rewardAmountBased": -0.6299
+          "rewardAmountBased": -0.5864
         },
         {
           "id": "ab65a498-5f10-50e0-b3be-4e50d3f5b908",
@@ -86,7 +86,7 @@
           "completed": false,
           "completionRatio": 0.9,
           "executedUsd": 360000.0,
-          "rewardAmountBased": -0.46882
+          "rewardAmountBased": -0.39052
         },
         {
           "id": "80fa54b8-7314-53de-aed4-fa530374768c",
@@ -103,7 +103,7 @@
           "completed": true,
           "completionRatio": 1.0,
           "executedUsd": 300000.0,
-          "rewardAmountBased": -0.37288
+          "rewardAmountBased": -0.28588
         },
         {
           "id": "b4fed707-3fc7-5fbe-8bcb-018c7907bfe9",
@@ -120,18 +120,18 @@
           "completed": true,
           "completionRatio": 1.0,
           "executedUsd": 100000.0,
-          "rewardAmountBased": -0.2069
+          "rewardAmountBased": -0.1429
         },
         {
           "id": "a121dc5c-b250-5b30-8025-f9e07e76d4e0",
           "createdAt": "2026-11-02T10:00:00Z",
           "createdBy": "u-analyst-1",
-          "corridor": "GBR->PHL",
+          "corridor": null,
           "amountUsd": 300000.0,
           "simulationDate": "2024-06-14",
           "stateMode": "historicalReplay",
           "policy": "waterfall",
-          "policyStatus": "default",
+          "policyStatus": null,
           "status": "failed",
           "allowed": null,
           "completed": null,
