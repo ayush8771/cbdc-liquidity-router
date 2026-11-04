@@ -1,6 +1,6 @@
 # Major Phase 2 — Team Architecture
 
-**Status:** v0.4, revised on 4 November 2026 after the team reviews (see `docs/TEAM_REVIEW_RESOLUTION.md`), proposed for a second team review. Parts of the inference service and backend are implemented on their feature branches. This document describes the agreed design, not their current state.
+**Status:** v0.4, **approved**: merged into `feature/phase2-platform` by the project owner through PR #3 on 4 November 2026, with the follow-up corrections in PR #4 (see `docs/TEAM_REVIEW_RESOLUTION.md`). Parts of the inference service and backend are implemented on their feature branches. This document describes the agreed design, not their current state.
 **Companion document:** `docs/PHASE2_API_CONTRACT.md`, which defines the endpoints, schemas and error codes. Its "How to read v0.4" note applies here too: **proposed** marks a rule awaiting the named person's approval, and open questions are listed in §11 and in contract §10.
 **Baseline:** tag `phase1-complete` (`bc9905e`). Phase 1 code, data, checkpoints and results are read-only for Phase 2.
 
@@ -657,7 +657,7 @@ The UI must say so. Modelling depletion would be a new simulator feature and nee
 5. **Whether to fix the root lock now** (platform markers) or leave it frozen as the Phase 1 record (draft: leave it; Phase 2 uses `services/inference/requirements/`).
 6. **Engine pool defaults.** The 10 s execution limit, the 12 s end-to-end deadline and the 180 s startup timeout are decided. `CBDC_ENGINE_WORKERS=2` and a queue of 32 are still to be confirmed after measurement.
 7. **Who administers GitHub branch protection or rulesets** (§3.1), and the real GitHub handles for CODEOWNERS.
-8. **Remaining open questions** are in API contract §10. The blocking ones are Q16 and Q19, plus the Dev B `feeCostUsd` migration that `meanFeeCostPct` depends on (Q11-dep). The rest are non-blocking. R1–R6 are resolved (see `docs/TEAM_REVIEW_RESOLUTION.md` §8). Dev A's implementation requirements are listed in API contract §9.1. `docs/TEAM_REVIEW_RESOLUTION.md` lists the implementation follow-ups for each developer.
+8. **Remaining open questions** are in API contract §10. Q16 and Q19 are closed. The `fee_cost_usd` definition and non-null `metrics` are confirmed by Ayush (contract §2.8). The remaining blocking item is the Dev B `feeCostUsd` migration that `meanFeeCostPct` depends on (Q11-dep). The rest are non-blocking. R1–R6 are resolved (see `docs/TEAM_REVIEW_RESOLUTION.md` §8). Dev A's implementation requirements are listed in API contract §9.1. `docs/TEAM_REVIEW_RESOLUTION.md` lists the implementation follow-ups for each developer.
 
 **Resolved in v0.4 (approved by Ayush as project owner and Dev A):**
 - the individual worker-process pool (§6.2);

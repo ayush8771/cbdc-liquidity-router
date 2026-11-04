@@ -248,11 +248,12 @@ def test_passthrough_must_keep_the_engine_code(root):
     assert_reported(problems(root), "409_policy_disabled_passthrough", "keep the engine's code")
 
 
-def test_passthrough_message_is_free_text(root):
-    # Backend review: the backend may use its own message; only code and status are stable.
+def test_passthrough_must_not_forward_the_engine_message(root):
+    # Q16: every app message is the backend's fixed text.
+    engine = json.loads((REPO / FIX / "inference/errors/409_policy_disabled.json").read_text(encoding="utf-8"))
     edit(root, "app/errors/409_policy_disabled_passthrough.json",
-         lambda d: d["response"]["body"]["error"].update(message="Rewritten by the backend."))
-    assert not [p for p in problems(root) if "409_policy_disabled_passthrough" in p]
+         lambda d: d["response"]["body"]["error"].update(message=engine["response"]["body"]["error"]["message"]))
+    assert_reported(problems(root), "409_policy_disabled_passthrough", "engine messages are never forwarded")
 
 
 def test_unknown_app_request_field_is_rejected(root):
@@ -672,3 +673,67 @@ def test_tampered_fingerprint_vector_is_reported(root):
     data["vectors"][0]["sha256"] = "0" * 64
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     assert_reported(problems(root), "fixed_frame_3_rows", "daily-state fingerprint")
+
+
+def test_validation_error_takes_precedence_over_invalid_amount(root):
+    # §3.2: a schema-invalid body is VALIDATION_ERROR even when the amount is also non-positive.
+    edit(root, "app/errors/422_validation_error_precedence.json",
+         lambda d: d["response"]["body"]["error"].update(code="INVALID_AMOUNT"))
+    assert_reported(problems(root), "422_validation_error_precedence", "must produce VALIDATION_ERROR")
+
+
+def test_app_server_url_has_no_path_prefix():
+    import yaml
+    spec = yaml.safe_load((REPO / "contracts/openapi/app.v1.yaml").read_text(encoding="utf-8"))
+    assert spec["servers"][0]["url"] == "/"
+    assert all(path.startswith("/api/v1/") for path in spec["paths"])
+
+
+# ---------------------------------------------------------------- confirmed metrics semantics (Ayush)
+
+@pytest.mark.parametrize("field, value", [
+    ("fee_cost_usd", 1.0), ("cost_term", 0.01), ("latency_term", 0.1), ("risk_term", 0.05)])
+def test_regulatory_rejection_costs_must_be_zero(root, field, value):
+    edit(root, "inference/route/200_regulatory_rejection.json",
+         lambda d: d["response"]["body"]["metrics"].update({field: value}))
+    assert_reported(problems(root), "200_regulatory_rejection", f"metrics.{field}")
+
+
+def test_regulatory_rejection_unrouted_is_the_full_amount(root):
+    edit(root, "inference/route/200_regulatory_rejection.json",
+         lambda d: d["response"]["body"]["totals"].update(unrouted_amount_based_usd=0.0))
+    assert_reported(problems(root), "200_regulatory_rejection", "unrouted_amount_based_usd")
+
+
+def test_fee_cost_uses_executed_amounts_not_requested(root):
+    # In the cheapest-feasible fixture a venue is clipped, so requested × fee would differ.
+    def change(d):
+        b = d["response"]["body"]
+        b["metrics"]["fee_cost_usd"] = sum(a["amount_requested_usd"] * a["fee_pct"] for a in b["allocations"])
+    edit(root, "inference/route/200_cheapest_feasible_partial.json", change)
+    assert_reported(problems(root), "200_cheapest_feasible_partial", "metrics.fee_cost_usd")
+
+
+def test_null_metric_is_rejected_by_the_schema(root):
+    edit(root, "inference/route/200_regulatory_rejection.json",
+         lambda d: d["response"]["body"]["metrics"].update(risk_term=None))
+    assert_reported(problems(root), "200_regulatory_rejection", "response schema")
+
+
+@pytest.mark.parametrize("group, field, value", [
+    ("totals", "unrouted_env_usd", 600000.0),  # the environment figure must stay 0 (requested_usd = 0)
+    ("metrics", "unrouted_term_env", 1.0),
+    ("metrics", "reward_env", -1.0),
+    ("metrics", "unrouted_term_amount_based", 0.0),
+])
+def test_rejection_keeps_env_and_amount_based_unrouted_distinct(root, group, field, value):
+    edit(root, "inference/route/200_regulatory_rejection.json",
+         lambda d: d["response"]["body"][group].update({field: value}))
+    assert_reported(problems(root), "200_regulatory_rejection", f"{group}.{field}")
+
+
+def test_rejection_fixture_shows_both_unrouted_figures():
+    body = json.loads((REPO / FIX / "inference/route/200_regulatory_rejection.json").read_text(encoding="utf-8"))
+    totals = body["response"]["body"]["totals"]
+    assert totals["unrouted_amount_based_usd"] == totals["amount_usd"] > 0
+    assert totals["unrouted_env_usd"] == 0.0 and totals["requested_usd"] == 0.0

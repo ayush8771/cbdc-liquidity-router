@@ -1,5 +1,5 @@
 {
-  "description": "Liveness: the process is up; no dependency is checked (§3.9). Path and body are a proposal.",
+  "description": "Liveness (approved): public GET /api/v1/health/live, HTTP 200, exactly {\"status\": \"ok\"}; no dependency is checked (§3.9).",
   "source": "illustrative",
   "request": {
     "method": "GET",

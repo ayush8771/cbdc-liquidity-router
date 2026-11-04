@@ -715,6 +715,17 @@ class Checker:
                               "completed=false")
             if not feas["reason"] or not feas["decisive_fact_ids"]:
                 self.fail(at, "a regulatory rejection needs reason and decisive_fact_ids")
+            # Ayush: full metrics, zero fee and execution costs, zero completion, amount-based unrouted = amount.
+            for name, want in (("metrics.fee_cost_usd", 0.0), ("metrics.cost_term", 0.0), ("metrics.latency_term", 0.0),
+                               ("metrics.risk_term", 0.0), ("totals.completion_ratio", 0.0),
+                               # Ayush: amount-based unrouted is the full amount; the environment's figure stays 0
+                               # (requested_usd = 0), preserving Phase 1 accounting.
+                               ("totals.unrouted_amount_based_usd", amount), ("totals.unrouted_env_usd", 0.0),
+                               ("metrics.unrouted_term_amount_based", 1.0), ("metrics.unrouted_term_env", 0.0),
+                               ("metrics.reward_env", 0.0)):
+                group, key = name.split(".")
+                if not close((m if group == "metrics" else totals)[key], want):
+                    self.fail(at, f"a regulatory rejection must have {name} = {want}")
         elif feas["reason"] is not None:
             self.fail(at, "feasibility.reason must be null when allowed")
 
@@ -839,6 +850,8 @@ class Checker:
         elif kind == "error":
             if app_body["error"]["code"] != eng_body["error"]["code"] or fx["response"]["status"] != src["response"]["status"]:
                 self.fail(rel, f"passthrough must keep the engine's code and status ({src_rel})")
+            if app_body["error"]["message"] == eng_body["error"]["message"]:
+                self.fail(rel, "engine messages are never forwarded; use the backend's fixed text (§4, Q16)")
             return
         else:
             self.fail(rel, f"unknown derived_from kind {kind!r}")
