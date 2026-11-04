@@ -97,8 +97,6 @@ Anvesh's open points, kept explicit:
 ## 5. Remaining questions (contract §10)
 
 **Blocking:**
-- **Q16:** does the app forward the sanitised engine 4xx message (capped at 500) or use a fixed message? *Anvesh and Varshini.*
-- **Q19:** audit rows for rejected requests. *Anvesh.*
 - **Q11-dep:** the `feeCostUsd` Prisma migration that `meanFeeCostPct` needs (see §7). *Anvesh.*
 
 **Non-blocking:**
@@ -194,7 +192,7 @@ Anvesh's open points, kept explicit:
 - **Not run on Linux:** no Linux environment was available here. The CI workflow `phase2-integration.yml` runs the checker on Ubuntu.
 
 **Still open:**
-- Q16 (Anvesh and Varshini) and Q19 (Anvesh).
+- Q16 and Q19: closed in revision 7 (§12).
 - The `feeCostUsd` Prisma migration (Anvesh; not done, outside this change).
 - The non-blocking items in contract §10.
 
@@ -237,3 +235,78 @@ The seven `decision_id` vectors are unchanged: their venues already sort the sam
 | **Unique scenario IDs** | `scenario_id` values in `/v1/scenarios` are unique. The checker reports a duplicate in the inference and app scenario fixtures; tests cover both | Contract §2.7; checker `check_version_fingerprints`; tests |
 
 The seven `decision_id` vectors and the daily-state fingerprint golden vector are unchanged: none of their inputs is an unsafe integer, and their venues are already in slot order.
+
+## 12. Approved contract corrections (revision 7)
+
+| Item | Resolution | Where |
+|---|---|---|
+| **Q16** (closed) | Fixed backend messages for every app error, passed-through 4xx included; engine messages never forwarded; only the approved mapped fields kept. The 500-character wording is removed. The passthrough fixtures now carry fixed text, and the checker rejects one that copies the engine message | Contract §4, §9; app OpenAPI `Unprocessable`, `ErrorResponse.message`; `app/errors/409_policy_disabled_passthrough.json`, `app/errors/422_date_in_gap_buffer_passthrough.json`; also `app/errors/503_engine_busy.json` and `app/transactions/200_get_failed.json`, which copied the engine text for a 5xx; checker + test |
+| **Q19** (closed) | An audit row only together with a persisted record, in the same DB transaction; a rejected request creates none. The outdated "every mutating call" wording is removed | Contract §6.2, §9 |
+| **Validation precedence** | Every `VALIDATION_ERROR` problem is returned first, together; `INVALID_AMOUNT` only for an otherwise valid body. New fixture with a bad country and a zero amount → `VALIDATION_ERROR` on `senderCountry` only | Contract §3.2; `app/errors/422_validation_error_precedence.json`; test |
+| **Liveness** | Fixture wording corrected: public `GET /api/v1/health/live`, HTTP 200, exactly `{"status":"ok"}`, no dependency check. The contract says the path and body are final | `app/meta/200_health_live.json`; contract §3.9 |
+| **OpenAPI prefix** | `servers.url` is `/`; the paths keep their full `/api/v1/...` form, so a generated client no longer requests `/api/v1/api/v1/...` | `contracts/openapi/app.v1.yaml` |
+
+**Then confirmed by Ayush:** see §13.
+
+## 13. Fee cost and metrics semantics (confirmed by Ayush)
+
+| Confirmation | Applied | Where |
+|---|---|---|
+| `metrics.fee_cost_usd` = Σ `amount_executed_usd × fee_pct`, executed amounts only, `fee_pct` as the bridge network defines it (a fraction) | Defined in the contract and the schema; the checker already recomputed it this way; a new test shows that requested × fee is rejected | Contract §2.8; inference OpenAPI `Metrics`; test |
+| `metrics` always present, every field non-null, rejections included | Already true in both OpenAPI schemas (every field required, none nullable). Now stated, and a test rejects a null metric | Contract §2.8; inference OpenAPI; test |
+| Rejection accounting. In `totals`: executed 0, completion ratio 0, amount-based unrouted = full amount, environment unrouted = 0. In `metrics`: fee cost 0, execution costs 0 | The checker enforces fee, cost, latency and risk terms 0, `completion_ratio` 0 and `unrouted_amount_based_usd` = `amount_usd`. The existing rejection fixture already satisfied all of it | Contract §2.8; checker; 5 tests |
+| No `PARTIAL_COMPLETION` and no `RISK_FALLBACK_USED` on a rejection | Already enforced; now stated together | Contract §2.8 |
+| `decision_id` is Dev A's job; the backend treats it as opaque and never recalculates it | Stated | Contract §2.11, §9.1 |
+
+**Resolved by Ayush: unrouted accounting on a rejection.**
+- `unrouted_amount_based_usd` = the full amount (executed is 0).
+- `unrouted_env_usd` = 0, preserving the Phase 1 accounting, where `requested_usd = 0`.
+- Both fields stay present and non-null.
+- The checker enforces both, plus `unrouted_term_env = 0`, `reward_env = 0` and `unrouted_term_amount_based = 1` (contract §2.8; tests). The existing rejection fixtures already matched, so none changed.
+
+**Backend follow-up (implementation only):** with metrics confirmed non-null, the `RoutingDecision` reward and term columns that are nullable today (`rewardEnv`, `rewardAmountBased`, `latencyTerm`, `riskTerm`, marked "PROVISIONAL: nullable") can be made non-null, in the same migration as `feeCostUsd`.
+
+## 14. Ayush's decisions W1 and F1 (revision 8)
+
+**W1: documentation correction.** The rejection rules in contract §2.8 now keep `totals` and `metrics` apart:
+- in `totals`: `requested_usd = 0`, `executed_usd = 0`, `completion_ratio = 0`, `completed = false`;
+- in `metrics`: `fee_cost_usd = 0`, and `cost_term`, `latency_term` and `risk_term` all 0.
+
+Before, `executed_usd` and `completion_ratio` were listed under `metrics`, where those fields don't exist. The same fix is made in §9.1 (A-8) and in §13 above. The checker already enforced the right fields in the right objects, so no checker or fixture change was needed.
+
+**F1: Phase 1 cost-baseline unit (outstanding technical finding).** This is separate from the Phase 2 contract. Nothing in Phase 1 was changed, no division by 100 is applied anywhere, and the reward calculation is untouched.
+
+*What was traced:*
+1. **Origin.** `real_cost_baseline` is the median of the raw RPW column `cc2 total cost %` per corridor-quarter (`src/preprocessing/rpw.py:112`). It is stored in `data/processed/rpw_corridor_quarterly.parquet`.
+2. **Stored values are sized like percentage points.**
+   - USA→IND 2023: 2.30, 2.74, 2.64, 2.745. GBR→PHL 2023: 2.00, 2.05, 1.57, 1.39. USA→MEX 2023: 3.08, 2.88, 2.605, 3.04.
+   - Across all 17,202 rows: median 3.82, 97.4% of rows above 1, 40 negative values, maximum 51.73. As fractions these would mean a 5,173% cost and a negative cost of up to 2,967%, which is implausible; as percentage points they are ordinary.
+3. **Consumers treat it as a fraction.**
+   - `src/training/cost_baseline.py` says "as a fraction, e.g. 0.05 = 5%" and returns the value unchanged.
+   - `src/envs/cbdc_env.py` passes it as `baseline_cost_pct`.
+   - `src/envs/reward.py` computes `baseline_cost = baseline_cost_pct × executed` and subtracts fees that are fractions (`fee_pct` 0.015 means 1.5%). Its placeholder default is 0.05.
+   - So a stored 2.05 enters the reward as 205%, not 2.05%: about 100 times too large relative to the fees.
+4. **Supporting, not conclusive.** The recorded Phase 1 mean rewards are about +0.9 (`docs/STAGE1D_RESULTS.md`), which is consistent with a cost term near 2, not near 0. I did not recompute the reward components.
+
+*What could not be confirmed.* The raw RPW workbook is not in this checkout (`data/raw/.cache/` is git-ignored and absent), so the unit of `cc2 total cost %` was **not verified at its source**. Someone with the raw workbook must confirm the column's documented unit. The stored values strongly indicate percentage points; that is the evidence above, not a confirmed fact.
+
+*Related points for the review.*
+- **Mixed units in Phase 1:** when the RPW lookup is unavailable the reward falls back to the placeholder 0.05, a fraction. The ARE→MEX fallback is a median of the same column, so it carries the same unit as the lookup.
+- **Phase 2:** `metrics.baseline_cost_pct` reports exactly what Phase 1 returns (for example 2.05). The contract's illustrative fixtures use 0.0612 and small rewards, which do not match real engine magnitudes. Dev A's engine-generated fixtures will show the real values. How the UI labels this field is pending F1.
+- **Any correction** would change every Phase 1 reward and the reported results, so it must be separately reviewed and versioned (an `engine_version` bump, which changes every `decision_id`). It is not proposed here.
+
+**Next step (Ayush):** confirm the raw unit, then decide whether to open a versioned Phase 1 change. Until then, nothing changes.
+
+## 15. Anvesh's PR #4 comments (revision 9)
+
+| Comment | Resolution | Where |
+|---|---|---|
+| Validation precedence | Spelled out in order: (1) every schema problem first, together, including an `amountUsd` that is missing, not a number or not finite; (2) only for an otherwise valid body, a finite `amountUsd` ≤ 0 returns `INVALID_AMOUNT`. No caller value and no engine message is echoed. The `INVALID_AMOUNT` row in §4 and the OpenAPI `amountUsd` description (both request schemas) now agree | Contract §3.2, §4; app OpenAPI |
+| Audit atomicity | Stated as the approved team decision: each record and its audit row in the same DB transaction; if the audit write fails the whole transaction rolls back. The rejected-request rules are unchanged (no record, no audit row). The caller-facing result of a database failure is **not** defined: it stays the open Dev B item (§6) | Contract §6.2 |
+| Contract header | Status now reads "approved": merged by the project owner (ayush8771) through PR #3 on 4 November 2026, with the follow-up corrections in PR #4. The "proposed for a second team review" wording is removed from both the contract and the architecture headers | Contract and architecture headers |
+
+**Closed — which source is normative (decision: Ayush).**
+- `docs/PHASE2_API_CONTRACT.md` is the authoritative, approved Phase 2 v0.4 specification.
+- The two OpenAPI files are machine-readable draft representations, not independently normative specifications. If they differ from the written contract, the written contract takes precedence until Ayush explicitly approves OpenAPI status.
+- The `DRAFT – pending approval` labels stay in `contracts/README.md`, `contracts/openapi/inference.v1.yaml` and `contracts/openapi/app.v1.yaml`. They are deliberately not changed.
+- A separate OpenAPI approval review will happen later. It does not delay implementation against the approved v0.4 contract.

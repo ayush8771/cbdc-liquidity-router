@@ -1,5 +1,5 @@
 {
-  "description": "Engine 422 passed through with the same code; not persisted (§3.2).",
+  "description": "Engine 422 passed through with the same code; not persisted (§3.2). The message is the backend's fixed text for the code; the engine message is never forwarded (§4).",
   "source": "illustrative",
   "derived_from": {
     "kind": "error",
@@ -30,7 +30,7 @@
     "body": {
       "error": {
         "code": "DATE_IN_GAP_BUFFER",
-        "message": "simulation_date 2022-01-10 falls within the 30-day gap buffer of a split boundary.",
+        "message": "The date falls within a gap buffer.",
         "details": {
           "field": "state.date"
         },

@@ -757,12 +757,17 @@ components:
         bridges_used: {type: integer, minimum: 0}
 
     Metrics:
+      description: |
+        Always present, every field non-null, including on a regulatory rejection (§2.8). On a rejection:
+        fee_cost_usd, cost_term, latency_term and risk_term are 0, and unrouted_term_amount_based is 1.
       type: object
       additionalProperties: false
       required: [fee_cost_usd, baseline_cost_pct, cost_term, latency_term, risk_term, unrouted_term_env,
                  unrouted_term_amount_based, reward_env, reward_amount_based, reward_weights]
       properties:
-        fee_cost_usd: {$ref: '#/components/schemas/NonNegMoney'}
+        fee_cost_usd:
+          description: Σ allocations[].amount_executed_usd × fee_pct (executed amounts only; fee_pct a fraction, §2.3).
+          allOf: [{$ref: '#/components/schemas/NonNegMoney'}]
         baseline_cost_pct: {type: number}
         cost_term: {type: number}
         latency_term: {type: number}
