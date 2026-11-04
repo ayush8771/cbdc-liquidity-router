@@ -1,0 +1,41 @@
+{
+  "description": "Engine 422 passed through with the same code; not persisted (§3.2).",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "error",
+    "fixture": "inference/errors/422_date_in_gap_buffer.json"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-422_date_in_gap_buffer_passthrough"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2022-01-10"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_date_in_gap_buffer_passthrough"
+    },
+    "body": {
+      "error": {
+        "code": "DATE_IN_GAP_BUFFER",
+        "message": "simulation_date 2022-01-10 falls within the 30-day gap buffer of a split boundary.",
+        "details": {
+          "field": "state.date"
+        },
+        "requestId": "fixture-422_date_in_gap_buffer_passthrough"
+      }
+    }
+  }
+}

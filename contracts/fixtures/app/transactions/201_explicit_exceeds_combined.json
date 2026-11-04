@@ -1,0 +1,179 @@
+{
+  "description": "Explicit user-supplied synthetic state; env vs amount-based unrouted differ (D7).",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "transaction",
+    "fixture": "inference/route/200_waterfall_explicit_exceeds_combined.json"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-201_explicit_exceeds_combined"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 400000.0,
+      "state": {
+        "mode": "explicit",
+        "referenceDate": "2024-06-14",
+        "venues": [
+          {
+            "bridgeUid": "GBR->PHL#0",
+            "liquidityUsd": 210000.0,
+            "congestion": 0.35,
+            "history": null
+          },
+          {
+            "bridgeUid": "GBR->PHL#1",
+            "liquidityUsd": 60000.0,
+            "congestion": 0.2,
+            "history": null
+          },
+          {
+            "bridgeUid": "GBR->PHL#2",
+            "liquidityUsd": 90000.0,
+            "congestion": 0.5,
+            "history": null
+          }
+        ]
+      },
+      "policy": "waterfall"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "X-Request-Id": "fixture-201_explicit_exceeds_combined"
+    },
+    "body": {
+      "id": "b4ffa6ea-812d-5748-aaee-a45483ed4866",
+      "createdAt": "2026-11-02T10:00:00Z",
+      "createdBy": "u-analyst-1",
+      "status": "routed",
+      "transaction": {
+        "senderCountry": "GBR",
+        "receiverCountry": "PHL",
+        "amountUsd": 400000.0,
+        "corridor": "GBR->PHL",
+        "simulationDate": "2024-06-14",
+        "clientReference": null
+      },
+      "failure": null,
+      "decision": {
+        "decisionId": "sha256:7cb6f2e2595ee7c868226b7aa2265117bb54e88d46933301b721edf3dab49a15",
+        "policy": "waterfall",
+        "policyStatus": "default",
+        "feasibility": {
+          "allowed": true,
+          "reason": null,
+          "decisiveFactIds": [],
+          "knowledgeVersion": "2026-11-02.1"
+        },
+        "allocations": [
+          {
+            "slot": 0,
+            "bridgeUid": "GBR->PHL#0",
+            "dataSourceTag": "real_static_bridge",
+            "feePct": 0.02,
+            "liquidityUsd": 210000.0,
+            "congestion": 0.35,
+            "risk": 0.0,
+            "shareRequested": 0.525,
+            "amountRequestedUsd": 210000.0,
+            "amountExecutedUsd": 210000.0,
+            "amountClippedUsd": 0.0,
+            "shareBeforeProjection": null
+          },
+          {
+            "slot": 1,
+            "bridgeUid": "GBR->PHL#1",
+            "dataSourceTag": "synthetic_bridge_expansion",
+            "feePct": 0.014,
+            "liquidityUsd": 60000.0,
+            "congestion": 0.2,
+            "risk": 0.0,
+            "shareRequested": 0.15,
+            "amountRequestedUsd": 60000.0,
+            "amountExecutedUsd": 60000.0,
+            "amountClippedUsd": 0.0,
+            "shareBeforeProjection": null
+          },
+          {
+            "slot": 2,
+            "bridgeUid": "GBR->PHL#2",
+            "dataSourceTag": "synthetic_bridge_expansion",
+            "feePct": 0.03,
+            "liquidityUsd": 90000.0,
+            "congestion": 0.5,
+            "risk": 0.0,
+            "shareRequested": 0.225,
+            "amountRequestedUsd": 90000.0,
+            "amountExecutedUsd": 90000.0,
+            "amountClippedUsd": 0.0,
+            "shareBeforeProjection": null
+          }
+        ],
+        "totals": {
+          "amountUsd": 400000.0,
+          "requestedUsd": 360000.0,
+          "executedUsd": 360000.0,
+          "unroutedEnvUsd": 0.0,
+          "unroutedAmountBasedUsd": 40000.0,
+          "completionRatio": 0.9,
+          "completed": false,
+          "bridgesUsed": 3
+        },
+        "metrics": {
+          "feeCostUsd": 7740.0,
+          "baselineCostPct": 0.0612,
+          "costTerm": 0.03573,
+          "latencyTerm": 0.32625,
+          "riskTerm": 0.0,
+          "unroutedTermEnv": 0.0,
+          "unroutedTermAmountBased": 0.1,
+          "rewardEnv": -0.29052,
+          "rewardAmountBased": -0.39052,
+          "rewardWeights": {
+            "lambdaLatency": 1.0,
+            "lambdaRisk": 1.0,
+            "lambdaUnrouted": 1.0,
+            "status": "placeholder"
+          }
+        },
+        "diagnostics": {
+          "regime": "exceeds_combined",
+          "combinedLiquidityUsd": 360000.0,
+          "projectionApplied": false
+        },
+        "provenance": {
+          "stateMode": "explicit",
+          "stateDate": "2024-06-14",
+          "split": "test",
+          "scenarioId": null,
+          "valuesProvenance": "user_supplied_synthetic",
+          "engineVersion": "0.1.0",
+          "gitCommit": "bc9905e",
+          "knowledgeSha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "dailyStateSha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "stateFrameSha256": "2ab732243aa08f0405eab69c2dcb292bf72b847f23ea6c5167c02cb06811834f",
+          "checkpoint": null,
+          "device": "cpu",
+          "platform": "linux-x86_64"
+        },
+        "warnings": [
+          {
+            "code": "PARTIAL_COMPLETION",
+            "message": "Executed 90.0% of the amount; the rest is unrouted."
+          },
+          {
+            "code": "RISK_FALLBACK_USED",
+            "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+          }
+        ]
+      }
+    }
+  }
+}

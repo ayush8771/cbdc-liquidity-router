@@ -1,10 +1,33 @@
 # Major Phase 2 — Team Architecture
 
-**Status:** v0.3 (2 November 2026), proposed for team approval through the Phase 2 pull request. Nothing described here is implemented yet.
-**Companion document:** `docs/PHASE2_API_CONTRACT.md`, which defines the endpoints, schemas and error codes.
+**Status:** v0.4, revised on 4 November 2026 after the team reviews (see `docs/TEAM_REVIEW_RESOLUTION.md`), proposed for a second team review. Parts of the inference service and backend are implemented on their feature branches. This document describes the agreed design, not their current state.
+**Companion document:** `docs/PHASE2_API_CONTRACT.md`, which defines the endpoints, schemas and error codes. Its "How to read v0.4" note applies here too: **proposed** marks a rule awaiting the named person's approval, and open questions are listed in §11 and in contract §10.
 **Baseline:** tag `phase1-complete` (`bc9905e`). Phase 1 code, data, checkpoints and results are read-only for Phase 2.
 
 > **Scope rule.** Phase 2 turns the validated Phase 1 engine into a web application. It supports **historical replay** and **synthetic simulation** only. It does not use live bridge data, live FX feeds or streaming; those belong to Major Phase 3. Simulated values must always be labelled as simulated.
+
+**Changes in v0.4:**
+- **Engine pool (§6.2):**
+  - individual worker processes, started with spawn and connected by pipes, instead of `ProcessPoolExecutor`;
+  - a timed-out, crashed or corrupted worker is replaced on its own ("worker recycling"), not the whole pool;
+  - a 10 s worker execution timeout and a separate, configurable 12 s request deadline (revised after review);
+  - a configurable startup timeout (`CBDC_ENGINE_STARTUP_TIMEOUT_S`, 180 s).
+- **Fingerprints (§6.2, §7.4):**
+  - daily-state fingerprint from little-endian `uint64` row hashes plus column names and dtypes;
+  - text artefacts hashed with LF line endings;
+  - a required Windows/Linux golden-hash test before any cross-platform determinism claim.
+- **Allocation invariant** checked fail-closed in the worker (§5.1).
+- **Dependencies (§7.2):**
+  - `service.in` is the lock input, without scikit-learn or SciPy;
+  - Cognee stays optional;
+  - a pinned pure-Python `rfc8785`;
+  - the PyTorch CPU index added with `--extra-index-url`;
+  - lock generation waits until `service.in` is final;
+  - CI dependency checks.
+- **`STATE_OUTSIDE_TRAINING_RANGE` (§9.1):** bounds from the actual training windows; a warning in every mode.
+- **Gap-buffer length corrected to Phase 1's 31-day ranges (§9.2, C15).**
+- **Folders:** fixture `meta/` folders added (§4, C12).
+- **Open decisions updated (§11).**
 
 **Changes in v0.3:**
 - Folder structure finalised (§4). Every Phase 2 test suite now sits outside Phase 1's `tests/`:
@@ -42,7 +65,7 @@ These come from Phase 1 results and from the project owner. Changing any of them
 | D3 | **Raw PPO (no projection) is not served.** | It completes only 15.6% of transactions under a venue outage (Stage 1F). |
 | D4 | **No checkpoint path is hard-coded.** A checkpoint is loaded only if it is listed, with its SHA-256, in an approval registry the project owner maintains (API contract §7). | No Phase 1 checkpoint has been approved for serving yet. |
 | D5 | **Phase 1 code under `src/` is imported, never modified.** The inference service wraps `CBDCLiquidityEnv`, the baselines, the PPO model, the projection and `StaticMemoryProvider`. | Preserves Stage 1A–1F behaviour and the 193 regression tests. |
-| D6 | **Feasibility comes only from `StaticMemoryProvider`.** Cognee is optional, off by default, and used for explanation text only. | Stage 1E influence boundaries. |
+| D6 | **Feasibility comes only from `StaticMemoryProvider`.** Cognee is optional, off by default, and used for explanation text only. In API v1, `semantic_context` is always null (API contract §2.10). | Stage 1E influence boundaries. |
 | D7 | **Responses report the amount-based unrouted figure and reward alongside the environment's.** | Stage 1F: the environment's accounting hides never-requested amounts. |
 | D8 | **Reward weights are shown as placeholders** (all λ = 1.0, `status: "placeholder"`). | They are uncalibrated. |
 | D9 | **The frontend talks only to the Express backend.** Only the backend calls the inference service. | One public API, one place for auth, persistence and audit. |
@@ -83,7 +106,9 @@ There is one rule: **routing logic lives only in the inference service, and appl
 | Users, auth, audit log | No. Internal network only. | Yes (development-only auth) |
 | Response shape for the UI | Engine schema (snake_case) | Application schema (camelCase), mapped field for field with no recalculation |
 
-The inference service is **stateless and deterministic for a given platform and device**: the same request against the same artefacts returns the same body. Baseline results are identical across platforms. PPO results may differ in the last floating-point digits between CPU and CUDA, or between operating systems; `provenance.device` records which was used. `decision_id` hashes the canonical request plus the artefact versions, never the outputs, so it is identical everywhere.
+The inference service is **stateless and deterministic for a given platform and device**: the same request against the same artefacts returns the same body. PPO results may differ in the last floating-point digits between CPU and CUDA, or between operating systems; `provenance.device` records which was used.
+
+`decision_id` hashes the RFC 8785 canonical form of the request plus artefact fingerprints, never the outputs (API contract §2.11). Baseline results, fingerprints and `decision_id` are designed to be identical on Windows and Linux. **That is claimed only once the golden-hash test (§7.4) passes on both platforms.**
 
 ---
 
@@ -161,8 +186,9 @@ cbdc-liquidity-router/
 │   │   ├── inference.v1.yaml
 │   │   └── app.v1.yaml
 │   ├── fixtures/
-│   │   ├── inference/   route/ compare/ explain/ state/ errors/
-│   │   └── app/         transactions/ comparisons/ auth/ dashboard/ errors/
+│   │   ├── inference/   meta/ route/ compare/ explain/ state/ errors/
+│   │   └── app/         meta/ transactions/ comparisons/ auth/ dashboard/ errors/
+│   ├── test-vectors/      decision_id.v1.json (exact RFC 8785 canonical strings and IDs, contract §2.11)
 │   └── README.md
 │
 ├── services/
@@ -282,6 +308,8 @@ cbdc_inference/engine/ — engine worker process:  route(transaction, state, pol
    │     │                          baselines.py | Stage1DRawObservationWrapper + PPOActorCritic
    │     │                          (deterministic) + capacity_projection.project_capped_simplex
    │     ├── execution              CBDCLiquidityEnv.step() — the Phase 1 evaluation path
+   │     ├── allocation invariant   requested_usd = Σ amount_requested_usd; no weight on infeasible
+   │     │                          or padding slots — otherwise INTERNAL_ERROR, no result (fail closed)
    │     └── regime label           transaction_generator.true_regime_for_row()
    └── explain                      StaticMemoryProvider.explain() + template text; Cognee optional
 ```
@@ -294,7 +322,7 @@ Rules:
 
 ### 5.2 Backend boundaries (Dev B)
 
-- `inferenceClient` is the only module that calls the inference service: a 15 s timeout (longer than the engine's 10 s task timeout), with errors mapped as in API contract §5. `INFERENCE_MODE=mock` serves `contracts/fixtures/inference/`.
+- `inferenceClient` is the only module that calls the inference service: a 15 s timeout, longer than the engine's 12 s end-to-end deadline, with errors mapped as in API contract §3.2 and §4. The health probe of `/v1/health` uses its own short timeout (contract §5). `INFERENCE_MODE=mock` serves `contracts/fixtures/inference/`.
 - `mappers/` converts engine responses to application responses field for field. Mappers never compute a metric.
 - `auth/` implements development-only auth (§8). Every route except `/api/v1/health` requires it.
 - Engine responses are stored verbatim as JSON (`engineResponse`), next to the normalised columns used for queries.
@@ -368,15 +396,23 @@ A single worker that handles one request at a time avoids interleaving, but it i
 
 ### 6.2 Design: isolated engine worker processes
 
-1. **The FastAPI process holds no Phase 1 state.** It validates requests and submits each one as a task to an `EnginePool`. This is a `concurrent.futures.ProcessPoolExecutor` using the **spawn** start method on every platform (`multiprocessing.get_context("spawn")`), so Windows and Linux behave the same. Size: `CBDC_ENGINE_WORKERS`, default 2.
-2. **One task at a time per process.** A process-pool worker runs one task at a time, and processes share no memory. Each Phase 1 global is therefore touched by one request at a time, and never by two requests at once.
-3. **The worker initialiser warms everything eagerly**, removing lazy-initialisation races:
+1. **The FastAPI process holds no Phase 1 state.** It validates requests and submits each one as a task to an `EnginePool`.
+   - The pool has `CBDC_ENGINE_WORKERS` slots (default 2). Each slot owns **one individual worker process**, started with the **spawn** method on every platform (`multiprocessing.get_context("spawn")`), so Windows and Linux behave the same.
+   - The slot talks to its process over a **pipe**.
+   - It is not a `concurrent.futures.ProcessPoolExecutor`: see §6.3.
+2. **One task at a time per process.** A slot sends its process one task and waits for the reply before taking the next. Processes share no memory, so each Phase 1 global is touched by one request at a time, never by two at once.
+3. **The worker initialiser warms everything eagerly**, removing lazy-initialisation races. A worker that hasn't finished within `CBDC_ENGINE_STARTUP_TIMEOUT_S` (default 180 s, configurable) has failed to start. Until at least one worker is ready, `/v1/health` returns 503 with `ready: false`, and engine endpoints return `NOT_READY`. The initialiser does the following:
    - `chdir` to the repo root;
    - load the daily table, macro-risk table, RPW cost baselines for all corridors, normalisation stats and knowledge base;
    - build the shared CNN;
    - load the approved checkpoint, if any, on the configured device, in `eval()` mode;
    - call `torch.set_num_threads(1)`;
-   - keep the baseline daily table as `BASELINE_FRAME` and record its fingerprint (`pandas.util.hash_pandas_object` → SHA-256).
+   - keep the baseline daily table as `BASELINE_FRAME` and record its fingerprint. The fingerprint is defined exactly in API contract §2.11 (scheme 1):
+     - an RFC 8785 descriptor of the column names, `str(dtype)`, index metadata, row count, pandas version and hashing parameters;
+     - row hashes from pandas 2.3.3 `hash_pandas_object(frame, index=True, categorize=False, hash_key="0123456789123456")`, as little-endian `<u8`;
+     - combined as a domain separator plus length-prefixed descriptor and row bytes, then SHA-256.
+
+     The index is included, and pandas is pinned to 2.3.3. The same function gives `daily_state_sha256` and `state_frame_sha256`, and the golden vector `contracts/test-vectors/daily_state_fingerprint.v1.json` pins its output (§7.4).
 4. **State is scoped to the request:**
    - Replay uses `BASELINE_FRAME` as is.
    - A scenario uses `perturb(BASELINE_FRAME, scenario)`, which returns a new frame. Each worker memoises at most 6 such frames, one per scenario; they are read-only.
@@ -388,16 +424,30 @@ A single worker that handles one request at a time avoids interleaving, but it i
    - the wrapper frame is restored;
    - the fingerprint is unchanged (a cheap check; the daily table has about 16,000 rows).
 
-   If any check fails, the task returns `INTERNAL_ERROR` with no result. The pool is then marked unhealthy and rebuilt, and `/v1/health` reports `degraded` until it's back.
-6. **Timeouts.** Each task has a timeout (`CBDC_ENGINE_TASK_TIMEOUT_S`, default 10 s). On timeout the request fails with `ENGINE_TIMEOUT`, and the pool is recycled, because a running process-pool task can't be cancelled.
+   If any check fails, the task returns `INTERNAL_ERROR` with no result. **That worker** is terminated and replaced, and the other workers keep serving. `/v1/health` reports `engine_workers: "rebuilding"` and `status: "degraded"` until the replacement is ready. A crashed worker process (no reply) is handled the same way.
+
+   Separately, before returning a result the worker checks the **allocation invariant** (API contract §2.8): `requested_usd` equals the sum of the per-venue requested amounts, and no infeasible venue or padding slot carries weight. A violation returns `INTERNAL_ERROR` with no result.
+6. **Deadlines and worker recycling** (owner decision, revised after review). Two independent limits apply.
+   - **Request deadline:** configurable, default **12 s**, counted from when the request is accepted. Set with `CBDC_ENGINE_REQUEST_DEADLINE_S` (owner decision). A minimum start budget (`CBDC_ENGINE_MIN_START_BUDGET_S`, provisional default 1 s, owner decision) stops a worker taking a queued task with less time than that left. Such a task gets `ENGINE_BUSY` and never runs (API contract §5). The 10 s execution timeout stays independent. The service refuses to start unless `0 <= CBDC_ENGINE_MIN_START_BUDGET_S < CBDC_ENGINE_REQUEST_DEADLINE_S`.
+     - Expiry while the task is still **queued**: the task is dropped without running, and the request fails with `503 ENGINE_BUSY` and `Retry-After`.
+     - Expiry while it is **running**: the request fails with `504 ENGINE_TIMEOUT`, but the worker is **not** killed. The task finishes, its result is discarded, and the worker takes the next task.
+   - **Worker execution timeout:** `CBDC_ENGINE_TASK_TIMEOUT_S`, **10 s**, counted from when the worker starts the task, and never shortened to the time left on the request deadline. A task past it is stopped by terminating and replacing **that worker process** ("worker recycling"), because a running task can't be cancelled. The request, if still waiting, gets `504 ENGINE_TIMEOUT`.
+   - Workers are replaced one at a time; the pool as a whole is never recycled.
+   - Expect more `ENGINE_BUSY` responses while a worker is being replaced, and while a worker finishes a task whose caller has already timed out.
+   - The 12 s default sits inside the backend's 15 s timeout, so the backend normally receives the engine's answer.
 7. **Backpressure.** At most `CBDC_ENGINE_MAX_QUEUE` tasks wait (default 32). Beyond that, the service returns `503 ENGINE_BUSY` immediately rather than queueing without limit.
-8. **Server workers.** Engine state lives only in pool processes, so the FastAPI layer can use any number of async workers. Each uvicorn worker owns its own pool. The default is one uvicorn worker with 2 engine workers.
+8. **Server workers.** Engine state lives only in the worker processes, so the FastAPI layer can use any number of async workers. Each uvicorn worker owns its own pool. The default is one uvicorn worker with 2 engine workers.
+9. **Health.** `/v1/health` reports:
+   - `engine_workers`: `ok`, `rebuilding` while any worker is being replaced, or `error`;
+   - `engine_pool`: `workers`, `queued`, `max_queue`, and `rebuilds_since_start`, which counts individual worker replacements;
+   - `ready_workers`: workers that have finished warming up (required).
 
 ### 6.3 Why not the alternatives
 
 | Alternative | Why it was rejected |
 |---|---|
 | A single worker | Head-of-line blocking; no isolation from corruption; no detection of it |
+| `concurrent.futures.ProcessPoolExecutor` (the v0.3 design) | A running task can't be cancelled. Terminating one of its processes needs private API and breaks the whole executor, so a timeout could only be handled by recycling every worker. Individual processes with pipes let a timeout kill only the stuck worker. |
 | Threads with a global lock | Serialises all engine work in the process; lazy caches and the CNN singleton stay exposed to code that bypasses the lock; a failure inside the lock leaves corrupted state in the process |
 | Refactoring Phase 1 to pass state explicitly | Not allowed (D5) |
 | Patching Phase 1 functions at runtime | Changes Phase 1 behaviour without changing its files; harder to audit than process isolation |
@@ -406,8 +456,13 @@ A single worker that handles one request at a time avoids interleaving, but it i
 
 - **Isolation:** many concurrent mixed requests (replay, `cheapest_venue_outage`, explicit states on the same date and corridor). Each result must equal its serial reference result exactly, and the baseline fingerprint must be unchanged afterwards.
 - **Fault injection:** a task that raises inside the injected-state block leaves the cache restored, and the next request is correct.
-- **Integrity failure:** a deliberately corrupted cache triggers `INTERNAL_ERROR`, a pool rebuild and `degraded` health.
-- **Timeout and backpressure:** `ENGINE_TIMEOUT` and `ENGINE_BUSY` paths.
+- **Integrity failure:** a deliberately corrupted cache triggers `INTERNAL_ERROR`, the replacement of that one worker, and `degraded` health; the other workers keep answering.
+- **Timeout, deadline and backpressure:**
+  - a task past the 10 s execution timeout recycles only its worker;
+  - a request queued past its deadline never runs and gets `ENGINE_BUSY`; one that passes its deadline while running gets `ENGINE_TIMEOUT` and its worker is not killed;
+  - `ENGINE_BUSY` when the queue is full and while a worker is being replaced.
+- **Startup:** workers become ready within `CBDC_ENGINE_STARTUP_TIMEOUT_S`, and `NOT_READY` is returned before that.
+- **Allocation invariant:** a violating result is replaced by `INTERNAL_ERROR`.
 - These tests run on both Windows and Linux, because spawn behaviour and import paths differ.
 
 ---
@@ -426,9 +481,11 @@ The root `requirements-lock.txt` is a `pip freeze` of the Windows development ve
 | Rule | Detail |
 |---|---|
 | One Python version | **3.10.11** everywhere. Docker uses `python:3.10.11-slim-bookworm`, pinned by digest. CI uses 3.10.11. |
-| Inputs | `requirements.txt` (Phase 1 direct dependencies, unchanged) plus `services/inference/requirements/service.in` (FastAPI, uvicorn, pydantic, httpx and test tools; owned by Dev A). Cognee and its dependencies are in a separate `services/inference/requirements/cognee.in`, installed only when `CBDC_ENABLE_COGNEE=true`. |
+| Inputs | **Core:** `services/inference/requirements/service.in`, owned by Dev A. It holds the Phase 1 runtime packages the engine imports, plus FastAPI, uvicorn, pydantic, httpx, the test tools and a pinned, pure-Python `rfc8785` for canonical JSON hashing (API contract §2.11).<br>• The root `requirements.txt` is not a lock input: it pins `cognee`, which must stay optional.<br>• **scikit-learn and SciPy are not in `service.in`.** A clean environment without them passed the full test run (283 tests, reported by Dev A).<br>• pandas stays pinned, because the daily-state fingerprint depends on it (§6.2).<br>**Optional:** Cognee and its dependencies are only in `services/inference/requirements/cognee.in`, installed only when `CBDC_ENABLE_COGNEE=true`. |
 | Compiler | `uv pip compile`, which can resolve for another platform (`--python-platform`, `--python-version 3.10.11`). Every lock can therefore be produced from any one machine, with `--generate-hashes`. |
-| Generated locks (`services/inference/requirements/`, owned by Dev D) | `linux-x86_64-cpu.txt` (Docker and Linux CI; `torch==2.13.0+cpu` from the PyTorch CPU index); `windows-x86_64-cpu.txt` (developers without an NVIDIA GPU, Windows CI); `windows-x86_64-cu130.txt` (the GPU development machine; `torch==2.13.0+cu130`). Optional `cognee-<platform>.txt` locks follow the same pattern. Generation is a cross-platform Python script in `infra/scripts/`. |
+| PyTorch index | The CPU locks add the PyTorch CPU index with **`--extra-index-url`**, not `--index-url`, so PyPI stays available for every other package. |
+| Generated locks (`services/inference/requirements/`, owned by Dev D) | `linux-x86_64-cpu.txt` (Docker and Linux CI; `torch==2.13.0+cpu` from the PyTorch CPU index); `windows-x86_64-cpu.txt` (developers without an NVIDIA GPU, Windows CI); `windows-x86_64-cu130.txt` (the GPU development machine; `torch==2.13.0+cu130`). Optional `cognee-<platform>.txt` locks follow the same pattern, later. Generation is a cross-platform Python script in `infra/scripts/`. **Lock generation waits until Dev A declares `service.in` final.** |
+| Dependency checks (CI) | The core locks contain no Cognee, scikit-learn or SciPy, and the core install passes the inference tests without them. Core and optional locks never mix. Plus the lock-drift and install checks of §7.4. |
 | Platform-only packages | Must carry markers (`; sys_platform == "win32"`), or appear only in the matching platform's lock. |
 | Install | `pip install --require-hashes --no-deps -r services/inference/requirements/<platform>.txt` into `services/inference/.venv` (never the Phase 1 `venv/`), then `pip check`. The Dockerfile installs `linux-x86_64-cpu.txt`. Torch is part of each lock, with its index set in the lock header, so there is no second torch install step. |
 | Root lock | Stays unchanged as the Phase 1 reproduction record. Adding markers to it, the earlier review finding, needs the owner's approval. |
@@ -446,6 +503,14 @@ The root `requirements-lock.txt` is a `pip freeze` of the Windows development ve
 ### 7.4 Cross-platform hygiene and checks
 
 - **Line endings.** The development machine has `core.autocrlf=true`, so a Windows checkout gives text files Windows line endings, which breaks shell scripts inside Linux containers. The root `.gitattributes` therefore sets `text=auto eol=lf` for Phase 2 paths only (`services/**`, `infra/**`, `contracts/**`, `e2e/**`, `.github/workflows/phase2-*.yml`). It has no global `* text=auto` rule, so no Phase 1 file is renormalised.
+- **Hashing text artefacts.** `data/` gets no `.gitattributes` rule, so a Windows checkout of `bridge_network.csv`, `regulatory_facts.json` or `normalization_stats.json` has CRLF line endings. The inference service converts CRLF to LF before hashing any text artefact (CSV, JSON). Binary files (parquet, checkpoints) are hashed as they are. The fingerprints therefore match the committed blobs on both platforms (API contract §2.11).
+- **Golden-hash test (required).** Fixed inputs must give identical results on Windows and Linux CI:
+  - artefact fingerprints;
+  - the daily-state fingerprint (§6.2);
+  - `decision_id`s, including every vector in `contracts/test-vectors/decision_id.v1.json`;
+  - the daily-state fingerprint of `contracts/test-vectors/daily_state_fingerprint.v1.json`. The contract checker already verifies it on Windows and Ubuntu CI with pandas 2.3.3.
+
+  Until it passes on both, documents and responses don't claim cross-platform determinism.
 - **Case and length.** Use lower-case folder and file names; Linux CI catches imports with the wrong case. Set `git config core.longpaths true` on Windows to handle deep `node_modules` paths.
 - **No symlinks** in Phase 2 folders: Windows needs Developer Mode to create them.
 - No OS-specific paths in code. Python uses `pathlib`; Node uses `path`.
@@ -453,6 +518,8 @@ The root `requirements-lock.txt` is a `pip freeze` of the Windows development ve
 - CI checks:
   - **lock drift:** recompile every lock and fail on any diff;
   - **install:** each lock installs and passes `pip check` on its platform;
+  - **dependencies:** the core/optional separation of §7.2;
+  - **golden hashes:** the test above, on Windows and Linux;
   - `npm ci` passes on both Ubuntu and Windows runners;
   - the Docker images build.
 
@@ -517,12 +584,21 @@ It binds to `localhost` or the private Compose network only. Phase 3 replaces th
 How it works:
 - The engine copies the baseline daily table and overrides the caller's venues at `reference_date`. If `history` is supplied, it overrides the 30 days from `reference_date − 29` to `reference_date`. Execution, baselines, CNN windows and the regime label then read that copy (§6.2).
 - **If `history` is omitted,** only the `reference_date` row changes. The baselines read only that row, so they are exact. `ppo_projected` is refused with `POLICY_UNAVAILABLE_FOR_STATE`, because its 30-day window would mix synthetic and replay values.
-- Values are normalised with the frozen train-only statistics. Values outside a venue's train-period range return `STATE_OUTSIDE_TRAINING_RANGE`. PPO behaviour on such inputs is out of distribution and unvalidated.
+- Values are normalised with the frozen train-only statistics.
+- **The training range check** (API contract §2.4):
+  - **Bounds.** Each venue has separate liquidity and congestion min–max bounds, taken over the union of the actual 30-day windows of all training transactions.
+  - **Values checked.** The effective values the selected policy reads, after scenario multipliers or explicit overrides: the current day for the baselines, and the whole 30-day window, including explicit `history`, for `ppo_projected`.
+  - **Effect.** A value outside its bounds adds the **warning** `STATE_OUTSIDE_TRAINING_RANGE`, in replay, scenario and explicit mode alike. It never blocks routing with a baseline policy. It is emitted by `/v1/route` and `/v1/compare` only, never by `/v1/state` (owner decision).
+  - PPO behaviour on such inputs is out of distribution and unvalidated.
+  - This replaces the v0.3 wording, which checked against the train-period range in explicit and scenario mode only.
 - Explicit states can't be combined with scenarios in v1. Responses label them `values_provenance: "user_supplied_synthetic"`, and they are never presented as replay data.
 
 ### 9.2 Reference and replay date limits
 
-- **Range:** 2011-01-01 to 2025-09-30, minus the 30-day gap buffers around split boundaries (Phase 1 `validate_simulation_date()`). This includes the first 30 days of 2011 and the last 30 days before 2025-09-30.
+- **Range:** 2011-01-01 to 2025-09-30, minus the gap buffers around split boundaries (Phase 1 `validate_simulation_date()`).
+  - Phase 1's `in_gap_buffer()` (`src/preprocessing/split.py`) excludes every date within **30 days or fewer** (`<= 30`) of a boundary.
+  - So the excluded ranges are 2011-01-01..2011-01-31 and 2025-08-31..2025-09-30 (31 days each), and 61 days around each interior boundary. For example, 2021-12-01..2022-01-31.
+  - `/v1/replay/calendar` lists the computed ranges.
 - **No future dates:** no data exists after 2025-09-30. A "today" what-if must use explicit mode with a valid `reference_date`, and the response states that cost and risk context comes from that date.
 - **"Historical" means synthetic history.** Replay shows the Phase 1 synthetic daily simulation, conditioned on real lagged data. It is not observed bridge history.
 - **No unseen dates:**
@@ -532,7 +608,7 @@ How it works:
 
   Responses report `provenance.split`. For `ppo_projected`, a train-split date also triggers `DATE_IN_TRAINING_SPLIT`.
 - **Cost-baseline granularity:** the RPW baseline is quarterly and lagged by one quarter, so it is constant within a quarter. ARE→MEX has no real RPW anchor and uses the documented USA→MEX fallback (`SYNTHETIC_COST_ANCHOR` warning).
-- **Risk granularity:** monthly. Locally supplied FRED daily FX begins around 2021-08; earlier months rely on WDI/CPI-derived signals or an unconditioned default. When the proxy is unavailable, the static placeholder is used (`RISK_FALLBACK_USED`).
+- **Risk granularity:** monthly. Locally supplied FRED daily FX begins around 2021-08; earlier months rely on WDI/CPI-derived signals or an unconditioned default. When the proxy is missing or NaN for the month, Phase 1 uses the static placeholder `0.0` (`DEFAULT_RISK_PLACEHOLDER`, `src/envs/bridge_network.py`), and responses add `RISK_FALLBACK_USED`. This is common on recent dates: for June 2024 the proxy is NaN for PHL, USA and ARE, so all three corridors use 0.0 (checked against `data/processed/macro_risk_proxy.parquet`). Phase 2 preserves this value (owner decision).
 - **Knowledge:** facts are undated today, and dated facts can't affect feasibility (Stage 1E). The reference date doesn't change feasibility.
 - **Scenarios** multiply the whole series, so the 30-day CNN window is stressed too, as in Stage 1F. They are not calibrated shocks.
 
@@ -576,10 +652,44 @@ The UI must say so. Modelling depletion would be a new simulator feature and nee
 
 1. **Which checkpoint, if any, to approve for `ppo_projected`.** The candidates are the six Stage 1F multi-seed checkpoints. Until one is approved, it stays disabled.
 2. **Whether viewers may see `ppo_projected` in comparisons.** The draft says no: analysts only.
-3. **Cognee in Phase 2.** Off by default in the draft. Turning it on needs local Ollama, the `cognee` lock, and adds only explanation text.
+3. *(Resolved in v0.4; see below.)*
 4. **How checkpoints are distributed** to other machines: they stay tracked under `outputs/`, or move to release assets.
 5. **Whether to fix the root lock now** (platform markers) or leave it frozen as the Phase 1 record (draft: leave it; Phase 2 uses `services/inference/requirements/`).
-6. **Engine pool defaults** (`CBDC_ENGINE_WORKERS=2`, a 10 s timeout, a queue of 32), to be confirmed after measurement.
+6. **Engine pool defaults.** The 10 s execution limit, the 12 s end-to-end deadline and the 180 s startup timeout are decided. `CBDC_ENGINE_WORKERS=2` and a queue of 32 are still to be confirmed after measurement.
 7. **Who administers GitHub branch protection or rulesets** (§3.1), and the real GitHub handles for CODEOWNERS.
+8. **Remaining open questions** are in API contract §10. The blocking ones are Q16 and Q19, plus the Dev B `feeCostUsd` migration that `meanFeeCostPct` depends on (Q11-dep). The rest are non-blocking. R1–R6 are resolved (see `docs/TEAM_REVIEW_RESOLUTION.md` §8). Dev A's implementation requirements are listed in API contract §9.1. `docs/TEAM_REVIEW_RESOLUTION.md` lists the implementation follow-ups for each developer.
+
+**Resolved in v0.4 (approved by Ayush as project owner and Dev A):**
+- the individual worker-process pool (§6.2);
+- the 10 s execution limit and 12 s deadline;
+- the configurable 180 s startup timeout;
+- RFC 8785 for `decision_id`, with `git_commit` excluded;
+- LF-normalised hashing of text artefacts, and the little-endian daily-state fingerprint with its golden-hash test;
+- `STATE_OUTSIDE_TRAINING_RANGE` from the training windows, as a warning in every mode (§9.1);
+- the allocation invariant and regulatory-rejection totals;
+- the Stage 1F `completed` rule, and the `bridges_used` threshold;
+- `METHOD_NOT_ALLOWED`;
+- Cognee optional, with `semantic_context` always null in v1 (former item 3, C6);
+- scikit-learn and SciPy removed from `service.in`, with `rfc8785` added;
+- `--extra-index-url` for the PyTorch CPU locks;
+- C11 and C16 as agreed.
+
+The Application API changes in contract §3–§4 were agreed by Dev B (producer) and Dev C (consumer), except where the contract marks them as pending or open.
+
+**Resolved after the team reviews (owner decisions, 4 November 2026):**
+- `decision_id` composition, with `engine_version` and `id_scheme: 1`;
+- the request deadline, separate from the execution timeout;
+- strict requests and closed responses in CI;
+- `ready_workers`;
+- engine 4xx message sanitising;
+- wrong-length history returns `VALIDATION_ERROR`;
+- `include_semantic_context` removed;
+- form-level errors omit `field`;
+- mapped field paths forwarded;
+- `details.cause: NOT_READY`;
+- `completionRate`;
+- database-down readiness 503, with liveness separate;
+- the 0.0 risk fallback;
+- no range warning from `/v1/state`.
 
 Resolved in v0.2: the concurrency approach (§6), the lock strategy (§7) and the development auth model (§8). Resolved in v0.3: the folder structure and container layout (§4).

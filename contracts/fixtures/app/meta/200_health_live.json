@@ -1,0 +1,20 @@
+{
+  "description": "Liveness: the process is up; no dependency is checked (§3.9). Path and body are a proposal.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/health/live",
+    "headers": {
+      "X-Request-Id": "fixture-200_health_live"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_health_live"
+    },
+    "body": {
+      "status": "ok"
+    }
+  }
+}

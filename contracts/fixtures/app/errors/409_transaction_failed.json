@@ -1,0 +1,26 @@
+{
+  "description": "Explanation requested for a failed transaction (§3.5). Inference is not called; nothing is stored.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/transactions/a121dc5c-b250-5b30-8025-f9e07e76d4e0/explanation",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-409_transaction_failed"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "X-Request-Id": "fixture-409_transaction_failed"
+    },
+    "body": {
+      "error": {
+        "code": "TRANSACTION_FAILED",
+        "message": "This transaction failed, so it has no decision to explain.",
+        "details": {},
+        "requestId": "fixture-409_transaction_failed"
+      }
+    }
+  }
+}

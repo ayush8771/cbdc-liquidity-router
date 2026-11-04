@@ -1,0 +1,71 @@
+{
+  "description": "camelCase mapping of the /v1/explain response plus transactionId (§3.5).",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "explanation",
+    "fixture": "inference/explain/200_waterfall_replay.json"
+  },
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/transactions/56d0d708-62d6-59aa-aa8d-4df8d9b8d37f/explanation",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-200_explanation_waterfall"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_explanation_waterfall"
+    },
+    "body": {
+      "transactionId": "56d0d708-62d6-59aa-aa8d-4df8d9b8d37f",
+      "decisionId": "sha256:d3c4bf8d044ad91f3f73e1cad651c590b89d60a5b1dc7e02c8fcd9bcfe90178e",
+      "policy": "waterfall",
+      "summary": "Routed 100% of $300,000 across 2 venues in fee order, each filled up to its simulated liquidity.",
+      "feasibility": {
+        "allowed": true,
+        "reason": null,
+        "activeFacts": [
+          {
+            "factId": "global_max_single_transfer_usd",
+            "ruleType": "max_single_transfer_usd",
+            "value": 500000.0,
+            "provenanceTag": "project_assumption",
+            "verified": false,
+            "source": "Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation."
+          }
+        ],
+        "provider": "StaticMemoryProvider"
+      },
+      "venueExplanations": [
+        {
+          "bridgeUid": "GBR->PHL#1",
+          "outcome": "used",
+          "reasonCode": "CHEAPEST_FILLED_TO_LIQUIDITY",
+          "text": "Lowest fee (1.40%). Filled to its simulated liquidity of $150,000."
+        },
+        {
+          "bridgeUid": "GBR->PHL#0",
+          "outcome": "used",
+          "reasonCode": "NEXT_CHEAPEST_REMAINDER",
+          "text": "Next-lowest fee (2.00%). Took the remaining $150,000."
+        },
+        {
+          "bridgeUid": "GBR->PHL#2",
+          "outcome": "unused",
+          "reasonCode": "AMOUNT_EXHAUSTED",
+          "text": "Not needed: the amount was fully routed by cheaper venues."
+        }
+      ],
+      "policyNotes": [],
+      "semanticContext": null,
+      "limitations": [
+        "Bridge liquidity and congestion are synthetic simulation values.",
+        "Reward weights are uncalibrated placeholders.",
+        "The only regulatory fact is an assumed $500K cap, not a real regulation.",
+        "Each transaction is independent; routing does not deplete liquidity for later transactions."
+      ]
+    }
+  }
+}
