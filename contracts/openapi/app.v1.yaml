@@ -32,8 +32,8 @@ info:
     Authentication is development-only (arch §8, contract §3.0) and is not
     production security.
 servers:
-  - url: /api/v1
-    description: Same origin (Vite proxy → backend :4000).
+  - url: /
+    description: Same origin (Vite proxy → backend :4000). Paths carry the full /api/v1 prefix.
 security:
   - devBearer: []
 tags:
@@ -401,8 +401,8 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     Unprocessable:
       description: |
-        VALIDATION_ERROR, or an engine 422 passed through with the same code (§3.2). Not persisted.
-        A passed-through engine message is truncated to 500 characters (§4).
+        VALIDATION_ERROR (every schema problem, reported before INVALID_AMOUNT), or an engine 422 passed
+        through with the same code (§3.2). Not persisted. The message is the backend's fixed text (§4).
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
     InternalError:
       description: INTERNAL_ERROR
@@ -1168,7 +1168,7 @@ components:
           properties:
             code: {$ref: '#/components/schemas/ErrorCode'}
             message:
-              description: Free text for people. Consumers key behaviour on code, never on message (§4). Whether a passed-through engine 4xx message is forwarded is open (contract §10, Q16).
+              description: The backend's fixed text for the code; engine messages are never forwarded (§4). Consumers key behaviour on code, never on message.
               type: string
             details:
               type: object

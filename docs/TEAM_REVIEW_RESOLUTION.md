@@ -97,8 +97,6 @@ Anvesh's open points, kept explicit:
 ## 5. Remaining questions (contract §10)
 
 **Blocking:**
-- **Q16:** does the app forward the sanitised engine 4xx message (capped at 500) or use a fixed message? *Anvesh and Varshini.*
-- **Q19:** audit rows for rejected requests. *Anvesh.*
 - **Q11-dep:** the `feeCostUsd` Prisma migration that `meanFeeCostPct` needs (see §7). *Anvesh.*
 
 **Non-blocking:**
@@ -194,7 +192,7 @@ Anvesh's open points, kept explicit:
 - **Not run on Linux:** no Linux environment was available here. The CI workflow `phase2-integration.yml` runs the checker on Ubuntu.
 
 **Still open:**
-- Q16 (Anvesh and Varshini) and Q19 (Anvesh).
+- Q16 and Q19: closed in revision 6 (§11).
 - The `feeCostUsd` Prisma migration (Anvesh; not done, outside this change).
 - The non-blocking items in contract §10.
 
@@ -228,6 +226,7 @@ Dev A's requirements A-1 to A-9 are documented only; Dev A implements them separ
 
 The seven `decision_id` vectors are unchanged: their venues already sort the same way under ordinal order. The tooling now pins `pandas==2.3.3` and `numpy==2.2.6`, the same pins as Phase 1's `requirements.txt`, so CI can run the fingerprint vector.
 
+
 ## 11. Ayush's final corrections (revision 6)
 
 | Correction | Resolution | Where |
@@ -237,3 +236,34 @@ The seven `decision_id` vectors are unchanged: their venues already sort the sam
 | **Unique scenario IDs** | `scenario_id` values in `/v1/scenarios` are unique. The checker reports a duplicate in the inference and app scenario fixtures; tests cover both | Contract §2.7; checker `check_version_fingerprints`; tests |
 
 The seven `decision_id` vectors and the daily-state fingerprint golden vector are unchanged: none of their inputs is an unsafe integer, and their venues are already in slot order.
+
+## 11. Approved contract corrections (revision 6)
+
+| Item | Resolution | Where |
+|---|---|---|
+| **Q16** (closed) | Fixed backend messages for every app error, passed-through 4xx included; engine messages never forwarded; only the approved mapped fields kept. The 500-character wording is removed. The passthrough fixtures now carry fixed text, and the checker rejects one that copies the engine message | Contract §4, §9; app OpenAPI `Unprocessable`, `ErrorResponse.message`; `app/errors/409_policy_disabled_passthrough.json`, `app/errors/422_date_in_gap_buffer_passthrough.json`; also `app/errors/503_engine_busy.json` and `app/transactions/200_get_failed.json`, which copied the engine text for a 5xx; checker + test |
+| **Q19** (closed) | An audit row only together with a persisted record, in the same DB transaction; a rejected request creates none. The outdated "every mutating call" wording is removed | Contract §6.2, §9 |
+| **Validation precedence** | Every `VALIDATION_ERROR` problem is returned first, together; `INVALID_AMOUNT` only for an otherwise valid body. New fixture with a bad country and a zero amount → `VALIDATION_ERROR` on `senderCountry` only | Contract §3.2; `app/errors/422_validation_error_precedence.json`; test |
+| **Liveness** | Fixture wording corrected: public `GET /api/v1/health/live`, HTTP 200, exactly `{"status":"ok"}`, no dependency check. The contract says the path and body are final | `app/meta/200_health_live.json`; contract §3.9 |
+| **OpenAPI prefix** | `servers.url` is `/`; the paths keep their full `/api/v1/...` form, so a generated client no longer requests `/api/v1/api/v1/...` | `contracts/openapi/app.v1.yaml` |
+
+**Then confirmed by Ayush:** see §12.
+
+## 12. Fee cost and metrics semantics (confirmed by Ayush)
+
+| Confirmation | Applied | Where |
+|---|---|---|
+| `metrics.fee_cost_usd` = Σ `amount_executed_usd × fee_pct`, executed amounts only, `fee_pct` as the bridge network defines it (a fraction) | Defined in the contract and the schema; the checker already recomputed it this way; a new test shows that requested × fee is rejected | Contract §2.8; inference OpenAPI `Metrics`; test |
+| `metrics` always present, every field non-null, rejections included | Already true in both OpenAPI schemas (every field required, none nullable). Now stated, and a test rejects a null metric | Contract §2.8; inference OpenAPI; test |
+| Rejection metrics: executed 0, fee 0, amount-based unrouted = full amount and environment unrouted = 0, completion 0, execution costs 0 | The checker enforces fee, cost, latency and risk terms 0, `completion_ratio` 0 and `unrouted_amount_based_usd` = `amount_usd`. The existing rejection fixture already satisfied all of it | Contract §2.8; checker; 5 tests |
+| No `PARTIAL_COMPLETION` and no `RISK_FALLBACK_USED` on a rejection | Already enforced; now stated together | Contract §2.8 |
+| `decision_id` is Dev A's job; the backend treats it as opaque and never recalculates it | Stated | Contract §2.11, §9.1 |
+
+**Resolved by Ayush: unrouted accounting on a rejection.**
+- `unrouted_amount_based_usd` = the full amount (executed is 0).
+- `unrouted_env_usd` = 0, preserving the Phase 1 accounting, where `requested_usd = 0`.
+- Both fields stay present and non-null.
+- The checker enforces both, plus `unrouted_term_env = 0`, `reward_env = 0` and `unrouted_term_amount_based = 1` (contract §2.8; tests). The existing rejection fixtures already matched, so none changed.
+
+**Backend follow-up (implementation only):** with metrics confirmed non-null, the `RoutingDecision` reward and term columns that are nullable today (`rewardEnv`, `rewardAmountBased`, `latencyTerm`, `riskTerm`, marked "PROVISIONAL: nullable") can be made non-null, in the same migration as `feeCostUsd`.
+
