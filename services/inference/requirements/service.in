@@ -16,6 +16,11 @@ pyarrow==25.0.0
 scikit-learn==1.7.2    # kept to mirror the Phase 1 stack; not imported by the inference path
 scipy==1.15.3          # src/backtesting/statistics.py (not on the routing path; kept for parity tooling)
 
+# --- decision_id and artefact fingerprints (contract §2.11, arch §7.2) ---
+# Pure-Python JCS (RFC 8785). The same version generated contracts/test-vectors/,
+# so the canonical strings must match byte for byte.
+rfc8785==0.1.4
+
 # --- Web service ---
 fastapi==0.141.1
 uvicorn==0.52.1

@@ -89,6 +89,8 @@ class EngineWarning:
 
 @dataclass(frozen=True)
 class RouteResult:
+    # "sha256:<hex>" over the §2.11 canonical document of this decision's INPUTS
+    decision_id: str
     # policy
     policy: str
     policy_status: str
@@ -139,3 +141,5 @@ class RouteResult:
     state_frame_sha256: str
     daily_state_sha256: str
     warnings: tuple
+    # the enabled checkpoint's SHA-256 for ppo_projected, else None (§2.8 provenance.checkpoint)
+    checkpoint_sha256: Optional[str] = None

@@ -6,7 +6,9 @@ import pytest
 from cbdc_inference.settings import Settings, get_settings
 
 CBDC_ENV_VARS = ("CBDC_REPO_ROOT", "CBDC_PPO_CHECKPOINT_ID", "CBDC_DEVICE", "CBDC_ENGINE_WORKERS",
-                 "CBDC_ENGINE_TASK_TIMEOUT_S", "CBDC_ENGINE_MAX_QUEUE", "CBDC_ENABLE_COGNEE")
+                 "CBDC_ENGINE_TASK_TIMEOUT_S", "CBDC_ENGINE_MAX_QUEUE", "CBDC_ENABLE_COGNEE",
+                 "CBDC_ENGINE_REQUEST_DEADLINE_S", "CBDC_ENGINE_MIN_START_BUDGET_S",
+                 "CBDC_ENGINE_STARTUP_TIMEOUT_S")
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SERVICE_ROOT.parents[1]
@@ -34,8 +36,16 @@ def repo_settings() -> Settings:
     return Settings(repo_root=REPO_ROOT)
 
 
+# The six decision_id artefact fingerprints the engine worker computes (contract §2.11).
+FAKE_ARTEFACTS = {
+    "knowledge_sha256": "a" * 64, "daily_state_sha256": "b" * 64, "bridge_network_sha256": "c" * 64,
+    "normalization_stats_sha256": "d" * 64, "macro_risk_proxy_sha256": "e" * 64,
+    "rpw_corridor_quarterly_sha256": "f" * 64,
+}
+
 FAKE_ENGINE_METADATA = {
-    "knowledge_version": "kv-test", "knowledge_sha256": "a" * 64, "daily_state_sha256": "b" * 64,
+    "knowledge_version": "kv-test", "artefacts": dict(FAKE_ARTEFACTS), "daily_state_sha256": "b" * 64,
+    "scenarios_sha256": "9" * 64, "checkpoint": None, "ppo_enabled": False,
     "date_range": {"start": "2011-01-01", "end": "2025-09-30"},
     "reward_weights": {"lambda_latency": 1.0, "lambda_risk": 1.0, "lambda_unrouted": 1.0, "status": "placeholder"},
     "torch": "2.13.0+cpu",
@@ -63,7 +73,7 @@ class FakePool:
     def close(self):
         self.closed = True
 
-    def submit(self, fn, *args):
+    def submit(self, fn, *args, deadline_s=None):
         from concurrent.futures import Future
         if self.submit_error is not None:
             raise self.submit_error
@@ -86,7 +96,10 @@ class FakePool:
 
     def health(self):
         return {"engine_workers": self.engine_workers,
-                "engine_pool": {"workers": len(self.slot_states), "queued": self.queued, "max_queue": 32,
+                "engine_pool": {"workers": len(self.slot_states),
+                                # §2.1: workers that have finished warming up and can take a task.
+                                "ready_workers": sum(1 for s in self.slot_states if s == "ready"),
+                                "queued": self.queued, "max_queue": 32,
                                 "rebuilds_since_start": self.rebuilds},
                 "slots": [{"index": i, "state": s, "busy": False, "pid": None} for i, s in enumerate(self.slot_states)]}
 

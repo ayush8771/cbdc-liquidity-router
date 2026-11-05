@@ -47,7 +47,8 @@ def test_state_missing_query_parameter(repo_settings, fake_pool_factory, params,
     with _client(repo_settings, factory) as c:
         r = c.get("/v1/state", params=params)
     assert r.status_code == 422 and r.json()["error"]["code"] == "VALIDATION_ERROR"
-    assert any(field in e["loc"] for e in r.json()["error"]["details"]["errors"])
+    # §4: details.errors[] is a list of {field, message}; `field` is the value's path.
+    assert any(e.get("field") == field for e in r.json()["error"]["details"]["errors"])
 
 
 @pytest.mark.parametrize("params,field", [
@@ -61,7 +62,9 @@ def test_state_invalid_mode_combinations(repo_settings, fake_pool_factory, param
     with _client(repo_settings, factory) as c:
         r = c.get("/v1/state", params={"corridor": "GBR->PHL", "date": "2024-06-14", **params})
     assert r.status_code == 422
-    assert r.json()["error"]["code"] == "VALIDATION_ERROR" and r.json()["error"]["details"] == {"field": field}
+    err = r.json()["error"]
+    assert err["code"] == "VALIDATION_ERROR"
+    assert [e["field"] for e in err["details"]["errors"]] == [field]
     assert not [n for n, _ in pool.calls if n == "state_task"]  # rejected before reaching a worker
 
 

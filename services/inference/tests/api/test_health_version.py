@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 
 from cbdc_inference import API_VERSION, ENGINE_VERSION
 from cbdc_inference.api.app import create_app
-from cbdc_inference.api.metadata import sha256_file
 from cbdc_inference.engine import errors as E
 from cbdc_inference.settings import Settings
 
@@ -32,7 +31,8 @@ def test_health_ok(repo_settings, fake_pool_factory):
     assert (b["status"], b["ready"]) == ("ok", True)
     assert b["checks"] == {"structured_data": "ok", "daily_state": "ok", "knowledge_base": "ok",
                            "engine_workers": "ok", "ppo_checkpoint": "disabled"}
-    assert b["engine_pool"] == {"workers": 2, "queued": 0, "max_queue": 32, "rebuilds_since_start": 0}
+    assert b["engine_pool"] == {"workers": 2, "ready_workers": 2, "queued": 0, "max_queue": 32,
+                               "rebuilds_since_start": 0}
     assert dt.datetime.strptime(b["time"], "%Y-%m-%dT%H:%M:%SZ")
     assert "Retry-After" not in r.headers
 
@@ -45,6 +45,8 @@ def test_one_worker_rebuilding_is_degraded_but_ready(repo_settings, fake_pool_fa
     assert r.status_code == 200
     assert (b["status"], b["ready"], b["checks"]["engine_workers"]) == ("degraded", True, "rebuilding")
     assert b["engine_pool"]["rebuilds_since_start"] == 1
+    # One worker is still warming up, so only the other can take a task (§2.1).
+    assert b["engine_pool"]["ready_workers"] == 1
 
 
 @pytest.mark.parametrize("states,workers_status", [(("rebuilding", "rebuilding"), "rebuilding"),
@@ -58,6 +60,7 @@ def test_no_serving_worker_is_not_ready(repo_settings, fake_pool_factory, states
     b = r.json()
     assert set(b) == HEALTH_KEYS  # same body shape as 200 (contract §2.1)
     assert (b["status"], b["ready"], b["checks"]["engine_workers"]) == ("degraded", False, workers_status)
+    assert b["engine_pool"]["ready_workers"] == 0  # `ready` is false until a worker has warmed up
 
 
 def test_missing_artefacts_are_not_ready(tmp_path, fake_pool_factory):
@@ -115,11 +118,15 @@ def test_version_shape_and_values(repo_settings, fake_pool_factory):
         {"policy": "ppo_projected", "status": "experimental", "enabled": False,
          "disabled_reason": "no approved checkpoint configured"}]
     assert v["checkpoint"] is None
-    assert v["knowledge"] == {"knowledge_version": meta["knowledge_version"], "sha256": meta["knowledge_sha256"]}
-    root = repo_settings.repo_root_resolved
-    assert v["data"] == {"daily_state_sha256": meta["daily_state_sha256"],
-                         "bridge_network_sha256": sha256_file(root / "data/structured/bridge_network.csv"),
-                         "normalization_stats_sha256": sha256_file(root / "data/processed/normalization_stats.json"),
+    # The knowledge hash is the Phase 2 SERVICE hash the worker computed (§2.2).
+    assert v["knowledge"] == {"knowledge_version": meta["knowledge_version"],
+                              "sha256": meta["artefacts"]["knowledge_sha256"]}
+    assert v["data"] == {"daily_state_sha256": meta["artefacts"]["daily_state_sha256"],
+                         "bridge_network_sha256": meta["artefacts"]["bridge_network_sha256"],
+                         "normalization_stats_sha256": meta["artefacts"]["normalization_stats_sha256"],
+                         "macro_risk_proxy_sha256": meta["artefacts"]["macro_risk_proxy_sha256"],
+                         "rpw_corridor_quarterly_sha256": meta["artefacts"]["rpw_corridor_quarterly_sha256"],
+                         "scenarios_sha256": meta["scenarios_sha256"],
                          "date_range": {"start": "2011-01-01", "end": "2025-09-30"}}
     assert v["reward_weights"]["status"] == "placeholder"
     rt = v["runtime"]
@@ -146,6 +153,10 @@ def test_lock_file_follows_torch_build(torch_version, expected):
 # ------------------------------------------------------------------ engine error mapping (contract §4)
 ENGINE_ERRORS = [
     (E.ValidationFailed("bad", {"field": "policy"}), 422, "VALIDATION_ERROR", None),
+    (E.StateVenueMismatch("venues", {"field": "state.venues"}), 422, "STATE_VENUE_MISMATCH", None),
+    (E.InvalidStateValue("value", {"field": "state.venues[0].congestion"}), 422, "INVALID_STATE_VALUE", None),
+    (E.PolicyUnavailableForState("needs history", {"field": "state.venues"}), 422,
+     "POLICY_UNAVAILABLE_FOR_STATE", None),
     (E.UnsupportedCorridor("x"), 422, "UNSUPPORTED_CORRIDOR", None),
     (E.InvalidAmount("x"), 422, "INVALID_AMOUNT", None),
     (E.DateOutOfRange("x"), 422, "DATE_OUT_OF_RANGE", None),
@@ -153,7 +164,6 @@ ENGINE_ERRORS = [
     (E.UnknownScenario("x"), 422, "UNKNOWN_SCENARIO", None),
     (E.PolicyDisabled("ppo off", {"field": "policy"}), 409, "POLICY_DISABLED", None),
     (E.EngineBusy("full", {"max_queue": 32}), 503, "ENGINE_BUSY", "1"),
-    (E.EngineNotReady("not yet"), 503, "NOT_READY", "5"),
     (E.EngineTimeout("slow", {"timeout_s": 10.0}), 504, "ENGINE_TIMEOUT", None),
 ]
 
@@ -169,9 +179,32 @@ def test_engine_errors_map_to_contract_envelope(repo_settings, fake_pool_factory
     with TestClient(app) as c:
         r = c.get("/v1/_raise", headers={"X-Request-Id": "e-1"})
     assert r.status_code == status
-    assert r.json() == {"error": {"code": code, "message": exc.message, "details": exc.details, "request_id": "e-1"}}
+    # §4: VALIDATION_ERROR carries `details.errors[]`; other 422 codes may carry `details.field`.
+    # Everything else an engine error carries is dropped, so no internal value can leak.
+    if code == "VALIDATION_ERROR":
+        details = {"errors": [{"field": "policy", "message": exc.message}]}
+    else:
+        details = {"field": exc.details["field"]} if "field" in exc.details else {}
+    assert r.json() == {"error": {"code": code, "message": exc.message, "details": details, "request_id": "e-1"}}
     assert r.headers.get("Retry-After") == retry_after
     assert r.headers["X-Request-Id"] == "e-1"
+
+
+def test_not_ready_never_reveals_which_artefacts_are_missing(repo_settings, fake_pool_factory):
+    """§4: a 4xx/503 message never exposes internal filesystem paths (owner decision)."""
+    _, factory = fake_pool_factory()
+    app = create_app(repo_settings, pool_factory=factory)
+
+    def raiser():
+        raise E.EngineNotReady("required Phase 1 artefacts missing under /repo",
+                               {"missing": ["data/processed/secret.parquet"]})
+    app.add_api_route("/v1/_raise", raiser)
+    with TestClient(app) as c:
+        r = c.get("/v1/_raise")
+    assert r.status_code == 503 and r.headers["Retry-After"] == "5"
+    err = r.json()["error"]
+    assert err["code"] == "NOT_READY" and err["details"] == {}
+    assert "/repo" not in err["message"] and "parquet" not in err["message"]
 
 
 @pytest.mark.parametrize("exc", [E.EngineIntegrityError("integrity failed", {"problems": ["cache replaced"]}),

@@ -2,12 +2,12 @@
 
 The FastAPI service and engine that wrap the Phase 1 routing code. It's internal: only the Express backend calls it (arch D9).
 
-- **Specs:** `docs/PHASE2_ARCHITECTURE.md` v0.3 and `docs/PHASE2_API_CONTRACT.md` v0.3 (on `main`).
+- **Specs:** `docs/PHASE2_ARCHITECTURE.md` and the approved `docs/PHASE2_API_CONTRACT.md` **v0.4**, which is the authoritative, normative source. Both OpenAPI files in `contracts/openapi/` remain **DRAFT**; where they disagree with the written contract, the contract wins.
 - **Phase 1 is read-only.** The service imports `src/`, and never modifies `src/`, `data/`, `outputs/`, `tests/`, `venv/` or the root requirements files.
 
 ## Status
 
-**The engine routes; the HTTP API doesn't yet.** No `/v1` endpoint is implemented.
+**All nine `/v1` endpoints of contract §2 are implemented**, against the approved v0.4 contract.
 
 | Piece | State |
 |---|---|
@@ -17,14 +17,18 @@ The FastAPI service and engine that wrap the Phase 1 routing code. It's internal
 | Error envelope and `X-Request-Id` (contract §1, §4) | Done |
 | `EngineWorker.route(transaction, state, policy)` (`engine/worker.py`) | Done for `waterfall` (default) and `cheapest_feasible`, in `historical_replay` and `scenario` modes. Parity with Phase 1 is exact. |
 | Explicit state mode (`engine/state.py`, `EngineWorker._explicit_frame`) | Done (contract §2.4, arch §9.1). Available through `/v1/route`. |
-| `STATE_OUTSIDE_TRAINING_RANGE` | Not emitted. Its definition is undecided; see "Open points" below. |
-| `ppo_projected`, `decision_id` | Not started. `ppo_projected` raises `POLICY_DISABLED`; `decision_id` waits for C5/C7. |
-| `EnginePool` (`engine/pool.py`) | Done: spawned worker processes, one task each, a bounded queue (`ENGINE_BUSY`), a per-task timeout (`ENGINE_TIMEOUT`), and automatic rebuild after a timeout, crash or failed integrity check. Health reports `engine_workers` and the `engine_pool` block. Started and stopped with the FastAPI app. |
+| `STATE_OUTSIDE_TRAINING_RANGE` | Done (contract §2.4, v0.4 settled it): per-venue liquidity and congestion min-max bounds over the **union of the actual 30-day windows of all training transactions**. A **warning only**, in all three state modes, from `/v1/route` and `/v1/compare` only, on the values the selected policy actually reads. Never from `/v1/state`, and it never blocks a baseline. |
+| `decision_id` (`cbdc_inference/hashing.py`) | Done (contract §2.11, `id_scheme` 1): RFC 8785 over the canonical document, hashing `engine_version`, the transaction, the state, the policy, the scenario multipliers, the reward weights, the six artefact fingerprints and `checkpoint_sha256`. Numbers are normalised to binary64 during validation and the **same** values are executed with; integer-valued numbers outside +/-(2^53 - 1) are rejected, never rounded. Reproduces every vector in `contracts/test-vectors/decision_id.v1.json` byte for byte. |
+| Artefact and daily-state fingerprints | Done (§2.11): text artefacts hashed after CRLF->LF, binaries as they are, and the scheme-1 daily-state fingerprint with pandas pinned to 2.3.3. Reproduces `contracts/test-vectors/daily_state_fingerprint.v1.json`. The service `knowledge_sha256` is the LF-normalised hash, **not** Phase 1's raw-byte `KnowledgeBase.sha256`. |
+| `ppo_projected` | Implemented, and **disabled** because the approval registry ships empty, so requests return `409 POLICY_DISABLED`. Served only with an approved checkpoint whose SHA-256 **each worker re-verifies itself**, and only through the Stage 1F capacity projection. Raw PPO is never exposed (D3). |
+| `EnginePool` (`engine/pool.py`) | Done: spawned worker processes, one task each, a bounded queue (`ENGINE_BUSY`), and individual worker recycling after a timeout, crash or failed integrity check. The two limits of §5 are independent: the **request deadline** (`CBDC_ENGINE_REQUEST_DEADLINE_S`, 12 s) fails a task expiring while queued with `503 ENGINE_BUSY` without running it, and one expiring while running with `504 ENGINE_TIMEOUT` **without killing the worker**; the **worker execution timeout** (`CBDC_ENGINE_TASK_TIMEOUT_S`, 10 s) is never shortened to it, and passing it recycles only that worker. The **minimum start budget** (`CBDC_ENGINE_MIN_START_BUDGET_S`, 1 s) is validated at start-up (`0 <= budget < deadline`). Health reports `engine_workers` and the `engine_pool` block, including `ready_workers`. |
 | `/v1/health`, `/v1/version` (`api/routers/meta.py`) | Done. Answered from startup metadata and the pool's in-memory health, without queuing a worker task. |
 | `/v1/network`, `/v1/state` (`api/routers/reference.py`) | Done. Each request runs as a task in an engine worker; `/v1/state` uses the same request-scoped frame and integrity check as routing. |
 | `/v1/replay/calendar`, `/v1/scenarios` | Done. Answered from startup metadata, which a worker computes from Phase 1 `split.py` and `scenarios.py`. |
-| `POST /v1/route` (`api/routers/route.py`) | Done for `waterfall` and `cheapest_feasible` in all three state modes. Blocked parts: `decision_id` is always `null` (C5/C7), and `STATE_OUTSIDE_TRAINING_RANGE` is never emitted. Unknown fields outside `state` are ignored (C8 open). |
-| `/v1/compare`, `/v1/explain` | Not started |
+| `POST /v1/route` (`api/routers/route.py`) | Done for every policy in all three state modes, with a non-null `decision_id`. **Requests are strict** (§1): every body object accepts only the contract's fields, `policy: null` is rejected while an omitted `policy` defaults to `waterfall`, and `client_reference` is capped at 200 code points. |
+| `POST /v1/compare` (§2.9) | Done. Every policy runs in **one** engine task on one request-scoped state frame, so `same_state` holds and every result shares a `state_frame_sha256`. A disabled or state-unavailable policy goes into `skipped` instead of failing the request, and each result's `decision_id` is hashed for its own policy, so it equals the `/v1/route` ID. |
+| `POST /v1/explain` (§2.10) | Done. Recomputes the decision deterministically, so its `decision_id` equals `/v1/route`'s. `semantic_context` is **always null in v1**, and `include_semantic_context` is rejected as an unknown field. For `ppo_projected`, `policy_notes` state that the shares come from a learned policy with no causal explanation and list each slot's change from `share_before_projection`; no causal reason is ever invented. |
+| Error envelope details (§4) | Done. `VALIDATION_ERROR` carries `details.errors[]` of `{field, message}`, with `field` **omitted** for a form-level error; other 422 codes carry `details.field`. `405 METHOD_NOT_ALLOWED` carries an `Allow` header. Only the contract's `details` keys are returned, so no internal path, exception text or configuration value can leak. |
 | Dockerfile, `Dockerfile.dockerignore` | Not started |
 | Platform locks `requirements/*.txt` | Dev D generates them from `requirements/*.in` |
 
@@ -162,13 +166,22 @@ Paths are relative to `CBDC_REPO_ROOT`:
 2. **`EnginePool`:** timeout, backpressure, integrity guard and rebuild. Then the **concurrency and fault-injection tests** (arch §6.4).
 3. **Endpoints:** `/v1/health`, `/v1/version`, `/v1/scenarios`, `/v1/replay/calendar`, `/v1/network`, then `/v1/route`. These come with **pydantic schemas** copied exactly from the contract.
 4. **Scenario mode** (parity with Stage 1F), then **explicit mode** (§9.1 rules and every 422 code).
-5. **`/v1/compare` and `/v1/explain`.**
-6. **`ppo_projected`.** It's only exercised in tests with a temporary registry, because no checkpoint is approved.
-7. **Dockerfile** and its allow-list `Dockerfile.dockerignore` (arch §4.2).
+5. ~~**`/v1/compare` and `/v1/explain`.**~~ Done.
+6. ~~**`ppo_projected`.**~~ Implemented. It is only exercised in tests with a temporary registry, because no checkpoint is approved.
+7. **Dockerfile** and its allow-list `Dockerfile.dockerignore` (arch §4.2). **Still to do** -- the only remaining item in this service, together with Dev D's platform locks.
 
 ### Open points to raise with Nisaraga / Dev D (no contract change made)
 
-0. **`STATE_OUTSIDE_TRAINING_RANGE` can't be implemented without a decision.** Findings from Phase 1:
+-1. **`decision_id.v1.json`'s `daily_state_sha256` input predates the §2.11 fingerprint scheme.** Not a defect, and no contract or vector change is needed, but Dev D's contract checker must not recompute it.
+   - Five of the six artefact hashes in the vectors' `inputs.artefacts` equal the live repository's values, because they are plain file hashes under the §2.11 text/binary rule: `knowledge_sha256` `b01faa5a…`, `bridge_network_sha256` `99982af3…`, `normalization_stats_sha256` `bc70dfaa…`, `macro_risk_proxy_sha256` `6fc4c870…` and `rpw_corridor_quarterly_sha256` `2b6abc03…`.
+   - The sixth, `daily_state_sha256` `d0f4b6e7…`, does **not**. It was reproduced exactly as
+     `sha256(pandas.util.hash_pandas_object(pd.read_parquet(daily), index=True).values.tobytes())`
+     — the **pre-scheme-1 row-hashes-only** digest, taken over the **raw** parquet read rather than the frame Phase 1 actually loads (`load_daily_series()` sorts by `(bridge_id, date)` and resets the index).
+   - The approved scheme-1 fingerprint (§2.11: `DOMAIN || u64le(len) || descriptor || u64le(len) || rows`) over the loaded frame is `c8757974…`, which is what `/v1/version` and `decision_id` report. Over the raw unsorted read it would be `059de5f9…`.
+   - **Why this is harmless:** in `decision_id.v1.json` the artefact hashes are *inputs* the vector supplies ("Inputs are illustrative but the canonical strings and IDs are exact"), so the implementation reproduces every canonical string and ID byte for byte regardless of that value. The normative test of the fingerprint algorithm is `daily_state_fingerprint.v1.json`, which this service reproduces exactly (descriptor string and `sha256`).
+   - **The risk:** if `infra/scripts/check_contracts.py` ever *recomputes* `daily_state_sha256` from the repository and compares it with the vector's input, it will fail. It must rebuild each document **from the vector's inputs**, as §2.11 specifies.
+
+0. **`STATE_OUTSIDE_TRAINING_RANGE` -- RESOLVED by contract v0.4 §2.4**, which chose option (b): per-venue min-max over the union of the actual 30-day windows of all training transactions, as a **warning** only. The findings below are kept as the record of why the question was raised.
    - **Two sets of "frozen train-only statistics" exist.**
      - The CNN daily stats (`liquidity_level` / `congestion_level`, keyed by parquet bridge ID) use every train-period day (n = 4018 per venue).
      - The raw PPO stats (`capacity`, keyed by `bridge_uid`) use only liquidity on training-transaction dates (for example n = 179 for GBR->PHL#1). Raw congestion has no stat of its own.
@@ -188,6 +201,6 @@ Paths are relative to `CBDC_REPO_ROOT`:
      - (b) min–max over training-transaction dates only.
 
 1. **Inputs vs. Cognee:** arch §7.2 lists the root `requirements.txt` as a lock input, but that file pins `cognee==1.4.2`, which is meant to be separate. `service.in` therefore repeats the Phase 1 runtime pins without Cognee or openpyxl. Confirm this with Dev D.
-2. **Framework errors with no contract code:** for example `405 Method Not Allowed`. The envelope currently uses `MALFORMED_REQUEST`. Either the contract defines a code (such as `METHOD_NOT_ALLOWED`) or we accept this.
-3. **Version mismatch:** this branch has the v0.2 docs, and v0.3 is on `main`. Merge `main` into `feature/phase2-inference` before the first PR.
+2. **Framework errors with no contract code -- RESOLVED by v0.4 §4**, which added `405 METHOD_NOT_ALLOWED` with an `Allow` header. The envelope now uses it.
+3. **Version mismatch -- RESOLVED.** This branch carries the approved v0.4 contract.
 4. **Branch and tag reference:** the architecture names `phase1-complete` = `bc9905e` as the baseline. `git_commit` in `/v1/version` must be read at build time, not hard-coded.

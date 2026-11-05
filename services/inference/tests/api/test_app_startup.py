@@ -32,10 +32,11 @@ def test_unapproved_checkpoint_id_stays_disabled(monkeypatch, fake_pool_factory)
 
 
 def test_only_contract_v1_endpoints_are_registered(repo_settings, fake_pool_factory):
-    """Only endpoints backed by the engine exist; compare and explain are not added yet."""
+    """Exactly the nine endpoints of contract §2, and nothing else."""
     _, factory = fake_pool_factory()
     paths = set(create_app(repo_settings, pool_factory=factory).openapi()["paths"])
-    assert paths == {"/v1/health", "/v1/version", "/v1/network", "/v1/state", "/v1/replay/calendar", "/v1/scenarios", "/v1/route"}
+    assert paths == {"/v1/health", "/v1/version", "/v1/network", "/v1/state", "/v1/replay/calendar",
+                     "/v1/scenarios", "/v1/route", "/v1/compare", "/v1/explain"}
 
 
 def test_unknown_path_uses_contract_error_envelope(repo_settings, fake_pool_factory):

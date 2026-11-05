@@ -85,6 +85,31 @@ def state_from_dict(raw: Any, path: str = "state"):
     return ExplicitState(_string(_require(raw, "reference_date", path), f"{path}.reference_date"), tuple(parsed))
 
 
+def state_to_hashable(state) -> dict:
+    """A StateSpec dataclass as the plain `state` dict `hashing.decision_document` expects (§2.11).
+
+    This is the *validated, normalised* state, so the values hashed are exactly the ones
+    executed with -- there is no separate "hash form" (§2.11). Venue order is irrelevant here:
+    `hashing.normalised_state` applies the ordinal `bridge_uid` sort itself, and that sort is
+    for hashing only; execution keeps Phase 1's slot order (§2.4).
+    """
+    if isinstance(state, ReplayState):
+        return {"mode": "historical_replay", "date": state.date}
+    if isinstance(state, ScenarioState):
+        return {"mode": "scenario", "date": state.date, "scenario_id": state.scenario_id}
+    if isinstance(state, ExplicitState):
+        return {
+            "mode": "explicit", "reference_date": state.reference_date,
+            "venues": [{"bridge_uid": v.bridge_uid, "liquidity_usd": v.liquidity_usd, "congestion": v.congestion,
+                        # An omitted history and `history: null` are the same thing and hash alike.
+                        "history": None if v.history is None else {
+                            "liquidity_usd": list(v.history.liquidity_usd),
+                            "congestion": list(v.history.congestion)}}
+                       for v in state.venues],
+        }
+    raise ValidationFailed("state.mode must be historical_replay, scenario or explicit", {"field": "state.mode"})
+
+
 def _number(value, path: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValidationFailed("Must be a number.", {"field": path})
@@ -111,8 +136,11 @@ def validate_explicit_values(state: ExplicitState, path: str = "state") -> Expli
                 if not isinstance(values, (list, tuple)):
                     raise ValidationFailed("Must be a list of numbers.", {"field": hpath})
                 if len(values) != HISTORY_DAYS:
-                    raise InvalidStateValue(f"history needs exactly {HISTORY_DAYS} values, oldest first; got {len(values)}.",
-                                            {"field": hpath})
+                    # A wrong LENGTH is a schema rule (minItems/maxItems 30), so it is a
+                    # VALIDATION_ERROR, not INVALID_STATE_VALUE (§2.4, owner decision).
+                    raise ValidationFailed(
+                        f"history needs exactly {HISTORY_DAYS} values, oldest first; got {len(values)}.",
+                        {"field": hpath})
                 nums = tuple(_number(x, f"{hpath}[{j}]") for j, x in enumerate(values))
                 last = nums[-1]
                 if abs(last - current) > LAST_VALUE_REL_TOL * max(abs(last), abs(current)):

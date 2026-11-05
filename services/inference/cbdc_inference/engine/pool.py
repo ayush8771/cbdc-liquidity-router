@@ -10,15 +10,27 @@ Design
 * One bounded FIFO queue (CBDC_ENGINE_MAX_QUEUE, default 32) holds tasks that
   are waiting for a free worker. When it is full, `submit` raises ENGINE_BUSY
   immediately; nothing queues without limit.
-* Per-task timeout (CBDC_ENGINE_TASK_TIMEOUT_S, default 10 s), measured from the
-  moment the task is handed to a worker (time waiting in the queue is not
-  counted). On timeout the task fails with ENGINE_TIMEOUT and that worker
-  process is terminated and rebuilt.
+* Two independent limits (contract §5, §8):
+  - **Worker execution timeout** (CBDC_ENGINE_TASK_TIMEOUT_S, default 10 s),
+    measured from when the task is handed to a worker. It is never shortened to
+    the time left on the request deadline. A task past it is stopped: its worker
+    process is terminated and replaced; the other workers keep serving.
+  - **Request deadline** (CBDC_ENGINE_REQUEST_DEADLINE_S, default 12 s), counted
+    from when `submit()` accepted the request. Expiry while the task is still
+    QUEUED removes it unrun and fails it with ENGINE_BUSY + Retry-After; expiry
+    while it is RUNNING fails the request with ENGINE_TIMEOUT but does **not**
+    kill the worker: the task runs on, its result is discarded, and the worker
+    takes the next task.
+  - **Minimum start budget** (CBDC_ENGINE_MIN_START_BUDGET_S, default 1 s): a
+    worker takes a queued task only if at least this much is left on its
+    deadline; otherwise the task is treated as expired while queued
+    (ENGINE_BUSY, never run). A budget of 0 disables the rule.
 * A worker is also rebuilt when its process crashes (no reply) or when it
   reports a failed integrity check (shared Phase 1 state not restored). Either
   way the task gets an INTERNAL_ERROR with no result. Other slots keep serving.
 * Health (`health()`) reports `engine_workers` = ok | rebuilding | error and the
-  contract's `engine_pool` block {workers, queued, max_queue, rebuilds_since_start}.
+  contract's `engine_pool` block {workers, ready_workers, queued, max_queue,
+  rebuilds_since_start}.
 
 Why not `concurrent.futures.ProcessPoolExecutor`: a running task cannot be
 cancelled (arch §6.2 step 6), and terminating one of its processes needs private
@@ -53,11 +65,15 @@ _CTX = mp.get_context("spawn")
 
 
 # ---------------------------------------------------------------------- child process
-def _child_main(conn, repo_root: str) -> None:
-    """Engine worker process: initialise once, then serve tasks one at a time."""
+def _child_main(conn, repo_root: str, checkpoint=None, device: str = "cpu") -> None:
+    """Engine worker process: initialise once, then serve tasks one at a time.
+
+    `checkpoint` is the approved registry entry the gate resolved, or None. The worker
+    re-verifies its SHA-256 itself before loading any weights (contract §7).
+    """
     try:
         from .worker import EngineWorker
-        worker = EngineWorker(repo_root)
+        worker = EngineWorker(repo_root, checkpoint=checkpoint, device=device)
     except EngineError as e:
         conn.send(("init_error", type(e).__name__, e.message, e.details))
         return
@@ -99,7 +115,27 @@ def _child_main(conn, repo_root: str) -> None:
 class _Job:
     fn: Callable
     args: tuple
+    # time.monotonic() at which the caller's REQUEST deadline expires (§5). It is set when
+    # `submit()` accepts the request, not when a worker starts the task.
+    deadline: float = float("inf")
     future: Future = field(default_factory=Future)
+
+    def time_left(self) -> float:
+        return self.deadline - time.monotonic()
+
+
+def _resolve(job: _Job, result=None, exc: Optional[BaseException] = None) -> None:
+    """Resolves a job's future unless it is already done.
+
+    A job whose request deadline expired while running has already been failed with
+    ENGINE_TIMEOUT (§5); its late result or error is then dropped, never returned.
+    """
+    if job.future.done():
+        return
+    if exc is not None:
+        job.future.set_exception(exc)
+    else:
+        job.future.set_result(result)
 
 
 class _Slot:
@@ -119,7 +155,7 @@ class _Slot:
     # -- process lifecycle
     def _spawn(self) -> None:
         parent, child = _CTX.Pipe(duplex=True)
-        proc = _CTX.Process(target=_child_main, args=(child, str(self.pool.repo_root)),
+        proc = _CTX.Process(target=_child_main, args=(child, str(self.pool.repo_root), self.pool.checkpoint, self.pool.device),
                             name=f"cbdc-engine-{self.index}", daemon=True)
         proc.start()
         child.close()
@@ -139,16 +175,33 @@ class _Slot:
 
     @staticmethod
     def _kill(proc, conn) -> None:
+        """Terminates a worker process, tolerating one that is already on its way out.
+
+        `is_alive()` and `terminate()` are not atomic: on Windows, terminating a process that
+        has just exited raises `PermissionError: [WinError 5]`, and on POSIX the equivalent race
+        raises `ProcessLookupError`. Either way the process is gone, which is the outcome we
+        wanted, so the error is swallowed. Letting it escape would kill the slot's own thread
+        mid-shutdown (and surface as an unhandled thread exception).
+        """
         try:
             if proc is not None and proc.is_alive():
-                proc.terminate()
-                proc.join(5)
-                if proc.is_alive():
-                    proc.kill()
-                    proc.join(5)
+                for stop in (proc.terminate, proc.kill):
+                    try:
+                        stop()
+                    except (OSError, ValueError, AssertionError):
+                        break  # already exited, or no longer terminable
+                    try:
+                        proc.join(5)
+                    except (OSError, ValueError):
+                        break
+                    if not proc.is_alive():
+                        break
         finally:
             if conn is not None:
-                conn.close()
+                try:
+                    conn.close()
+                except OSError:
+                    pass
 
     def _start_with_retry(self, rebuilding: bool) -> bool:
         delay = 1.0
@@ -182,6 +235,16 @@ class _Slot:
 
     # -- task loop
     def _run(self) -> None:
+        """The slot's thread body. Nothing may escape it: this is a daemon thread, so an
+        escaping exception would silently stop the slot (and show up only as an unhandled
+        thread exception) while `health()` still reported its last state."""
+        try:
+            self._serve()
+        except BaseException:  # noqa: BLE001 - a slot thread must never die silently
+            logger.exception("engine slot %d stopped unexpectedly", self.index)
+            self.state = self.STOPPED
+
+    def _serve(self) -> None:
         if not self._start_with_retry(rebuilding=False):
             self.state = self.STOPPED
             return
@@ -190,8 +253,8 @@ class _Slot:
                 job = self.pool._queue.get(timeout=0.2)
             except queue.Empty:
                 continue
-            if not job.future.set_running_or_notify_cancel():
-                continue  # caller gave up while it was queued
+            if not self._claim(job):
+                continue  # caller gave up, or the request deadline left too little to start
             self.busy = True
             try:
                 rebuild_reason = self._execute(job)
@@ -202,34 +265,77 @@ class _Slot:
         self.state = self.STOPPED
         self._shutdown_process()
 
+    def _claim(self, job: _Job) -> bool:
+        """Decides whether this slot may start `job` (§5 minimum start budget).
+
+        A worker takes a queued task only if at least `CBDC_ENGINE_MIN_START_BUDGET_S` is left
+        on the request deadline. Otherwise the task is treated as expired while queued:
+        `503 ENGINE_BUSY`, **never run**, so a retry is safe. With a budget of 0 this is exactly
+        the plain queued-expiry rule.
+        """
+        if job.future.cancelled() or not job.future.set_running_or_notify_cancel():
+            return False
+        left = job.time_left()
+        if left < self.pool.min_start_budget_s:
+            # The future is RUNNING at this point, but the task was never sent to a worker.
+            job.future.set_exception(EngineBusy(
+                "the request deadline expired while the task was queued; it never ran, so a retry is safe",
+                {"deadline_expired_while": "queued"}))
+            return False
+        return True
+
     def _execute(self, job: _Job) -> Optional[str]:
-        """Runs one job. Returns a reason string if the worker must be rebuilt."""
+        """Runs one job. Returns a reason string if the worker must be rebuilt.
+
+        Two independent limits (§5). The worker **execution** timeout is never shortened to
+        the caller's remaining deadline: if the caller's request deadline passes while the task
+        is running, the request gets `504 ENGINE_TIMEOUT`, the worker is left alone, and the
+        task's result is discarded when it arrives. Only passing the execution timeout itself
+        recycles the worker.
+        """
         timeout = self.pool.task_timeout_s
+        request_expired = False
         try:
             self.conn.send((job.fn, job.args))
-            if not self.conn.poll(timeout):
-                self._mark_rebuilding()
-                job.future.set_exception(EngineTimeout(
-                    f"engine task exceeded {timeout:g} s", {"timeout_s": timeout}))
-                return "task timeout"
+            exec_deadline = time.monotonic() + timeout
+            while True:
+                now = time.monotonic()
+                if now >= exec_deadline:
+                    self._mark_rebuilding()
+                    if not request_expired:
+                        job.future.set_exception(EngineTimeout(
+                            f"engine task exceeded the {timeout:g} s execution timeout",
+                            {"timeout_s": timeout}))
+                    return "execution timeout"
+                if not request_expired and now >= job.deadline:
+                    # The caller's deadline passed while the task was RUNNING: fail the request
+                    # but keep the worker, and keep waiting so its reply is drained and discarded.
+                    request_expired = True
+                    job.future.set_exception(EngineTimeout(
+                        "the request deadline expired while the task was running",
+                        {"deadline_expired_while": "running"}))
+                wake = exec_deadline if request_expired else min(exec_deadline, job.deadline)
+                if self.conn.poll(max(0.0, wake - now)):
+                    break
             msg = self.conn.recv()
         except (EOFError, OSError, BrokenPipeError):
             if self.proc is not None:
                 self.proc.join(5)  # collect the exit code of the dead process
             code = self.proc.exitcode if self.proc is not None else None
             self._mark_rebuilding()
-            job.future.set_exception(EngineWorkerCrashed("engine worker process crashed; no result returned",
-                                                         {"exitcode": code}))
+            _resolve(job, exc=EngineWorkerCrashed("engine worker process crashed; no result returned",
+                                                  {"exitcode": code}))
             return f"worker crashed (exitcode {code})"
         if msg[0] == "ok":
-            job.future.set_result(msg[1])
+            # If the caller's deadline already expired, the result is discarded (§5).
+            _resolve(job, result=msg[1])
             return None
         error = rebuild_error(msg[1], msg[2], msg[3])
         if isinstance(error, EngineIntegrityError):
             self._mark_rebuilding()
-            job.future.set_exception(error)
+            _resolve(job, exc=error)
             return "integrity check failed"
-        job.future.set_exception(error)
+        _resolve(job, exc=error)
         return None
 
     def _shutdown_process(self) -> None:
@@ -239,19 +345,31 @@ class _Slot:
             except Exception:  # noqa: BLE001
                 pass
         if self.proc is not None:
-            self.proc.join(2)
+            try:
+                self.proc.join(2)  # give it a chance to exit on the sentinel before terminating
+            except (OSError, ValueError):
+                pass
         self._kill(self.proc, self.conn)
         self.proc = self.conn = None
 
 
 class EnginePool:
     def __init__(self, repo_root, workers: int = 2, task_timeout_s: float = 10.0, max_queue: int = 32,
-                 startup_timeout_s: float = 180.0):
+                 startup_timeout_s: float = 180.0, request_deadline_s: float = 12.0,
+                 min_start_budget_s: float = 1.0, checkpoint=None, device: str = "cpu"):
         if workers < 1 or max_queue < 1 or task_timeout_s <= 0:
             raise ValueError("workers and max_queue must be >= 1 and task_timeout_s > 0")
+        if request_deadline_s <= 0 or not 0 <= min_start_budget_s < request_deadline_s:
+            # §8 startup validation: a budget at or above the deadline rejects every queued request.
+            raise ValueError("min_start_budget_s must be >= 0 and < request_deadline_s")
         self.repo_root = Path(repo_root).expanduser().resolve()
         self.workers, self.task_timeout_s, self.max_queue = workers, float(task_timeout_s), max_queue
         self.startup_timeout_s = float(startup_timeout_s)
+        self.request_deadline_s = float(request_deadline_s)
+        self.min_start_budget_s = float(min_start_budget_s)
+        # The approved checkpoint entry passed to each worker; each one re-verifies it (§7).
+        self.checkpoint = checkpoint
+        self.device = device
         self._queue: "queue.Queue[_Job]" = queue.Queue(maxsize=max_queue)
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -262,7 +380,10 @@ class EnginePool:
     @classmethod
     def from_settings(cls, settings, **overrides) -> "EnginePool":
         kw = dict(repo_root=settings.repo_root_resolved, workers=settings.engine_workers,
-                  task_timeout_s=settings.engine_task_timeout_s, max_queue=settings.engine_max_queue)
+                  task_timeout_s=settings.engine_task_timeout_s, max_queue=settings.engine_max_queue,
+                  startup_timeout_s=settings.engine_startup_timeout_s,
+                  request_deadline_s=settings.engine_request_deadline_s,
+                  min_start_budget_s=settings.engine_min_start_budget_s, device=settings.device)
         kw.update(overrides)
         return cls(**kw)
 
@@ -301,12 +422,14 @@ class EnginePool:
         self.close()
 
     # -- submission
-    def submit(self, fn: Callable, *args: Any) -> Future:
+    def submit(self, fn: Callable, *args: Any, deadline_s: Optional[float] = None) -> Future:
+        """Accepts a task and stamps its request deadline (§5), counted from now."""
         if not self._started or self._stop.is_set():
             raise EngineNotReady("engine pool is not running")
         if all(s.state in (_Slot.ERROR, _Slot.STOPPED) for s in self._slots):
             raise EngineNotReady("no engine worker is available")
-        job = _Job(fn, args)
+        budget = self.request_deadline_s if deadline_s is None else float(deadline_s)
+        job = _Job(fn, args, deadline=time.monotonic() + budget)
         try:
             self._queue.put_nowait(job)
         except queue.Full:
@@ -339,7 +462,10 @@ class EnginePool:
             rebuilds = self._rebuilds
         return {
             "engine_workers": status,
-            "engine_pool": {"workers": self.workers, "queued": self._queue.qsize(), "max_queue": self.max_queue,
+            # `ready_workers` (§2.1, A-6): workers that have finished warming up and can take a task.
+            "engine_pool": {"workers": self.workers,
+                            "ready_workers": sum(1 for s in states if s == _Slot.READY),
+                            "queued": self._queue.qsize(), "max_queue": self.max_queue,
                             "rebuilds_since_start": rebuilds},
             "slots": [{"index": s.index, "state": s.state, "busy": s.busy, "pid": s.pid} for s in self._slots],
         }

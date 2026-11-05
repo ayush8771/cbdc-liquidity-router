@@ -158,8 +158,12 @@ def test_calendar_matches_validate_simulation_date_on_every_day(worker, p1):
 
 
 def test_scenarios_are_stage1f_definitions(worker, p1):
+    """Every Stage 1F definition is reported unchanged, but §2.7 fixes the ORDER: always
+    sorted by `scenario_id` in ascending ordinal order, whatever order Phase 1 defines them in."""
     out = worker.scenario_list()
-    assert [s["scenario_id"] for s in out["scenarios"]] == list(p1.scenarios.SCENARIOS)
+    ids = [s["scenario_id"] for s in out["scenarios"]]
+    assert set(ids) == set(p1.scenarios.SCENARIOS)
+    assert ids == sorted(p1.scenarios.SCENARIOS)
     for s in out["scenarios"]:
         src = p1.scenarios.SCENARIOS[s["scenario_id"]]
         assert (s["description"], s["liquidity_multiplier"], s["congestion_multiplier"],

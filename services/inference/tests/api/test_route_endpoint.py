@@ -4,6 +4,7 @@ The stand-in pool runs each route task on the session EngineWorker, so every
 response here is real engine output mapped by the API layer.
 """
 import math
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -68,6 +69,12 @@ def _error(r, status, code):
     return r.json()["error"]
 
 
+def _fields(err) -> list:
+    """The field paths of a VALIDATION_ERROR's `details.errors[]` (§4). An item about no single
+    field omits `field` entirely, so a form-level error shows as None here."""
+    return [e.get("field") for e in err["details"]["errors"]]
+
+
 # ------------------------------------------------------------------ success
 def test_schema_and_values_equal_engine_output(client, worker):
     r = client.post("/v1/route", json=body(client_reference="ref-9"), headers={"X-Request-Id": "rt-1"})
@@ -79,7 +86,9 @@ def test_schema_and_values_equal_engine_output(client, worker):
     assert all(set(a) == ALLOC_KEYS for a in b["allocations"])
 
     e = worker.route(Transaction("GBR", "PHL", 300000.0, "ref-9"), ReplayState(DATE), None)
-    assert b["decision_id"] is None  # blocked on C5/C7
+    # §2.11: "sha256:" + 64 lowercase hex characters, equal to the engine's own value.
+    assert b["decision_id"] == e.decision_id
+    assert re.fullmatch(r"sha256:[0-9a-f]{64}", b["decision_id"])
     assert (b["policy"], b["policy_status"]) == ("waterfall", "default")  # default policy
     assert b["transaction"] == {"sender_country": "GBR", "receiver_country": "PHL", "amount_usd": 300000.0,
                                 "corridor": "GBR->PHL", "simulation_date": DATE, "client_reference": "ref-9"}
@@ -98,7 +107,8 @@ def test_schema_and_values_equal_engine_output(client, worker):
     assert (p["state_mode"], p["state_date"], p["split"], p["scenario_id"], p["values_provenance"]) == \
         ("historical_replay", DATE, "test", None, "synthetic_simulation")
     assert p["engine_version"] == ENGINE_VERSION and p["checkpoint"] is None and p["device"] == "cpu"
-    assert p["knowledge_sha256"] == worker.knowledge.sha256
+    # The Phase 2 SERVICE hash (CRLF->LF normalised), NOT Phase 1's raw-byte KnowledgeBase.sha256 (§2.2).
+    assert p["knowledge_sha256"] == worker.artefacts["knowledge_sha256"]
     assert p["daily_state_sha256"] == p["state_frame_sha256"] == worker.daily_state_sha256
     assert [w["code"] for w in b["warnings"]] == [w.code for w in e.warnings]
 
@@ -148,11 +158,54 @@ def test_integer_amount_accepted(client):
     assert r.status_code == 200 and r.json()["transaction"]["amount_usd"] == 1000.0
 
 
-def test_unknown_fields_outside_state_are_ignored(client):
-    """C8 is open: the contract only requires rejecting unknown fields inside `state`."""
-    b = body(note="x")
-    b["extra"] = 1
-    assert client.post("/v1/route", json=b).status_code == 200
+@pytest.mark.parametrize("mutate,field", [
+    (lambda b: b.__setitem__("extra", 1), "extra"),
+    (lambda b: b["transaction"].__setitem__("note", "x"), "transaction.note"),
+    (lambda b: b.__setitem__("include_semantic_context", True), "include_semantic_context"),
+])
+def test_requests_are_strict(client, mutate, field):
+    """§1: every request body object accepts only the fields the contract defines, so a
+    misspelt field never silently falls back to its default. `include_semantic_context` was
+    removed from v1 (§2.10), so it is rejected like any other unknown field."""
+    b = body()
+    mutate(b)
+    err = _error(client.post("/v1/route", json=b), 422, "VALIDATION_ERROR")
+    assert _fields(err) == [field]
+
+
+def test_policy_null_is_rejected_but_omitted_policy_defaults(client):
+    """§1: `policy: null` is a 422; only an OMITTED policy takes the `waterfall` default."""
+    err = _error(client.post("/v1/route", json=body() | {"policy": None}), 422, "VALIDATION_ERROR")
+    assert _fields(err) == ["policy"]
+    assert client.post("/v1/route", json=body()).json()["policy"] == "waterfall"
+
+
+@pytest.mark.parametrize("length,ok", [(200, True), (201, False)])
+def test_client_reference_length_limit(client, length, ok):
+    """§2.8: at most 200 characters, counted as Unicode code points."""
+    r = client.post("/v1/route", json=body(client_reference="e" * length))
+    if ok:
+        assert r.status_code == 200
+    else:
+        assert _fields(_error(r, 422, "VALIDATION_ERROR")) == ["transaction.client_reference"]
+
+
+@pytest.mark.parametrize("payload,fields", [
+    (body(amount=9007199254740993), ["transaction.amount_usd"]),
+    (body(amount=1e21), ["transaction.amount_usd"]),
+])
+def test_unsafe_integers_are_rejected_not_rounded(client, payload, fields):
+    """§2.11: an integer-valued number outside +/-(2^53 - 1) in `transaction` or `state` is a
+    VALIDATION_ERROR with the value's path, never rounded."""
+    err = _error(client.post("/v1/route", json=payload), 422, "VALIDATION_ERROR")
+    assert _fields(err) == fields
+
+
+def test_every_unsafe_number_is_reported_together(client, worker):
+    state = explicit_state(worker)
+    state["venues"][1]["liquidity_usd"] = 2 ** 53
+    err = _error(client.post("/v1/route", json=body(amount=1e21, state=state)), 422, "VALIDATION_ERROR")
+    assert sorted(_fields(err)) == ["state.venues[1].liquidity_usd", "transaction.amount_usd"]
 
 
 def test_deterministic(client):
@@ -167,7 +220,7 @@ def test_malformed_json(client):
 
 
 @pytest.mark.parametrize("payload,field", [
-    ([], "body"),
+    ([], None),  # about no single field, so `field` is omitted (§4)
     ({"state": {"mode": "historical_replay", "date": DATE}}, "transaction"),
     ({"transaction": {"sender_country": "GBR", "receiver_country": "PHL", "amount_usd": 1.0}}, "state"),
     ({"transaction": "GBR->PHL", "state": {"mode": "historical_replay", "date": DATE}}, "transaction"),
@@ -183,7 +236,7 @@ def test_malformed_json(client):
 ])
 def test_validation_errors(client, payload, field):
     err = _error(client.post("/v1/route", json=payload), 422, "VALIDATION_ERROR")
-    assert err["details"]["field"] == field
+    assert _fields(err) == [field]
 
 
 @pytest.mark.parametrize("key", ["risk", "fee", "baseline_cost_pct", "data_source_tag"])
@@ -191,7 +244,7 @@ def test_explicit_cannot_set_phase1_values(client, worker, key):
     state = explicit_state(worker)
     state["venues"][0][key] = 0.5
     err = _error(client.post("/v1/route", json=body(state=state)), 422, "VALIDATION_ERROR")
-    assert err["details"]["field"] == f"state.venues[0].{key}" and "cannot be set" in err["message"]
+    assert _fields(err) == [f"state.venues[0].{key}"] and "cannot be set" in err["message"]
 
 
 @pytest.mark.parametrize("payload,status,code", [
@@ -220,7 +273,8 @@ def test_explicit_state_errors(client, worker):
     _error(client.post("/v1/route", json=body(state=s)), 422, "INVALID_STATE_VALUE")
     s = explicit_state(worker, with_history=True)
     s["venues"][0]["history"]["liquidity_usd"] = s["venues"][0]["history"]["liquidity_usd"][:29]
-    _error(client.post("/v1/route", json=body(state=s)), 422, "INVALID_STATE_VALUE")
+    # A wrong LENGTH is a schema rule, so VALIDATION_ERROR, not INVALID_STATE_VALUE (§2.4).
+    _error(client.post("/v1/route", json=body(state=s)), 422, "VALIDATION_ERROR")
     s = explicit_state(worker)
     s["reference_date"] = "2022-01-10"
     _error(client.post("/v1/route", json=body(state=s)), 422, "DATE_IN_GAP_BUFFER")
@@ -261,4 +315,9 @@ def test_not_ready_before_metadata(repo_settings, fake_pool_factory):
 
 
 def test_get_is_not_allowed(client):
-    assert client.get("/v1/route").status_code == 405
+    """§4 / A-5b: 405 METHOD_NOT_ALLOWED with an `Allow` header listing the path's methods."""
+    r = client.get("/v1/route")
+    err = _error(r, 405, "METHOD_NOT_ALLOWED")
+    allow = {m.strip() for m in r.headers["Allow"].split(",")}
+    assert "POST" in allow and "GET" not in allow
+    assert err["details"] == {}

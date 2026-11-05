@@ -1,12 +1,14 @@
 """Startup metadata for /v1/health and /v1/version, computed in the FastAPI process
-WITHOUT importing Phase 1 (arch §5.1): file checks, file hashes and git commit.
+WITHOUT importing Phase 1 (arch §5.1): file checks and the git commit.
 
-Values that need Phase 1 objects (knowledge version, daily-state fingerprint,
-reward weights, torch version) come from an engine worker via `metadata_task`.
+Values that need Phase 1 objects (knowledge version, the six artefact
+fingerprints, the daily-state fingerprint, reward weights, torch version) come
+from an engine worker via `metadata_task`. The worker is the single source of
+truth for the fingerprints, so the values `/v1/version` reports are the ones
+`decision_id` hashes (§2.2, §2.11).
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import platform
 import subprocess
@@ -18,17 +20,6 @@ STRUCTURED_FILES = ("data/structured/countries.csv", "data/structured/bridge_net
                     "data/structured/transaction_requests.csv")
 DAILY_STATE_FILE = "data/processed/synthetic_liquidity_congestion_daily.parquet"
 KNOWLEDGE_FILE = "data/knowledge/regulatory_facts.json"
-BRIDGE_NETWORK_FILE = "data/structured/bridge_network.csv"
-NORMALIZATION_STATS_FILE = "data/processed/normalization_stats.json"
-
-
-def sha256_file(path: Path) -> str:
-    """Raw file bytes. Cross-platform normalisation is undecided (contract README C5)."""
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
 
 
 def artefact_checks(repo_root: Path) -> dict:
@@ -74,12 +65,7 @@ def lock_file_for(platform_name: str, torch_version: Optional[str]) -> str:
 
 
 def static_metadata(repo_root: Path) -> dict:
-    data = {}
-    for key, rel in (("bridge_network_sha256", BRIDGE_NETWORK_FILE),
-                     ("normalization_stats_sha256", NORMALIZATION_STATS_FILE)):
-        try:
-            data[key] = sha256_file(repo_root / rel)
-        except OSError:
-            data[key] = None
+    """Provenance that needs no Phase 1 import. Artefact fingerprints are deliberately
+    not here: an engine worker computes them (§2.11)."""
     return {"git_commit": git_commit(repo_root), "platform": platform_tag(),
-            "python": platform.python_version(), "data": data}
+            "python": platform.python_version()}

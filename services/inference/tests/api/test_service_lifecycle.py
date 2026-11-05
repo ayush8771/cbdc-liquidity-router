@@ -40,7 +40,8 @@ def test_startup_does_not_block_and_becomes_ready(live):
     r = _poll(client, "/v1/health", 200)
     b = r.json()
     assert (b["status"], b["ready"], b["checks"]["engine_workers"]) == ("ok", True, "ok")
-    assert b["engine_pool"] == {"workers": 1, "queued": 0, "max_queue": 32, "rebuilds_since_start": 0}
+    assert b["engine_pool"] == {"workers": 1, "ready_workers": 1, "queued": 0, "max_queue": 32,
+                                "rebuilds_since_start": 0}
 
 
 def test_version_reports_the_real_engine(live, worker):
@@ -90,9 +91,10 @@ def test_route_concurrent_mixed_modes_equal_serial_engine(live, worker):
     order = [i % len(payloads) for i in range(24)]
     with ThreadPoolExecutor(max_workers=8) as clients:
         responses = list(clients.map(lambda i: client.post("/v1/route", json=payloads[i]), order))
-    static = {**live[0].state.static_metadata, "knowledge_sha256": worker.knowledge.sha256}
+    static = dict(live[0].state.static_metadata)
+    meta = live[0].state.engine_metadata
     expected = [route_response(worker.route(Transaction("GBR", "PHL", 300000.0), state_from_dict(p["state"]),
-                                            p["policy"]), static, "cpu") for p in payloads]
+                                            p["policy"]), static, meta, "cpu") for p in payloads]
     assert all(r.status_code == 200 for r in responses)
     assert [r.json() for r in responses] == [expected[i] for i in order]
 

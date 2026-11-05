@@ -94,17 +94,30 @@ def test_current_value_rules(worker, override, exc):
 
 
 @pytest.mark.parametrize("liq_hist,cong_hist", [
-    ([100.0] * 29, [0.1] * 29),                       # wrong length
-    ([100.0] * 31, [0.1] * 31),
     ([100.0] * 29 + [999.0], [0.1] * 29 + [0.1]),     # last != current
     ([100.0] * 30, [0.1] * 29 + [0.2]),
     ([-1.0] + [100.0] * 29, [0.1] * 30),              # negative inside history
     ([math.nan] + [100.0] * 29, [0.1] * 30),
 ])
-def test_history_rules(worker, liq_hist, cong_hist):
+def test_history_value_rules(worker, liq_hist, cong_hist):
+    """The VALUE rules return INVALID_STATE_VALUE (§2.4)."""
     state = _state(worker, liq=100.0, cong=0.1, history=ExplicitHistory(tuple(liq_hist), tuple(cong_hist)))
     with pytest.raises(E.InvalidStateValue) as ei:
         worker.route(TX, state)
+    assert ei.value.details["field"].startswith("state.venues[1].history.")
+
+
+@pytest.mark.parametrize("liq_hist,cong_hist", [
+    ([100.0] * 29, [0.1] * 29),
+    ([100.0] * 31, [0.1] * 31),
+])
+def test_history_wrong_length_is_a_validation_error(worker, liq_hist, cong_hist):
+    """A wrong LENGTH is a schema rule (minItems/maxItems 30), so it is VALIDATION_ERROR, not
+    INVALID_STATE_VALUE (§2.4, owner decision)."""
+    state = _state(worker, liq=100.0, cong=0.1, history=ExplicitHistory(tuple(liq_hist), tuple(cong_hist)))
+    with pytest.raises(E.ValidationFailed) as ei:
+        worker.route(TX, state)
+    assert ei.value.code == "VALIDATION_ERROR"
     assert ei.value.details["field"].startswith("state.venues[1].history.")
 
 
@@ -149,12 +162,16 @@ def test_explicit_equal_to_replay_gives_identical_results(worker, policy, amount
     replay = worker.route(tx, ReplayState(DATE), policy)
     explicit = worker.route(tx, ExplicitState(DATE, tuple(_replay_venues(worker))), policy)
     assert explicit.state_frame_sha256 == replay.daily_state_sha256  # same values -> same fingerprint
-    differ = {"state_mode", "values_provenance"}
+    # `decision_id` identifies the decision's INPUTS, not its outputs (§2.11), and an explicit
+    # state is a different input from a replay state even when its values coincide, so the two
+    # IDs differ by design while every routing output is identical.
+    differ = {"state_mode", "values_provenance", "decision_id"}
     for name in replay.__dataclass_fields__:
         if name not in differ:
             assert getattr(explicit, name) == getattr(replay, name), name
     assert (explicit.state_mode, explicit.values_provenance) == ("explicit", "user_supplied_synthetic")
     assert explicit.scenario_id is None and explicit.state_date == DATE
+    assert explicit.decision_id != replay.decision_id
 
 
 def test_explicit_with_full_history_equal_to_replay_is_identical(worker):
@@ -231,14 +248,17 @@ def test_ppo_disabled_takes_precedence_today(worker):
 
 
 def test_ppo_needs_history_on_every_venue(worker, monkeypatch):
-    """Exercises the rule that will apply once ppo_projected can be enabled."""
+    """The state rule is checked before any attempt to load weights (§2.4)."""
     monkeypatch.setattr(worker, "ppo_enabled", True)
     partial = _replay_venues(worker, with_history=True)
     partial[2] = ExplicitVenue(partial[2].bridge_uid, partial[2].liquidity_usd, partial[2].congestion, None)
     with pytest.raises(E.PolicyUnavailableForState) as ei:
         worker.route(TX, ExplicitState(DATE, tuple(partial)), "ppo_projected")
     assert (ei.value.code, ei.value.http_status) == ("POLICY_UNAVAILABLE_FOR_STATE", 422)
-    with pytest.raises(E.PolicyDisabled, match="not implemented"):  # full history passes the state rule
+    # Full history passes the state rule, so the request reaches the checkpoint gate. No
+    # checkpoint is approved in this repository, so loading fails closed with POLICY_DISABLED
+    # rather than serving unverified weights (§7).
+    with pytest.raises(E.PolicyDisabled, match="no approved checkpoint"):
         worker.route(TX, ExplicitState(DATE, tuple(_replay_venues(worker, with_history=True))), "ppo_projected")
 
 

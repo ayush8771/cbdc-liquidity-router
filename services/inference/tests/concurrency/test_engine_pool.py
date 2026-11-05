@@ -68,6 +68,8 @@ def _wait(cond, timeout=30.0):
 def test_defaults_come_from_settings():
     p = EnginePool.from_settings(Settings())
     assert (p.workers, p.task_timeout_s, p.max_queue) == (2, 10.0, 32)
+    # The deadline settings of §5/§8 are covered in detail in test_deadlines.py.
+    assert (p.request_deadline_s, p.min_start_budget_s, p.startup_timeout_s) == (12.0, 1.0, 180.0)
 
 
 def test_invalid_configuration_rejected():
@@ -89,8 +91,9 @@ def test_missing_artefacts_fail_startup(tmp_path):
 def test_health_reports_contract_block(pool):
     h = pool.health()
     assert h["engine_workers"] == "ok"
-    assert set(h["engine_pool"]) == {"workers", "queued", "max_queue", "rebuilds_since_start"}
+    assert set(h["engine_pool"]) == {"workers", "ready_workers", "queued", "max_queue", "rebuilds_since_start"}
     assert (h["engine_pool"]["workers"], h["engine_pool"]["max_queue"]) == (2, 32)
+    assert h["engine_pool"]["ready_workers"] == 2  # both warmed up (§2.1)
     assert len({s["pid"] for s in h["slots"]}) == 2
 
 

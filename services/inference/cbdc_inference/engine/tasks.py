@@ -11,10 +11,21 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import PurePosixPath
 
 
 def route_task(worker, transaction, state, policy):
     return worker.route(transaction, state, policy)
+
+
+def compare_task(worker, transaction, state, policies):
+    """POST /v1/compare: every policy in ONE task on one state frame (§2.9)."""
+    return worker.compare(transaction, state, policies)
+
+
+def explain_task(worker, transaction, state, policy):
+    """POST /v1/explain: recomputes the decision and explains it (§2.10)."""
+    return worker.explain(transaction, state, policy)
 
 
 def ping_task(worker):
@@ -28,14 +39,25 @@ def metadata_task(worker):
     end = max(b[1] for b in p.split.SPLIT_BOUNDARIES.values())
     return {
         "knowledge_version": worker.knowledge.knowledge_version,
-        "knowledge_sha256": worker.knowledge.sha256,  # Phase 1 KnowledgeBase.sha256 (raw file bytes; C5 open)
+        # The six `decision_id` artefact fingerprints, computed by the worker, so the values
+        # /v1/version reports are exactly the ones decision_id hashes (§2.2, §2.11). Note that
+        # `knowledge_sha256` here is the Phase 2 SERVICE hash (CRLF->LF normalised), which on a
+        # Windows CRLF checkout differs from Phase 1's raw-byte KnowledgeBase.sha256.
+        "artefacts": dict(worker.artefacts),
         "daily_state_sha256": worker.daily_state_sha256,
+        "scenarios_sha256": worker.scenarios_fingerprint(),
         "date_range": {"start": start.date().isoformat(), "end": end.date().isoformat()},
-        "reward_weights": {"lambda_latency": p.reward.DEFAULT_LAMBDA_LATENCY_PLACEHOLDER,
-                           "lambda_risk": p.reward.DEFAULT_LAMBDA_RISK_PLACEHOLDER,
-                           "lambda_unrouted": p.reward.DEFAULT_LAMBDA_UNROUTED_PLACEHOLDER,
-                           "status": "placeholder"},
+        "reward_weights": dict(worker.reward_weights),
         "torch": p.torch.__version__,
+        # The checkpoint this worker actually verified and will serve, or None (§2.2, §7).
+        "checkpoint": None if worker.checkpoint is None else {
+            "checkpoint_id": worker.checkpoint.checkpoint_id,
+            "sha256": worker.checkpoint.sha256,
+            "approved_by": worker.checkpoint.approved_by,
+            "approved_on": worker.checkpoint.approved_on,
+            "source_run": str(PurePosixPath(worker.checkpoint.path).parent),
+        },
+        "ppo_enabled": bool(worker.ppo_enabled),
         # answered by the FastAPI process from startup metadata (contract §2): /v1/replay/calendar, /v1/scenarios
         "replay_calendar": worker.replay_calendar(),
         "scenarios": worker.scenario_list(),
