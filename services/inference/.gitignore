@@ -1,0 +1,16 @@
+# Service-local virtual environment (never the Phase 1 venv/)
+.venv/
+
+# Python / test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Local environment files (never committed)
+.env
+.env.*

@@ -1,0 +1,5 @@
+# Optional explanation-only semantic context (CBDC_ENABLE_COGNEE=true).
+# Installed on top of service.in only when Cognee is enabled; needs local Ollama
+# (docs/STAGE1E_MEMORY.md). Cognee never affects feasibility or routing (arch D6).
+-r service.in
+cognee==1.4.2

@@ -1,0 +1,32 @@
+# Inference service dependency INPUTS (Dev A). Locks are generated from this by
+# Dev D with `uv pip compile` into requirements/<platform>.txt (arch §7.2).
+# Do not edit the root requirements.txt / requirements-lock.txt for Phase 2.
+#
+# Versions match those already present in the Phase 1 dev venv (2026-11-03),
+# so the service can be tested against the exact same stack.
+
+# --- Phase 1 runtime needed by the engine (mirrors root requirements.txt pins) ---
+# Cognee is deliberately NOT here (see cognee.in). openpyxl is not needed: it is
+# only used by Phase 1 preprocessing of data/raw, which is not read at inference.
+gymnasium==1.3.0
+torch==2.13.0          # CPU build on Linux/CI (+cpu), cu130 on the GPU dev machine; index set by each lock
+pandas==2.3.3
+numpy==2.2.6
+pyarrow==25.0.0
+scikit-learn==1.7.2    # kept to mirror the Phase 1 stack; not imported by the inference path
+scipy==1.15.3          # src/backtesting/statistics.py (not on the routing path; kept for parity tooling)
+
+# --- decision_id and artefact fingerprints (contract §2.11, arch §7.2) ---
+# Pure-Python JCS (RFC 8785). The same version generated contracts/test-vectors/,
+# so the canonical strings must match byte for byte.
+rfc8785==0.1.4
+
+# --- Web service ---
+fastapi==0.141.1
+uvicorn==0.52.1
+pydantic==2.13.4
+pydantic-settings==2.15.0
+
+# --- Testing ---
+pytest==9.1.1
+httpx==0.28.1          # fastapi.testclient
