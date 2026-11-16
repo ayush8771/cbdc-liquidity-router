@@ -5,6 +5,8 @@
 **Current milestone:** Stage 1D finalized (1 November 2026); Stage 1E complete as an infrastructure milestone (2 November 2026, knowledge population deferred); Stage 1F complete (2 November 2026)\
 **Primary handover target:** Claude (web) + Claude Code working directly in the repository
 
+> **Status update (16 November 2026): Major Phase 2 in progress.** Phase 1 is frozen as the baseline (tag `phase1-complete`) and is not changed by Phase 2. Phase 2 design, contract and progress: `docs/PHASE2_ARCHITECTURE.md`, `docs/PHASE2_API_CONTRACT.md` and `docs/PHASE2_STATUS.md`. This handover still covers Phase 1 only.
+>
 > **Status update (2 November 2026): Stage 1F complete** — see [section 8C](#8c-stage-1f-comprehensive-backtesting--evaluation-2-november-2026) and `docs/STAGE1F_RESULTS.md`.
 >
 > **Status update (2 November 2026): Stage 1E complete as an infrastructure milestone** — see [section 8B](#8b-stage-1e-cognee--semantic-memory-2-november-2026) and `docs/STAGE1E_MEMORY.md`.

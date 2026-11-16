@@ -1,6 +1,6 @@
 # Major Phase 2 — API Contract
 
-**Status:** v0.4, **approved**. The project owner merged it into `feature/phase2-platform` through PR #3 on 4 November 2026. Further approved corrections are in the follow-up PR #4, which applies on top of v0.4 once it is merged. `docs/TEAM_REVIEW_RESOLUTION.md` records what each review changed and what is still open.
+**Status:** v0.4, **approved**. The project owner merged it into `feature/phase2-platform` through PR #3 on 4 November 2026. The approved follow-up corrections of PR #4 were merged into `feature/phase2-platform` on 4 November 2026 (`dc6cf48`). `docs/TEAM_REVIEW_RESOLUTION.md` records what each review changed and what is still open; its §16 reconciles this document with the backend implementation as of 16 November 2026. Implementation progress is tracked in `docs/PHASE2_STATUS.md`, not here.
 **Normative source.** This document is the authoritative, approved Phase 2 v0.4 specification. Both OpenAPI files in `contracts/openapi/` remain DRAFT pending separate approval; they are machine-readable representations, not independently normative. The approved contract takes precedence over any discrepancy (`docs/TEAM_REVIEW_RESOLUTION.md` §15).
 **Architecture and roles:** `docs/PHASE2_ARCHITECTURE.md`. Section references written "arch §n" point there.
 
@@ -819,7 +819,7 @@ Query rules (they match the backend's implementation, `services/backend/src/rout
 
 ### 3.4 `GET /api/v1/transactions/:id`
 
-Returns the same body as the 201 response in §3.2. That includes failed transactions, with `status: "failed"`, `decision: null`, `transaction.corridor: null` and `failure` set. Unknown IDs return `404 NOT_FOUND`. What a non-UUID `:id` returns (404 or 422) is not yet defined (§10, Q11a).
+Returns the same body as the 201 response in §3.2. That includes failed transactions, with `status: "failed"`, `decision: null`, `transaction.corridor: null` and `failure` set. Unknown IDs return `404 NOT_FOUND`. What a non-UUID `:id` returns (404 or 422) is not yet defined (§10, Q11a). *Implementation note, not a rule:* the backend currently returns `404 NOT_FOUND` for a non-UUID `:id` on all three `:id` routes (§3.4, §3.5, §3.6).
 
 ### 3.5 `GET /api/v1/transactions/:id/explanation`
 
@@ -843,7 +843,7 @@ The request is the same as §3.2, with `"policies": [...]` in place of `policy`.
 {"id", "createdAt", "createdBy", "transaction", "state", "policies", "results": [decision…], "skipped": [...], "sameState": true, "note": "..."}
 ```
 
-`GET /api/v1/comparisons/:id` returns the same body (200), rebuilt from the stored record without calling inference. Unknown and non-UUID IDs return `404 NOT_FOUND`, as for transactions (§3.4). Any authenticated user may read any comparison (§3.1).
+`GET /api/v1/comparisons/:id` returns the same body (200), rebuilt from the stored record without calling inference. Unknown IDs return `404 NOT_FOUND`, as for transactions (§3.4). A non-UUID ID follows the same open question as for transactions (§10, Q11a); the backend currently returns `404 NOT_FOUND` for it. Any authenticated user may read any comparison (§3.1).
 
 **Policies** (owner decision, Q18):
 - Each entry of `policies` is a canonical policy name or a comparison alias:
@@ -908,8 +908,7 @@ The aggregates are computed from stored decision fields only, never recomputed f
   - `byCorridor` covers routed transactions only, because a failed row has no corridor. `byCorridor.count` is **renamed `routed`**: the routed decisions on that corridor. It also has `allowedRouted` and `completionRate`.
 - **Means** (owner decision): `meanRewardAmountBased`, `meanLatencyTerm` and `meanRiskTerm` average over the allowed routed decisions, and are **null** when `allowedRouted` is 0.
 - **`meanFeeCostPct`** (owner decision) = **100 × AVG(`feeCostUsd` / `executedUsd`)** over the allowed routed decisions with `executedUsd > 0`, and null when there are none. It is a percentage: 1.4 means 1.4 %.
-  - **Dependency:** the backend has no `feeCostUsd` column today. Dev B must add it to `RoutingDecision` with a Prisma migration, copied from `metrics.fee_cost_usd`.
-  - That migration is **not part of this contracts change** and has not been made. Until it lands, the backend can't compute this field from stored columns.
+  - **Dependency (Q11-dep, done):** the field needs a `feeCostUsd` column on `RoutingDecision`, copied from `metrics.fee_cost_usd`. Dev B added it in the Prisma migration `services/backend/prisma/migrations/20261104120000_failure_code_fee_cost_usd`. The migration also backfills existing decisions from the stored `engineResponse`, where `metrics.fee_cost_usd` is a JSON number. A decision with a NULL `feeCostUsd` is skipped by the mean, never counted as 0.
 - The dashboard fixture is derived from the stored transactions and their records. The checker recomputes `allowedRouted`, `routed`, `completionRate`, every mean and `meanFeeCostPct` from them.
 
 ### 3.9 `GET /api/v1/health`, `GET /api/v1/meta`
@@ -1041,12 +1040,14 @@ Each transaction request (including the full state spec, so explicit states can 
 | Model | Key fields |
 |---|---|
 | `User` | `id`, `email`, `role` (`viewer`/`analyst`); seeded from `dev-tokens.json`, without the hashes |
-| `TransactionRequest` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor` (null when `failed`), `amountUsd`, `stateMode`, `stateSpec` (JSON), `simulationDate`, `requestedPolicy`, `status`, `failureCode` (null unless `status` is `failed`; needs a new migration), `clientReference` (≤ 200 characters) |
+| `TransactionRequest` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor` (null when `failed`), `amountUsd`, `stateMode`, `stateSpec` (JSON), `simulationDate`, `requestedPolicy`, `status`, `failureCode` (null unless `status` is `failed`; added by migration `20261104120000_failure_code_fee_cost_usd`, with a CHECK constraint that forbids a code on a non-failed row; failed rows saved before it have no code), `clientReference` (≤ 200 characters) |
 | `RoutingDecision` | `id`, `transactionId`, `decisionId`, `policy`, `policyStatus`, `allowed`, `completed`, `completionRatio`, `executedUsd`, `unroutedEnvUsd`, `unroutedAmountBasedUsd`, `rewardEnv`, `rewardAmountBased`, `valuesProvenance`, `stateFrameSha256`, `checkpointSha256`, `knowledgeSha256`, `gitCommit`, `engineResponse` (JSON) |
 | `Allocation` | `id`, `decisionId`, `slot`, `bridgeUid`, `shareRequested`, `amountRequestedUsd`, `amountExecutedUsd`, `amountClippedUsd`, `liquidityUsd`, `congestion`, `risk`, `shareBeforeProjection` |
 | `Comparison` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor`, `amountUsd`, `simulationDate`, `clientReference`, `stateMode`, `stateSpec` (JSON), `policies`, `engineResponse` (JSON). An independent record: no `TransactionRequest` is created, and there is no `transactionId`. `stateSpec` is the effective state and `policies` the resolved canonical list, in order; both are returned as `state` and `policies` (§3.6, Q18). |
 | `Explanation` | `id`, `decisionId`, `engineResponse` (JSON), `createdAt` |
 | `AuditLog` | `id`, `at`, `userId`, `action`, `requestId`, `entityType`, `entityId`, `outcome` |
+
+The finalised models are in `services/backend/prisma/schema.prisma`. Beyond this outline, `RoutingDecision` also stores `latencyTerm`, `riskTerm` and `feeCostUsd` (§3.8). `Allocation` refers to its decision through `routingDecisionId`, to avoid a clash with the `decisionId` hash. Fields the schema marks `PROVISIONAL`, such as the `AuditLog` `action` and `outcome` values, are not agreed contract values.
 
 ---
 
@@ -1147,15 +1148,16 @@ Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A
 
 **Blocking: needed before the dependent implementation lands**
 
-| # | Question | Positions | Decides |
-|---|---|---|---|
-| Q11-dep | `meanFeeCostPct` needs a `feeCostUsd` column on `RoutingDecision`, added by a Prisma migration (§3.8) | Formula decided by the owner; the migration is not made | Anvesh (implementation) |
+None open. Q11-dep, the `feeCostUsd` column that `meanFeeCostPct` needs (§3.8), was the last blocking item. It is **done**: Dev B added it in the Prisma migration `services/backend/prisma/migrations/20261104120000_failure_code_fee_cost_usd`.
 
 **Non-blocking: they can follow v0.4**
 
+The backend implements an interim behaviour for Q11a and Q14. Each stays open until its decider records a decision here; the interim behaviour is not a contract rule.
+
 | # | Question | Notes | Decides |
 |---|---|---|---|
-| Q11a | A non-UUID `:id`: `404 NOT_FOUND` or `422 VALIDATION_ERROR`? | Not implemented yet | Anvesh |
-| Q14 | Is `405` checked before or after authentication in the app? | The fixtures send a token, so they don't depend on it | Anvesh |
+| Q11a | A non-UUID `:id`: `404 NOT_FOUND` or `422 VALIDATION_ERROR`? | Backend at `5414275`: `404 NOT_FOUND` on `GET /transactions/:id`, `/transactions/:id/explanation` and `/comparisons/:id`, checked before the database is read | Anvesh |
+| Q14 | Is `405` checked before or after authentication in the app? | The fixtures send a token, so they don't depend on it. Backend at `5414275`: `405` before authentication, with or without a token | Anvesh |
+| Q22 | A failed transaction saved before `failureCode` existed has no code. Should `GET /transactions/:id` return it with `failure: null`? | Raised by Dev B, 16 November 2026. §3.4 says `failure` is set on failed transactions; the app OpenAPI allows `failure: null`. Backend at `5414275` returns `failure: null` for such legacy rows and invents no code. Rows saved since the migration always have a code | Ayush (contract owner) |
 | F1 | **Phase 1 cost-baseline unit** (a technical finding, not a Phase 2 contract change). `real_cost_baseline` looks like percentage points but is used as a fraction in the reward. Any correction would change Phase 1 rewards, so it needs a separately reviewed and versioned change. Phase 2 passes the value through unchanged | Evidence and the open points: `docs/TEAM_REVIEW_RESOLUTION.md` §14 | Ayush |
 | Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback | Nisarga, Anvesh, Varshini |

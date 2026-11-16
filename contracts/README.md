@@ -2,6 +2,7 @@
 
 **Status: DRAFT v0.4.0, pending approval by Dev A, B and C** (arch §10). Until it is approved, `docs/PHASE2_API_CONTRACT.md` is normative. Any difference between that document and these files is a bug here.
 - Revised on 4 November 2026 after the team reviews. Ayush's owner decisions are applied; `docs/TEAM_REVIEW_RESOLUTION.md` lists what changed.
+- Updated on 16 November 2026 (`feature/phase2-backend`, `5414275`) for owner decision Q18 (comparisons, contract §3.6): `app.v1.yaml`, `fixtures/app/comparisons/` and the checker. The DRAFT status is unchanged.
 - Questions the contract still leaves open (contract §10) are left open here.
 - **CI rule:** request schemas strict, response schemas closed, in both APIs. At run time, consumers ignore unknown response fields and enum values (contract §1).
 
@@ -11,7 +12,7 @@ Owner: Dev D. Changes need approval from every consumer (arch §4.1).
 |---|---|
 | `openapi/inference.v1.yaml` | Inference API (`/v1`, snake_case). Producer A, consumer B. |
 | `openapi/app.v1.yaml` | Application API (`/api/v1`, camelCase). Producer B, consumer C. |
-| `fixtures/inference/` | `meta/ state/ route/ compare/ explain/ errors/`. Used by the backend's mock mode and by Prism. |
+| `fixtures/inference/` | `meta/ state/ route/ compare/ explain/ errors/`. Intended for the backend's mock mode and for Prism. The backend doesn't load them yet: its fixture-backed mock waits on the selection rule (contract §10, Q20). |
 | `fixtures/app/` | `meta/ auth/ transactions/ comparisons/ dashboard/ errors/`. Used by MSW in the web app. |
 | `test-vectors/decision_id.v1.json` | Exact `decision_id` canonical strings and IDs (contract §2.11). Dev A's implementation must reproduce them. |
 
@@ -71,6 +72,12 @@ The checker:
   - `decision` and `corridor` are null and `failure` is set;
   - the list's decision-derived fields are null;
   - `failure` repeats the code and message of the `POST` error that created it;
+- checks comparison records (§3.6, owner decision Q18):
+  - `results` and `skipped` together cover exactly the record's `policies`, in that order;
+  - `transaction.corridor` is null exactly when every policy was skipped;
+  - `transaction.simulationDate` and each result's provenance confirm the returned `state`;
+  - an app request's `policies`, after the aliases `baseline` → `waterfall` and `ruleBased` → `cheapestFeasible`, or the mock token's role default when omitted, equal the list sent to the engine;
+  - `skipped[].message` is the engine's text, unchanged;
 - checks that a 405 sends an `Allow` header listing the path's methods;
 - checks health readiness: `unavailable` exactly when the database is, otherwise `ok` or `degraded` by inference, including on the 503 body;
 - checks the risk fallback: `RISK_FALLBACK_USED` is required where the Phase 1 lookup actually falls back. That is a recorded table of (corridor, month) pairs read from `macro_risk_proxy.parquet`, not an inference from risk 0.0. It also means risk 0.0, and never appears on a regulatory rejection. `/v1/state` never emits `STATE_OUTSIDE_TRAINING_RANGE`;
@@ -86,7 +93,7 @@ CI runs it in `.github/workflows/phase2-integration.yml`.
 
 | # | Issue | v0.4 outcome |
 |---|---|---|
-| C1 | App health `database` values | **Resolved:** `[ok, unavailable]`; mock mode reports `ok`; database down → 503 with the Health body and `status: "unavailable"` (Ayush). The liveness path is a proposal (Q3a). |
+| C1 | App health `database` values | **Resolved:** `[ok, unavailable]`; mock mode reports `ok`; database down → 503 with the Health body and `status: "unavailable"` (Ayush). The liveness path was later approved (Q3a): `GET /api/v1/health/live` (contract §3.9). |
 | C2 | `ENGINE_TIMEOUT` listed with the 503s in §3.2 | **Resolved:** 504 everywhere; §3.2 rewritten. |
 | C3 | `POLICY_DISABLED` through the app | **Resolved:** passed through as 409, not persisted; a viewer gets 403 first. |
 | C4 | `GET /transactions/:id` for a failed transaction | **Resolved:** `decision: null`, `corridor: null`, `failure: {code, message}`; `409 TRANSACTION_FAILED` for its explanation. |
