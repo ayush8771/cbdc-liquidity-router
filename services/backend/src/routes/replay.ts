@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import type { InferenceClient } from "../inferenceClient/client.js";
+import type { InferenceCache } from "../inferenceClient/cache.js";
 import { inferenceInvalid, inferenceUnavailable } from "../inferenceClient/errors.js";
 import type { Logger } from "../logger.js";
 import { KeyCollisionError, toCamelCase } from "../mappers/camelCase.js";
@@ -8,13 +8,13 @@ import { KeyCollisionError, toCamelCase } from "../mappers/camelCase.js";
 // of GET /v1/replay/calendar. Any role may call it. Query parameters are
 // ignored and not forwarded (none are documented). The body is checked only
 // for being a JSON object (by the client); no fields are validated or computed.
-// Not cached yet: §3.1 marks it "(cached)", pending a decision on when the
-// backend checks /v1/version (§5).
-export function replayCalendar(client: InferenceClient | undefined, logger: Logger): RequestHandler {
+// Cached (§3.1) through the shared inference cache, which re-checks
+// /v1/version and drops the calendar when the §5 fingerprint changes.
+export function replayCalendar(cache: InferenceCache | undefined, logger: Logger): RequestHandler {
   return async (req, res) => {
-    if (client === undefined) throw inferenceUnavailable("not_configured");
+    if (cache === undefined) throw inferenceUnavailable("not_configured");
     // Inference errors (InferenceError) reach the error handler as they are.
-    const calendar = await client.get("/v1/replay/calendar", { requestId: req.requestId });
+    const calendar = await cache.get("/v1/replay/calendar", req.requestId);
     let mapped: unknown;
     try {
       mapped = toCamelCase(calendar);

@@ -154,3 +154,98 @@ describe("GET /api/v1/health with an inference probe", () => {
     assert.ok(elapsed < delay * 2 - 50, `took ${elapsed} ms; the checks ran one after the other`);
   });
 });
+
+describe("GET /api/v1/health/live (§3.9 liveness)", () => {
+  // Probes that record every call, and report both dependencies as down.
+  function downProbes() {
+    const calls = { database: 0, inference: 0 };
+    const database: DatabaseProbe = { check: async () => (calls.database++, "unavailable") };
+    const inference: InferenceHealthProbe = { check: async () => (calls.inference++, "unavailable") };
+    return { calls, database, inference };
+  }
+
+  it("returns HTTP 200 with exactly {status: ok}", async () => {
+    const server = await startServer(createApp({ logger: silentLogger, database: { check: async () => "ok" } }));
+    try {
+      const res = await fetch(`${server.baseUrl}/api/v1/health/live`);
+      assert.equal(res.status, 200);
+      assert.match(res.headers.get("content-type") ?? "", /^application\/json/);
+      assert.deepEqual(await res.json(), { status: "ok" });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("is public: 200 without a token, with an invalid token, and with no users configured", async () => {
+    const server = await startServer(createApp({ logger: silentLogger }));
+    try {
+      const variants: Array<Record<string, string>> = [
+        {},
+        { Authorization: "Bearer nonsense" },
+        { Authorization: "Basic abc" },
+      ];
+      for (const headers of variants) {
+        const res = await fetch(`${server.baseUrl}/api/v1/health/live`, { headers });
+        assert.equal(res.status, 200);
+        assert.deepEqual(await res.json(), { status: "ok" });
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("stays 200 while the database and inference are unavailable, and calls neither", async () => {
+    const { calls, database, inference } = downProbes();
+    const server = await startServer(createApp({ logger: silentLogger, database, inference }));
+    try {
+      const res = await fetch(`${server.baseUrl}/api/v1/health/live`);
+      assert.equal(res.status, 200);
+      assert.deepEqual(await res.json(), { status: "ok" });
+      assert.deepEqual(calls, { database: 0, inference: 0 });
+      // Control: readiness on the same app does call both probes, and is 503.
+      const ready = await fetch(`${server.baseUrl}/api/v1/health`);
+      assert.equal(ready.status, 503);
+      await ready.arrayBuffer();
+      assert.deepEqual(calls, { database: 1, inference: 1 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("makes no inference client call", async () => {
+    const calls: string[] = [];
+    const inferenceClient = {
+      get: async (path: string) => (calls.push(path), {}),
+      post: async (path: string) => (calls.push(path), {}),
+    } as unknown as NonNullable<Parameters<typeof createApp>[0]>["inferenceClient"];
+    const server = await startServer(createApp({ logger: silentLogger, inferenceClient }));
+    try {
+      const res = await fetch(`${server.baseUrl}/api/v1/health/live`);
+      assert.equal(res.status, 200);
+      assert.deepEqual(calls, []);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("answers HEAD with 200 and no body, like the other GET routes", async () => {
+    const server = await startServer(createApp({ logger: silentLogger }));
+    try {
+      const res = await fetch(`${server.baseUrl}/api/v1/health/live`, { method: "HEAD" });
+      assert.equal(res.status, 200);
+      assert.equal(await res.text(), "");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("keeps a trailing path segment unknown (404)", async () => {
+    const server = await startServer(createApp({ logger: silentLogger }));
+    try {
+      const res = await fetch(`${server.baseUrl}/api/v1/health/live/extra`);
+      assert.equal(res.status, 404);
+    } finally {
+      await server.close();
+    }
+  });
+});

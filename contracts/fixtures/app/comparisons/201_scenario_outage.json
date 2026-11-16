@@ -1,5 +1,5 @@
 {
-  "description": "Analyst comparison under the outage scenario; ppoProjected skipped (disabled).",
+  "description": "Analyst comparison under the outage scenario; ppoProjected skipped (disabled), with the engine's skipped message unchanged (Q18).",
   "source": "illustrative",
   "derived_from": {
     "kind": "comparison",
@@ -45,6 +45,16 @@
         "simulationDate": "2024-06-14",
         "clientReference": null
       },
+      "state": {
+        "mode": "scenario",
+        "date": "2024-06-14",
+        "scenarioId": "cheapest_venue_outage"
+      },
+      "policies": [
+        "waterfall",
+        "cheapestFeasible",
+        "ppoProjected"
+      ],
       "results": [
         {
           "decisionId": "sha256:9455bec70782714479142448912a81acdd1399772c0f704cebf465d5211cb699",

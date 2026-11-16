@@ -2,6 +2,8 @@ import { createApp } from "./app.js";
 import { ConfigError, loadConfig, type Config } from "./config/config.js";
 import { createDatabaseProbe } from "./db/health.js";
 import { disconnectPrismaClient, getPrismaClient } from "./db/prisma.js";
+import { createPrismaComparisonStore } from "./db/comparisons.js";
+import { createPrismaDashboardRepository } from "./db/dashboard.js";
 import { createPrismaExplanationStore } from "./db/explanations.js";
 import { createPrismaTransactionPersistence } from "./db/transactionPersistence.js";
 import { createPrismaTransactionRepository } from "./db/transactions.js";
@@ -32,6 +34,8 @@ const database = createDatabaseProbe(prisma, logger);
 const transactions = prisma === undefined ? undefined : createPrismaTransactionRepository(prisma);
 const transactionPersistence = prisma === undefined ? undefined : createPrismaTransactionPersistence(prisma);
 const explanations = prisma === undefined ? undefined : createPrismaExplanationStore(prisma);
+const dashboard = prisma === undefined ? undefined : createPrismaDashboardRepository(prisma);
+const comparisons = prisma === undefined ? undefined : createPrismaComparisonStore(prisma);
 // One inference client for health and the routes. Mock mode never calls the
 // inference service; health reports "mock".
 const inferenceClient = createInferenceClient(config.inference, { logger });
@@ -47,6 +51,8 @@ const server = createApp({
   transactions,
   transactionPersistence,
   explanations,
+  dashboard,
+  comparisons,
 }).listen(PORT, HOST);
 
 server.once("listening", () => {

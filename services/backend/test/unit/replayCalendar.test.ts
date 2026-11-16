@@ -4,8 +4,10 @@ import type { AddressInfo } from "node:net";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { createApp } from "../../src/app.js";
 import type { DevUser } from "../../src/config/devTokens.js";
+import { createInferenceCache, VERSION_REFRESH_MS } from "../../src/inferenceClient/cache.js";
 import { createInferenceClient, type InferenceClient } from "../../src/inferenceClient/client.js";
 import { newToken, sha256Hex } from "../helpers/devTokens.js";
+import { engineVersionBody } from "../helpers/version.js";
 import { captureLogger, silentLogger, startServer } from "../helpers/server.js";
 
 // The calendar body is test data shaped after API contract §2.6, not a fixture.
@@ -41,12 +43,15 @@ const users: DevUser[] = [
 ];
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-// A fake inference service.
+// A fake inference service. /v1/version (read first, by the shared cache) is
+// answered by respondVersion, everything else by respond.
 let received: Array<{ method: string; url: string; headers: IncomingHttpHeaders }> = [];
 let respond: (res: ServerResponse) => void;
+let respondVersion: (res: ServerResponse) => void;
 const fake = createServer((req, res) => {
   received.push({ method: req.method ?? "", url: req.url ?? "", headers: req.headers });
-  respond(res);
+  if (req.url === "/v1/version") respondVersion(res);
+  else respond(res);
 });
 let fakeUrl: string;
 
@@ -91,6 +96,7 @@ describe("GET /api/v1/replay/calendar", () => {
   beforeEach(() => {
     received = [];
     respond = (res) => json(res, 200, engineCalendar);
+    respondVersion = (res) => json(res, 200, engineVersionBody());
   });
 
   describe("authentication", () => {
@@ -133,15 +139,21 @@ describe("GET /api/v1/replay/calendar", () => {
       assert.deepEqual(JSON.parse(res.text), { ...appCalendar, futureField: { nestedValue: "keep_me" } });
     });
 
-    it("calls GET /v1/replay/calendar once, forwarding the request ID and no Authorization", async () => {
+    it("calls GET /v1/version (the §5 cache check) then GET /v1/replay/calendar once each, forwarding the request ID and no Authorization", async () => {
       const res = await call(client(), { headers: { ...auth(analystToken), "X-Request-Id": "cal-req-1" } });
       assert.equal(res.headers.get("x-request-id"), "cal-req-1");
-      assert.equal(received.length, 1);
-      assert.equal(received[0]!.method, "GET");
-      assert.equal(received[0]!.url, "/v1/replay/calendar");
-      assert.equal(received[0]!.headers["x-request-id"], "cal-req-1");
-      assert.equal(received[0]!.headers.authorization, undefined);
-      assert.equal(received[0]!.headers.cookie, undefined);
+      assert.deepEqual(
+        received.map((r) => [r.method, r.url]),
+        [
+          ["GET", "/v1/version"],
+          ["GET", "/v1/replay/calendar"],
+        ],
+      );
+      for (const r of received) {
+        assert.equal(r.headers["x-request-id"], "cal-req-1");
+        assert.equal(r.headers.authorization, undefined);
+        assert.equal(r.headers.cookie, undefined);
+      }
     });
 
     it("forwards the generated request ID when the caller sends none", async () => {
@@ -158,7 +170,10 @@ describe("GET /api/v1/replay/calendar", () => {
       });
       assert.equal(res.status, 200);
       assert.deepEqual(JSON.parse(res.text), appCalendar);
-      assert.equal(received[0]!.url, "/v1/replay/calendar");
+      assert.deepEqual(
+        received.map((r) => r.url),
+        ["/v1/version", "/v1/replay/calendar"],
+      );
     });
 
     it("returns a controlled 502 INFERENCE_ERROR when two keys collide, logging no key names", async () => {
@@ -180,6 +195,175 @@ describe("GET /api/v1/replay/calendar", () => {
         { requestId: "collide", path: "/v1/replay/calendar", reason: "key_collision" },
       );
       assert.doesNotMatch(capture.lines.join("\n"), /gapBufferDays|gap_buffer_days/);
+    });
+  });
+
+  describe("cache (§3.1, §5)", () => {
+    // Version bodies with a controllable fingerprint field; each calendar fetch gets a serial.
+    let engineVersion: Record<string, unknown> = engineVersionBody();
+    let calendarSerial = 0;
+    beforeEach(() => {
+      engineVersion = engineVersionBody();
+      calendarSerial = 0;
+      respondVersion = (res) => json(res, 200, engineVersion);
+      respond = (res) => json(res, 200, { ...engineCalendar, note: `serial-${++calendarSerial}` });
+    });
+
+    async function sharedApp() {
+      const clock = { time: 0 };
+      const inferenceClient = client();
+      const inferenceCache = createInferenceCache(inferenceClient, { now: () => clock.time });
+      const server = await startServer(createApp({ logger: silentLogger, users, inferenceClient, inferenceCache }));
+      const get = async () => {
+        const res = await fetch(`${server.baseUrl}/api/v1/replay/calendar`, { headers: auth(viewerToken) });
+        const text = await res.text();
+        return { status: res.status, body: JSON.parse(text) as Record<string, any> };
+      };
+      return { clock, get, close: server.close };
+    }
+    const urls = () => received.map((r) => r.url);
+
+    it("serves the calendar from the cache on the second call", async () => {
+      const app = await sharedApp();
+      try {
+        const first = await app.get();
+        const second = await app.get();
+        assert.equal(first.status, 200);
+        assert.deepEqual(second.body, first.body);
+        assert.equal(second.body.note, "serial-1");
+        assert.deepEqual(urls(), ["/v1/version", "/v1/replay/calendar"]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("re-checks the version after 30 s and keeps the calendar when the fingerprint is unchanged", async () => {
+      const app = await sharedApp();
+      try {
+        await app.get();
+        app.clock.time = VERSION_REFRESH_MS - 1;
+        await app.get();
+        assert.deepEqual(urls(), ["/v1/version", "/v1/replay/calendar"]);
+        app.clock.time = VERSION_REFRESH_MS;
+        assert.equal((await app.get()).body.note, "serial-1");
+        assert.deepEqual(urls(), ["/v1/version", "/v1/replay/calendar", "/v1/version"]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("re-fetches the calendar when the fingerprint changes", async () => {
+      const app = await sharedApp();
+      try {
+        await app.get();
+        engineVersion = engineVersionBody({ engine_version: "0.2.0" });
+        app.clock.time = VERSION_REFRESH_MS;
+        assert.equal((await app.get()).body.note, "serial-2");
+        assert.deepEqual(urls(), ["/v1/version", "/v1/replay/calendar", "/v1/version", "/v1/replay/calendar"]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("serves no cached calendar after a failed version refresh", async () => {
+      const app = await sharedApp();
+      try {
+        await app.get();
+        respondVersion = (res) => json(res, 500, { error: { code: "INTERNAL_ERROR", message: "x" } });
+        app.clock.time = VERSION_REFRESH_MS;
+        const res = await app.get();
+        assert.equal(res.status, 502);
+        assert.equal(res.body.error.code, "INFERENCE_ERROR");
+        assert.deepEqual(urls(), ["/v1/version", "/v1/replay/calendar", "/v1/version"]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("returns 502 for a malformed 200 /v1/version without fetching the calendar, and retries at once", async () => {
+      const app = await sharedApp();
+      try {
+        respondVersion = (res) => json(res, 200, engineVersionBody({ checkpoint: "not-an-object" }));
+        const bad = await app.get();
+        assert.equal(bad.status, 502);
+        assert.equal(bad.body.error.code, "INFERENCE_ERROR");
+        assert.deepEqual(urls(), ["/v1/version"]);
+        respondVersion = (res) => json(res, 200, engineVersion);
+        const good = await app.get();
+        assert.equal(good.status, 200);
+        assert.equal(good.body.note, "serial-1");
+        assert.deepEqual(urls(), ["/v1/version", "/v1/version", "/v1/replay/calendar"]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("serves no cached calendar after a malformed version refresh, and recovers on the next request", async () => {
+      const app = await sharedApp();
+      try {
+        await app.get();
+        app.clock.time = VERSION_REFRESH_MS;
+        respondVersion = (res) => json(res, 200, engineVersionBody({ engine_version: "" }));
+        assert.equal((await app.get()).status, 502);
+        respondVersion = (res) => json(res, 200, engineVersion);
+        const good = await app.get();
+        assert.equal(good.status, 200);
+        assert.equal(good.body.note, "serial-1"); // same fingerprint, so the cached calendar is valid again
+        assert.deepEqual(urls(), ["/v1/version", "/v1/replay/calendar", "/v1/version", "/v1/version"]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("does not cache a failed calendar fetch", async () => {
+      const app = await sharedApp();
+      try {
+        respond = (res) => json(res, 500, { error: { code: "INTERNAL_ERROR", message: "x" } });
+        assert.equal((await app.get()).status, 502);
+        respond = (res) => json(res, 200, engineCalendar);
+        assert.equal((await app.get()).status, 200);
+        assert.deepEqual(urls(), ["/v1/version", "/v1/replay/calendar", "/v1/replay/calendar"]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("shares one version and one calendar fetch between concurrent requests", async () => {
+      const app = await sharedApp();
+      try {
+        const results = await Promise.all([app.get(), app.get(), app.get()]);
+        for (const r of results) assert.equal(r.body.note, "serial-1");
+        assert.deepEqual(urls(), ["/v1/version", "/v1/replay/calendar"]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("caches mock-mode answers too, with no fixtures (a test handler)", async () => {
+      const paths: string[] = [];
+      const mock = createInferenceClient(
+        { url: fakeUrl, mode: "mock", timeoutMs: 1000 },
+        {
+          logger: silentLogger,
+          mockHandler: (request) => {
+            paths.push(request.path);
+            return { status: 200, body: request.path === "/v1/version" ? engineVersion : engineCalendar };
+          },
+        },
+      );
+      // One app (one cache) for both requests.
+      const server = await startServer(createApp({ logger: silentLogger, users, inferenceClient: mock }));
+      try {
+        for (let i = 0; i < 2; i += 1) {
+          const res = await fetch(`${server.baseUrl}/api/v1/replay/calendar`, { headers: auth(viewerToken) });
+          assert.equal(res.status, 200);
+          assert.deepEqual(await res.json(), appCalendar);
+        }
+      } finally {
+        await server.close();
+      }
+      assert.deepEqual(paths, ["/v1/version", "/v1/replay/calendar"]);
+      assert.equal(received.length, 0);
     });
   });
 

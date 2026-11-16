@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import type { RequestHandler } from "express";
 import { authenticatedUser } from "../auth/devAuth.js";
 import type { ExplanationStore, ExplanationTarget } from "../db/explanations.js";
+import type { InferenceCache } from "../inferenceClient/cache.js";
 import type { InferenceClient, JsonObject } from "../inferenceClient/client.js";
 import { inferenceInvalid, inferenceUnavailable, OPT_IN_PASSTHROUGH_CODES } from "../inferenceClient/errors.js";
 import type { Logger } from "../logger.js";
@@ -23,9 +24,9 @@ import { storedRequest, unknownResource, UUID } from "./transactions.js";
 // 5. ppoProjected only (Q17 rules 2-3), from GET /v1/version before /v1/explain:
 //    checkpoint null -> 409 POLICY_DISABLED; checkpoint.sha256 differing from
 //    the decision's stored checkpointSha256 -> 409 DECISION_MISMATCH. So a
-//    decision is never recomputed with another checkpoint. /v1/version is not
-//    cached in the backend yet (§5 caching is unimplemented), so it is read
-//    on each such request.
+//    decision is never recomputed with another checkpoint. /v1/version is
+//    read through the shared cache (§5, cache.ts), as §3.5 specifies; an
+//    engine 409 POLICY_DISABLED after a stale read passes through (step 6).
 // 6. POST /v1/explain with the stored request (the /v1/route body). An engine
 //    409 POLICY_DISABLED passes through (§3.5); other failures map as for
 //    POST /transactions (§3.2). A 200 body that doesn't validate is 502.
@@ -43,6 +44,7 @@ export const DECISION_MISMATCH_MESSAGE =
 export function getTransactionExplanation(
   store: ExplanationStore | undefined,
   client: InferenceClient | undefined,
+  cache: InferenceCache | undefined,
   logger: Logger,
 ): RequestHandler {
   return async (req, res) => {
@@ -67,10 +69,10 @@ export function getTransactionExplanation(
     if (!(await store.userExists(user.userId))) {
       throw new Error("The authenticated user has no User row; run the development-user seed");
     }
-    if (client === undefined) throw inferenceUnavailable("not_configured");
+    if (client === undefined || cache === undefined) throw inferenceUnavailable("not_configured");
 
     if (target.requestedPolicy === "ppoProjected") {
-      const sha256 = enabledCheckpointSha256(await client.get("/v1/version", { requestId: req.requestId }));
+      const sha256 = enabledCheckpointSha256(await cache.version(req.requestId));
       if (sha256 === null) {
         const disabled = OPT_IN_PASSTHROUGH_CODES.POLICY_DISABLED;
         throw new ApiError(disabled.status, "POLICY_DISABLED", disabled.message);

@@ -31,7 +31,7 @@ describe("404 JSON responses (real app)", () => {
     ["GET", "/api/v1/does-not-exist"],
     ["POST", "/api/v1/does-not-exist"],
     ["DELETE", "/api/v1/health/extra"],
-    ["GET", "/api/v1/comparisons"], // not implemented yet, so unknown
+    ["GET", "/api/v1/comparisons/x/y"], // nothing below a comparison
     ["GET", "/"],
   ] as const) {
     it(`${method} ${path} returns the NOT_FOUND envelope`, async () => {
@@ -55,12 +55,18 @@ describe("405 METHOD_NOT_ALLOWED (real app, §4)", () => {
   for (const [method, path, allow] of [
     ["POST", "/api/v1/health", "GET, HEAD"],
     ["DELETE", "/api/v1/health", "GET, HEAD"],
+    ["POST", "/api/v1/health/live", "GET, HEAD"],
+    ["PUT", "/api/v1/health/live", "GET, HEAD"],
     ["PUT", "/api/v1/auth/me", "GET, HEAD"],
+    ["POST", "/api/v1/meta", "GET, HEAD"],
+    ["DELETE", "/api/v1/meta", "GET, HEAD"],
     ["POST", "/api/v1/replay/calendar", "GET, HEAD"],
     ["DELETE", "/api/v1/transactions", "GET, HEAD, POST"],
     ["PATCH", "/api/v1/transactions", "GET, HEAD, POST"],
     ["PUT", "/api/v1/transactions", "GET, HEAD, POST"],
     ["OPTIONS", "/api/v1/transactions", "GET, HEAD, POST"],
+    ["GET", "/api/v1/comparisons", "POST"],
+    ["DELETE", "/api/v1/comparisons", "POST"],
   ] as const) {
     it(`${method} ${path} -> 405 with Allow: ${allow}`, async () => {
       const res = await fetch(`${server.baseUrl}${path}`, { method, headers: { "X-Request-Id": "mna-1" } });

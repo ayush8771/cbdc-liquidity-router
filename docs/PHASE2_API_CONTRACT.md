@@ -30,6 +30,13 @@
   - unknown enum values handled at run time (§1).
 - **Fixtures corrected:** risk fallback on every 2024-06-14 decision, a PPO-enabled meta fixture, a dashboard derived from the stored transactions, and new health and validation fixtures.
 
+**Owner decision Q18 (comparisons, Ayush; applied 16 November 2026):**
+- policy aliases `baseline` (= `waterfall`) and `ruleBased` (= `cheapestFeasible`) in comparison requests; only canonical names are stored and returned;
+- the default for an omitted `policies`: `waterfall`, `cheapestFeasible`, `ppoProjected` for an analyst, the same without `ppoProjected` for anyone else; results follow the policy order;
+- the record returns the effective `state` and the resolved `policies`;
+- `skipped[].message` is the engine's text, unchanged;
+- the engine alone decides PPO availability in a comparison; the backend makes no checkpoint check of its own (§3.6).
+
 **Changes in v0.4:**
 - **Errors (§4):**
   - new codes `METHOD_NOT_ALLOWED` (405, with `Allow`) and `TRANSACTION_FAILED` (409);
@@ -830,17 +837,40 @@ Returns the camelCase mapping of the `/v1/explain` response, plus `"transactionI
 
 ### 3.6 `POST /api/v1/comparisons`
 
-The request is the same as §3.2, with `"policies": [...]` in place of `policy`. It is strict in the same way, and `policies: null` is rejected. A viewer who includes `ppoProjected` gets `403 FORBIDDEN_POLICY`. If a viewer omits `policies`, the backend sends only the non-experimental policies. A disabled policy is reported in `skipped`, never as an error. The response is HTTP 201 with `{"id", "createdAt", "createdBy", "transaction", "results": [decision…], "skipped": [...], "sameState": true, "note": "..."}`.
+The request is the same as §3.2, with `"policies": [...]` in place of `policy`. It is strict in the same way, and `policies: null` is rejected. The response is HTTP 201 with:
+
+```json
+{"id", "createdAt", "createdBy", "transaction", "state", "policies", "results": [decision…], "skipped": [...], "sameState": true, "note": "..."}
+```
+
+`GET /api/v1/comparisons/:id` returns the same body (200), rebuilt from the stored record without calling inference. Unknown and non-UUID IDs return `404 NOT_FOUND`, as for transactions (§3.4). Any authenticated user may read any comparison (§3.1).
+
+**Policies** (owner decision, Q18):
+- Each entry of `policies` is a canonical policy name or a comparison alias:
+  - `baseline` means `waterfall`;
+  - `ruleBased` means `cheapestFeasible`.
+- Aliases are mapped in place, so the caller's order is kept. Only canonical names are sent to the engine, stored and returned; an alias never appears in a record.
+- Two entries that name the same policy, such as `baseline` and `waterfall`, are a `422 VALIDATION_ERROR`, like any duplicate.
+- An omitted `policies` means, in this order:
+  - for an `analyst`: `waterfall`, `cheapestFeasible`, `ppoProjected`;
+  - for anyone else: `waterfall`, `cheapestFeasible`. A viewer who omits `policies` gets only the non-experimental policies.
+- A viewer who lists `ppoProjected` gets `403 FORBIDDEN_POLICY`, before validation, inference and persistence. No alias names `ppoProjected`.
+- The backend always sends the resolved list to `/v1/compare`, so the engine's own default (§2.9) never applies.
+- `policies` in the record is that resolved canonical list. `results` and `skipped` follow its order, whatever order the engine answers in.
+
+**PPO availability.** The engine alone decides whether `ppo_projected` can run (§7): a disabled or unavailable policy comes back in `skipped`, and the comparison is still saved. The backend makes no `/v1/version` call and no checkpoint check of its own for a comparison. It never substitutes or retries a policy: a result for any policy it didn't send makes the response invalid (`502 INFERENCE_ERROR`), so there is no fallback to raw PPO.
+
+**`skipped`.** Each entry is `{"policy", "code", "message"}`, with `policy` mapped to its app name. `message` is the engine's text, **unchanged** (owner decision, Q18). A skipped entry is part of a 201, not an error, so the §4 rule that app error messages are the backend's fixed text doesn't apply to it. The documented codes are `POLICY_DISABLED` and `POLICY_UNAVAILABLE_FOR_STATE`. Like any enum, the list is closed in CI, and at run time an undocumented code is passed through and treated generically (§1).
+
+**`state`** is the effective state the comparison used (owner decision, Q18): the validated request state, with an explicit venue's omitted `history` written as `null`. Every result's provenance must confirm it: `state_mode`, `state_date` (the date, or the reference date in explicit mode) and `scenario_id` (null outside scenario mode). Otherwise the engine response is invalid (`502 INFERENCE_ERROR`) and nothing is saved. When every policy is skipped, no result confirms it, and it is the validated request state.
 
 **A comparison is an independent record.**
 - It creates no transaction record, has no `transactionId`, and never appears in `GET /api/v1/transactions` or the dashboard.
-- It stores its own transaction fields, the state spec, the policy list sent to the engine, its creator and the verbatim `/v1/compare` response (§6.3).
+- It stores its own transaction fields, the effective state (`stateSpec`), the resolved canonical policy list, its creator and the verbatim `/v1/compare` response (§6.3).
+- The record and its audit row are written in one database transaction (§6.2).
 - `transaction.corridor` is null only if every policy was skipped. In that case no result confirms the corridor, and it is not derived.
-- A comparison is persisted **only** when `/v1/compare` returns 200, including a 200 in which some or all policies are skipped. On any error nothing is saved, and the §3.2 error is returned with no `transactionId` (confirmed by Dev B).
-- Not yet defined (§10, Q18):
-  - which list the backend sends when an **analyst** omits `policies`;
-  - the order of `results`;
-  - whether the record echoes `state` and `policies`. Both are stored, but not returned.
+- A comparison is persisted **only** when `/v1/compare` returns 200, including a 200 in which some or all policies are skipped. On any error nothing is saved, and the §3.2 error is returned with no `transactionId` (confirmed by Dev B). An engine `409 POLICY_DISABLED` for `/v1/compare` breaks §2.9, so the app returns `502 INFERENCE_ERROR` for it.
+- The same request sent twice creates two records (§6.1: records are append-only).
 
 ### 3.7 `GET /api/v1/state`
 
@@ -1014,7 +1044,7 @@ Each transaction request (including the full state spec, so explicit states can 
 | `TransactionRequest` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor` (null when `failed`), `amountUsd`, `stateMode`, `stateSpec` (JSON), `simulationDate`, `requestedPolicy`, `status`, `failureCode` (null unless `status` is `failed`; needs a new migration), `clientReference` (≤ 200 characters) |
 | `RoutingDecision` | `id`, `transactionId`, `decisionId`, `policy`, `policyStatus`, `allowed`, `completed`, `completionRatio`, `executedUsd`, `unroutedEnvUsd`, `unroutedAmountBasedUsd`, `rewardEnv`, `rewardAmountBased`, `valuesProvenance`, `stateFrameSha256`, `checkpointSha256`, `knowledgeSha256`, `gitCommit`, `engineResponse` (JSON) |
 | `Allocation` | `id`, `decisionId`, `slot`, `bridgeUid`, `shareRequested`, `amountRequestedUsd`, `amountExecutedUsd`, `amountClippedUsd`, `liquidityUsd`, `congestion`, `risk`, `shareBeforeProjection` |
-| `Comparison` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor`, `amountUsd`, `simulationDate`, `clientReference`, `stateMode`, `stateSpec` (JSON), `policies`, `engineResponse` (JSON). An independent record: no `TransactionRequest` is created, and there is no `transactionId`. |
+| `Comparison` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor`, `amountUsd`, `simulationDate`, `clientReference`, `stateMode`, `stateSpec` (JSON), `policies`, `engineResponse` (JSON). An independent record: no `TransactionRequest` is created, and there is no `transactionId`. `stateSpec` is the effective state and `policies` the resolved canonical list, in order; both are returned as `state` and `policies` (§3.6, Q18). |
 | `Explanation` | `id`, `decisionId`, `engineResponse` (JSON), `createdAt` |
 | `AuditLog` | `id`, `at`, `userId`, `action`, `requestId`, `entityType`, `entityId`, `outcome` |
 
@@ -1113,7 +1143,7 @@ These are **requirements** that Dev A's inference service and its tests must mee
 
 ## 10. Open decisions (v0.4 revision)
 
-Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A3), Q12 (R5), Q13, Q15, Q17, Q21 (A2), Q3a and Q9a, and the corrections R1–R6. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
+Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A3), Q12 (R5), Q13, Q15, Q17, Q18 (comparisons, §3.6), Q21 (A2), Q3a and Q9a, and the corrections R1–R6. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
 
 **Blocking: needed before the dependent implementation lands**
 
@@ -1127,6 +1157,5 @@ Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A
 |---|---|---|---|
 | Q11a | A non-UUID `:id`: `404 NOT_FOUND` or `422 VALIDATION_ERROR`? | Not implemented yet | Anvesh |
 | Q14 | Is `405` checked before or after authentication in the app? | The fixtures send a token, so they don't depend on it | Anvesh |
-| Q18 | Comparisons: the analyst default for an omitted `policies`, the order of `results`, and whether the record echoes `state` and `policies` | Both are already persisted (§6.3) | Anvesh and Varshini |
 | F1 | **Phase 1 cost-baseline unit** (a technical finding, not a Phase 2 contract change). `real_cost_baseline` looks like percentage points but is used as a fraction in the reward. Any correction would change Phase 1 rewards, so it needs a separately reviewed and versioned change. Phase 2 passes the value through unchanged | Evidence and the open points: `docs/TEAM_REVIEW_RESOLUTION.md` §14 | Ayush |
 | Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback | Nisarga, Anvesh, Varshini |

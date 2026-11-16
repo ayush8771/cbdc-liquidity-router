@@ -9,12 +9,17 @@ Checks, in order:
      definitions of §2.8 (including the allocation invariant, the C14 warning
      rule and regulatory rejections), policy defaults, compare and explain
      rules (§2.9, §2.10), decision_id stability across fixtures, failed
-     transaction records (§3.2–§3.4), 405 responses with Allow (§4), health
+     transaction records (§3.2–§3.4), comparison records (§3.6: policy
+     order, coverage, effective state), 405 responses with Allow (§4), health
      readiness (§3.9), the risk fallback and state-view warnings (§2.5, §2.8),
      and dashboard totals derived from the stored transactions (§3.8).
   4. App fixtures marked `derived_from` are the field-for-field camelCase
      mapping of their inference fixture (§3.2), with no recomputation. Error
      messages are free text: a passthrough must keep the code and status only.
+     A comparison also returns the engine request's state and policies, its
+     results and skipped in that policy order, and the engine's skipped
+     messages unchanged; its app request maps to the engine request through
+     the comparison aliases and the role default (§3.6, Q18).
   5. Coverage: every operation has a success fixture, and every error code the
      API raises has at least one fixture.
   6. No real-looking bearer token appears in any fixture.
@@ -47,6 +52,13 @@ SPEC_FILES = {"inference": "inference.v1.yaml", "app": "app.v1.yaml"}
 POLICY_TO_APP = {"cheapest_feasible": "cheapestFeasible", "ppo_projected": "ppoProjected"}
 MODE_TO_APP = {"historical_replay": "historicalReplay"}
 POLICY_STATUS = {"waterfall": "default", "cheapest_feasible": "baseline", "ppo_projected": "experimental"}
+APP_POLICIES = ("waterfall", "cheapestFeasible", "ppoProjected")
+# Comparison-only aliases (§3.6, Q18): accepted in a request, never stored or returned.
+COMPARISON_ALIASES = {"baseline": "waterfall", "ruleBased": "cheapestFeasible"}
+# The policies compared when a request omits `policies` (§3.6, Q18), in result order, by role.
+COMPARISON_DEFAULTS = {"analyst": ["waterfall", "cheapestFeasible", "ppoProjected"],
+                       "viewer": ["waterfall", "cheapestFeasible"]}
+MOCK_TOKEN_ROLES = {"Bearer mock-analyst": "analyst", "Bearer mock-viewer": "viewer"}
 VALUES_PROVENANCE = {"historical_replay": "synthetic_simulation", "scenario": "synthetic_scenario",
                      "explicit": "user_supplied_synthetic"}
 
@@ -488,6 +500,8 @@ class Checker:
             elif template == "/api/v1/transactions" and "items" in body:
                 for item in body["items"]:
                     self.check_summary(rel, item)
+            elif template in ("/api/v1/comparisons", "/api/v1/comparisons/{id}"):
+                self.check_comparison_record(rel, body)
             return
         if template == "/v1/state":
             codes = [w["code"] for w in body["warnings"]]
@@ -516,6 +530,29 @@ class Checker:
             self.fail(rel, "a failed transaction's corridor must be null; it is never derived (§3.2)")
         if failed and body["failure"] is not None:
             self.failed_records[body["id"]] = (body["failure"], rel)
+
+    def check_comparison_record(self, rel, body) -> None:
+        """§3.6, Q18: results and skipped cover the canonical policies exactly, in their order, on the state returned."""
+        policies = body["policies"]
+        ran = [r["policy"] for r in body["results"]]
+        skipped = [s["policy"] for s in body["skipped"]]
+        if set(ran) & set(skipped):
+            self.fail(rel, "a policy is both in results and in skipped")
+        if sorted(ran + skipped) != sorted(policies):
+            self.fail(rel, "results + skipped must cover exactly the record's policies")
+        for name, listed in (("results", ran), ("skipped", skipped)):
+            if listed != [p for p in policies if p in listed]:
+                self.fail(rel, f"{name} must follow the order of policies (Q18)")
+        if (body["transaction"]["corridor"] is None) != (not body["results"]):
+            self.fail(rel, "transaction.corridor is null exactly when every policy was skipped (§3.6)")
+        state = body["state"]
+        state_date = state.get("date") or state.get("referenceDate")
+        if body["transaction"]["simulationDate"] != state_date:
+            self.fail(rel, "transaction.simulationDate must be the state's date (§2.8)")
+        for r in body["results"]:
+            prov = r["provenance"]
+            if (prov["stateMode"], prov["stateDate"], prov["scenarioId"]) != (state["mode"], state_date, state.get("scenarioId")):
+                self.fail(rel, f"result {r['policy']}: provenance does not confirm the record's state (Q18)")
 
     def check_summary(self, rel, item) -> None:
         derived = ("corridor", "policyStatus", "allowed", "completed", "completionRatio", "executedUsd",
@@ -840,11 +877,32 @@ class Checker:
                         "decision": to_app({k: v for k, v in eng_body.items() if k != "transaction"})}
             self.check_request_mapping(rel, fx["request"].get("body"), src["request"]["body"], fx["request"]["method"])
         elif kind == "comparison":
+            eng_req = src["request"]["body"]
+            if "policies" not in eng_req:
+                # The backend always sends the resolved list (§3.6, Q18), never the engine's own default.
+                self.fail(rel, f"{src_rel}: a comparison's engine request must list its policies")
+                return
+            policies = to_app(eng_req["policies"], "policies")
+            order = {p: i for i, p in enumerate(policies)}
+            in_order = lambda entries: sorted(entries, key=lambda e: order.get(e["policy"], len(order)))  # noqa: E731
+            if eng_body["results"]:
+                transaction = to_app(eng_body["results"][0]["transaction"])
+            else:  # every policy skipped: the request's fields, corridor null (§3.6)
+                tx = eng_req["transaction"]
+                transaction = {"senderCountry": tx["sender_country"], "receiverCountry": tx["receiver_country"],
+                               "amountUsd": tx["amount_usd"], "corridor": None,
+                               "simulationDate": eng_req["state"].get("date") or eng_req["state"].get("reference_date"),
+                               "clientReference": tx.get("client_reference")}
             expected = {**{k: app_body.get(k) for k in ("id", "createdAt", "createdBy")},
-                        "transaction": to_app(eng_body["results"][0]["transaction"]),
-                        "results": [to_app({k: v for k, v in r.items() if k != "transaction"}) for r in eng_body["results"]],
-                        "skipped": to_app(eng_body["skipped"]), "sameState": eng_body["same_state"], "note": eng_body["note"]}
-            self.check_request_mapping(rel, fx["request"].get("body"), src["request"]["body"], fx["request"]["method"])
+                        "transaction": transaction,
+                        "state": to_app(eng_req["state"]),
+                        "policies": policies,
+                        "results": in_order([to_app({k: v for k, v in r.items() if k != "transaction"})
+                                             for r in eng_body["results"]]),
+                        # The engine's messages, unchanged (Q18).
+                        "skipped": in_order(to_app(eng_body["skipped"])),
+                        "sameState": eng_body["same_state"], "note": eng_body["note"]}
+            self.check_comparison_request(rel, fx, eng_req, policies)
         elif kind == "explanation":
             expected = {"transactionId": app_body.get("transactionId"), **to_app(eng_body)}
         elif kind == "error":
@@ -858,6 +916,26 @@ class Checker:
             return
         if app_body != expected:
             self.fail(rel, f"not the field-for-field camelCase mapping of {src_rel}: {first_diff(app_body, expected)}")
+
+    def check_comparison_request(self, rel, fx, eng_req, policies) -> None:
+        """§3.6, Q18: aliases become canonical names in place; an omitted list is the caller's role default."""
+        app_req = fx["request"].get("body")
+        if fx["request"]["method"] != "POST" or app_req is None:
+            return
+        if "policies" in app_req:
+            names = [COMPARISON_ALIASES.get(p, p) for p in app_req["policies"]]
+            if any(p not in APP_POLICIES for p in names) or len(set(names)) != len(names):
+                self.fail(rel, "comparison policies must be distinct canonical names or aliases")
+        else:
+            role = MOCK_TOKEN_ROLES.get(fx["request"].get("headers", {}).get("Authorization"))
+            if role is None:
+                self.fail(rel, "a comparison that omits policies needs a mock-analyst or mock-viewer token")
+                return
+            names = COMPARISON_DEFAULTS[role]
+        if names != policies:
+            self.fail(rel, f"app request policies resolve to {names}, but the engine was sent {policies}")
+        self.check_request_mapping(rel, {**{k: v for k, v in app_req.items() if k != "policies"}, "policies": names},
+                                   eng_req, "POST")
 
     def check_request_mapping(self, rel, app_req, eng_req, method) -> None:
         if method != "POST" or app_req is None:

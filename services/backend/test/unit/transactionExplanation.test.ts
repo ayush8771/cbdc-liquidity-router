@@ -5,8 +5,10 @@ import { createApp } from "../../src/app.js";
 import type { DevUser } from "../../src/config/devTokens.js";
 import type { ExplanationStore, ExplanationTarget, NewExplanation } from "../../src/db/explanations.js";
 import { createInferenceClient, type InferenceRequest, type MockResponse } from "../../src/inferenceClient/client.js";
+import { createInferenceCache, VERSION_REFRESH_MS } from "../../src/inferenceClient/cache.js";
 import { DECISION_MISMATCH_MESSAGE, TRANSACTION_FAILED_MESSAGE } from "../../src/routes/explanations.js";
 import { newToken, sha256Hex } from "../helpers/devTokens.js";
+import { engineVersionBody } from "../helpers/version.js";
 import { captureLogger, silentLogger, startServer } from "../helpers/server.js";
 import { appExplanation, engineError, engineExplainResponse } from "../helpers/transactions.js";
 
@@ -238,7 +240,7 @@ describe("GET /api/v1/transactions/:id/explanation: stored explanation", () => {
     const { store, saves } = fakeStore([ppoTarget({ engineResponse: stored })]);
     const res = await request(PPO_ID, {
       store,
-      answers: { "/v1/version": { status: 200, body: { checkpoint: null } } },
+      answers: { "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: null }) } },
     });
     assert.equal(res.status, 200);
     assert.equal(res.body!.policy, "ppoProjected");
@@ -312,7 +314,7 @@ describe("GET /api/v1/transactions/:id/explanation: DECISION_MISMATCH", () => {
     const { store, saves } = fakeStore([ppoTarget()]);
     const res = await request(PPO_ID, {
       store,
-      answers: { "/v1/version": { status: 200, body: { checkpoint: { sha256: "b".repeat(64) } } } },
+      answers: { "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { sha256: "b".repeat(64) } }) } },
     });
     assertError(res, 409, "DECISION_MISMATCH");
     assert.deepEqual(res.calls.map((c) => c.path), ["/v1/version"]);
@@ -324,7 +326,7 @@ describe("GET /api/v1/transactions/:id/explanation: DECISION_MISMATCH", () => {
     const res = await request(PPO_ID, {
       store,
       answers: {
-        "/v1/version": { status: 200, body: { checkpoint: { checkpoint_id: "c", sha256: CHECKPOINT } } },
+        "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { checkpoint_id: "c", sha256: CHECKPOINT } }) },
         "/v1/explain": { status: 200, body: engineExplainResponse({ policy: "ppo_projected" }) },
       },
     });
@@ -339,7 +341,7 @@ describe("GET /api/v1/transactions/:id/explanation: DECISION_MISMATCH", () => {
 describe("GET /api/v1/transactions/:id/explanation: POLICY_DISABLED", () => {
   it("returns 409 when no checkpoint is enabled, without calling /v1/explain (Q17 rule 2)", async () => {
     const { store, saves } = fakeStore([ppoTarget()]);
-    const res = await request(PPO_ID, { store, answers: { "/v1/version": { status: 200, body: { checkpoint: null } } } });
+    const res = await request(PPO_ID, { store, answers: { "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: null }) } } });
     assertError(res, 409, "POLICY_DISABLED");
     assert.equal(res.body!.error.message, "The experimental PPO policy has no approved checkpoint enabled.");
     assert.deepEqual(res.calls.map((c) => c.path), ["/v1/version"]);
@@ -351,7 +353,7 @@ describe("GET /api/v1/transactions/:id/explanation: POLICY_DISABLED", () => {
     const res = await request(PPO_ID, {
       store,
       answers: {
-        "/v1/version": { status: 200, body: { checkpoint: { sha256: CHECKPOINT } } },
+        "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { sha256: CHECKPOINT } }) },
         "/v1/explain": { status: 409, body: engineError("POLICY_DISABLED", "engine-secret-text") },
       },
     });
@@ -374,6 +376,146 @@ describe("GET /api/v1/transactions/:id/explanation: POLICY_DISABLED", () => {
     const { store } = fakeStore([routedTarget()]);
     const res = await request(ROUTED_ID, { store });
     assert.deepEqual(res.calls.map((c) => c.path), ["/v1/explain"]);
+  });
+});
+
+describe("GET /api/v1/transactions/:id/explanation: shared /v1/version cache (§3.5, §5)", () => {
+  // One app (one cache) across several requests, with a fake clock.
+  async function sharedApp(answers: Answers, store: ExplanationStore) {
+    const { client, calls } = mockClient(answers);
+    const clock = { time: 0 };
+    const inferenceCache = createInferenceCache(client, { now: () => clock.time });
+    const server = await startServer(
+      createApp({ logger: silentLogger, users, inferenceClient: client, inferenceCache, explanations: store }),
+    );
+    const get = async (path: string) => {
+      const res = await fetch(`${server.baseUrl}${path}`, { headers: { Authorization: `Bearer ${analystToken}` } });
+      const text = await res.text();
+      return { status: res.status, body: JSON.parse(text) as Record<string, any> };
+    };
+    return { calls, clock, get, close: server.close };
+  }
+  const versionCalls = (calls: InferenceRequest[]) => calls.filter((c) => c.path === "/v1/version").length;
+  const PPO_PATH = `/api/v1/transactions/${PPO_ID}/explanation`;
+
+  it("reads the checkpoint from the cache: one /v1/version read within 30 s, a fresh one after", async () => {
+    const { store, saves } = fakeStore([ppoTarget()]);
+    const answers: Answers = {
+      "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { sha256: "b".repeat(64) } }) },
+      "/v1/explain": { status: 200, body: engineExplainResponse({ policy: "ppo_projected" }) },
+    };
+    const app = await sharedApp(answers, store);
+    try {
+      assert.equal((await app.get(PPO_PATH)).status, 409);
+      // The checkpoint now matches upstream, but the cached version still says otherwise.
+      answers["/v1/version"] = { status: 200, body: engineVersionBody({ checkpoint: { sha256: CHECKPOINT } }) };
+      app.clock.time = VERSION_REFRESH_MS - 1;
+      const cached = await app.get(PPO_PATH);
+      assert.equal(cached.status, 409);
+      assert.equal(cached.body.error.code, "DECISION_MISMATCH");
+      assert.equal(versionCalls(app.calls), 1);
+      // After 30 s the version is re-read and the decision is explained.
+      app.clock.time = VERSION_REFRESH_MS;
+      const fresh = await app.get(PPO_PATH);
+      assert.equal(fresh.status, 200);
+      assert.equal(versionCalls(app.calls), 2);
+      assert.equal(saves.length, 1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns 409 POLICY_DISABLED from a cached null checkpoint until the refresh", async () => {
+    const { store } = fakeStore([ppoTarget()]);
+    const answers: Answers = {
+      "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: null }) },
+      "/v1/explain": { status: 200, body: engineExplainResponse({ policy: "ppo_projected" }) },
+    };
+    const app = await sharedApp(answers, store);
+    try {
+      assert.equal((await app.get(PPO_PATH)).body.error.code, "POLICY_DISABLED");
+      answers["/v1/version"] = { status: 200, body: engineVersionBody({ checkpoint: { sha256: CHECKPOINT } }) };
+      assert.equal((await app.get(PPO_PATH)).body.error.code, "POLICY_DISABLED");
+      app.clock.time = VERSION_REFRESH_MS;
+      assert.equal((await app.get(PPO_PATH)).status, 200);
+      assert.equal(versionCalls(app.calls), 2);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("passes through an engine 409 POLICY_DISABLED when the cached checkpoint is stale", async () => {
+    const { store, saves } = fakeStore([ppoTarget()]);
+    const answers: Answers = {
+      "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { sha256: CHECKPOINT } }) },
+      "/v1/explain": { status: 409, body: engineError("POLICY_DISABLED", "engine-secret-text") },
+    };
+    const app = await sharedApp(answers, store);
+    try {
+      // Warm the cache, then disable the checkpoint upstream.
+      assert.equal((await app.get(PPO_PATH)).status, 409);
+      answers["/v1/version"] = { status: 200, body: engineVersionBody({ checkpoint: null }) };
+      const res = await app.get(PPO_PATH);
+      assert.equal(res.status, 409);
+      assert.equal(res.body.error.code, "POLICY_DISABLED");
+      assert.equal(versionCalls(app.calls), 1);
+      assert.equal(saves.length, 0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("propagates a failed version refresh instead of using the expired checkpoint", async () => {
+    const { store, saves } = fakeStore([ppoTarget()]);
+    const answers: Answers = { "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { sha256: "b".repeat(64) } }) } };
+    const app = await sharedApp(answers, store);
+    try {
+      assert.equal((await app.get(PPO_PATH)).status, 409);
+      answers["/v1/version"] = undefined; // the mock client then answers 503 INFERENCE_UNAVAILABLE
+      app.clock.time = VERSION_REFRESH_MS;
+      const res = await app.get(PPO_PATH);
+      assert.equal(res.status, 503);
+      assert.equal(res.body.error.code, "INFERENCE_UNAVAILABLE");
+      assert.ok(!app.calls.some((c) => c.path === "/v1/explain"));
+      assert.equal(saves.length, 0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns 502 for a malformed 200 /v1/version without calling /v1/explain, and explains on the next request", async () => {
+    const { store, saves } = fakeStore([ppoTarget()]);
+    const answers: Answers = {
+      "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { sha256: CHECKPOINT }, git_commit: 42 }) },
+      "/v1/explain": { status: 200, body: engineExplainResponse({ policy: "ppo_projected" }) },
+    };
+    const app = await sharedApp(answers, store);
+    try {
+      const bad = await app.get(PPO_PATH);
+      assert.equal(bad.status, 502);
+      assert.equal(bad.body.error.code, "INFERENCE_ERROR");
+      assert.ok(!app.calls.some((c) => c.path === "/v1/explain"));
+      assert.equal(saves.length, 0);
+      answers["/v1/version"] = { status: 200, body: engineVersionBody({ checkpoint: { sha256: CHECKPOINT } }) };
+      const good = await app.get(PPO_PATH);
+      assert.equal(good.status, 200);
+      assert.equal(versionCalls(app.calls), 2);
+      assert.equal(saves.length, 1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("shares the cached version with GET /api/v1/meta", async () => {
+    const { store } = fakeStore([ppoTarget()]);
+    const app = await sharedApp({ "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: null }) } }, store);
+    try {
+      assert.equal((await app.get("/api/v1/meta")).status, 200);
+      assert.equal((await app.get(PPO_PATH)).body.error.code, "POLICY_DISABLED");
+      assert.equal(versionCalls(app.calls), 1);
+    } finally {
+      await app.close();
+    }
   });
 });
 
@@ -437,7 +579,7 @@ describe("GET /api/v1/transactions/:id/explanation: authentication and access", 
       store,
       token: viewerToken,
       answers: {
-        "/v1/version": { status: 200, body: { checkpoint: { sha256: CHECKPOINT } } },
+        "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { sha256: CHECKPOINT } }) },
         "/v1/explain": { status: 200, body: engineExplainResponse({ policy: "ppo_projected" }) },
       },
     });
@@ -541,7 +683,7 @@ describe("GET /api/v1/transactions/:id/explanation: methods", () => {
           method: "HEAD",
           token,
           answers: {
-            "/v1/version": { status: 200, body: { checkpoint: { sha256: CHECKPOINT } } },
+            "/v1/version": { status: 200, body: engineVersionBody({ checkpoint: { sha256: CHECKPOINT } }) },
             "/v1/explain": { status: 200, body: engineExplainResponse() },
           },
         });

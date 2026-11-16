@@ -13,9 +13,21 @@ import type { Prisma } from "@prisma/client";
 //   explanation is stored only on success; entity Explanation. PROVISIONAL
 //   name, like the other action values (schema.prisma).
 
-export const AUDIT_ACTIONS = { transactionCreate: "TRANSACTION_CREATE", explanationCreate: "EXPLANATION_CREATE" } as const;
+// - action COMPARISON_CREATE (§3.6, §6.2): outcome SUCCESS only, since a
+//   comparison is stored only on a /v1/compare 200; entity Comparison.
+//   PROVISIONAL name, like the other action values.
+
+export const AUDIT_ACTIONS = {
+  transactionCreate: "TRANSACTION_CREATE",
+  explanationCreate: "EXPLANATION_CREATE",
+  comparisonCreate: "COMPARISON_CREATE",
+} as const;
 export const AUDIT_OUTCOMES = { success: "SUCCESS", failed: "FAILED" } as const;
-export const AUDIT_ENTITY_TYPES = { transactionRequest: "TransactionRequest", explanation: "Explanation" } as const;
+export const AUDIT_ENTITY_TYPES = {
+  transactionRequest: "TransactionRequest",
+  explanation: "Explanation",
+  comparison: "Comparison",
+} as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 export type AuditOutcome = (typeof AUDIT_OUTCOMES)[keyof typeof AUDIT_OUTCOMES];

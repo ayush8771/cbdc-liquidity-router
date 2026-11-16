@@ -737,3 +737,80 @@ def test_rejection_fixture_shows_both_unrouted_figures():
     totals = body["response"]["body"]["totals"]
     assert totals["unrouted_amount_based_usd"] == totals["amount_usd"] > 0
     assert totals["unrouted_env_usd"] == 0.0 and totals["requested_usd"] == 0.0
+
+
+# ---- comparisons (§3.6, owner decisions Q18) ----
+COMPARISON = "app/comparisons/201_scenario_outage.json"
+
+
+@pytest.mark.parametrize("field", ["state", "policies"])
+def test_comparison_record_without_state_or_policies_is_reported(root, field):
+    edit(root, COMPARISON, lambda d: d["response"]["body"].pop(field))
+    assert_reported(problems(root), "201_scenario_outage", f"'{field}' is a required property")
+
+
+def test_comparison_record_returning_an_alias_is_reported(root):
+    edit(root, COMPARISON, lambda d: d["response"]["body"].update(policies=["baseline", "ruleBased", "ppoProjected"]))
+    assert_reported(problems(root), "201_scenario_outage", "response schema")
+
+
+def test_comparison_skipped_message_must_be_the_engines(root):
+    edit(root, COMPARISON, lambda d: d["response"]["body"]["skipped"][0].update(
+        message="The experimental PPO policy has no approved checkpoint enabled."))
+    assert_reported(problems(root), "201_scenario_outage", "field-for-field", "/skipped/0/message")
+
+
+def test_comparison_results_out_of_policy_order_are_reported(root):
+    edit(root, COMPARISON, lambda d: d["response"]["body"]["results"].reverse())
+    found = problems(root)
+    assert_reported(found, "201_scenario_outage", "results must follow the order of policies")
+    assert_reported(found, "201_scenario_outage", "field-for-field")
+
+
+def test_comparison_record_must_cover_its_policies(root):
+    edit(root, COMPARISON, lambda d: d["response"]["body"].update(policies=["waterfall", "cheapestFeasible"]))
+    assert_reported(problems(root), "201_scenario_outage", "results + skipped must cover exactly")
+
+
+def test_comparison_state_not_confirmed_by_the_results_is_reported(root):
+    edit(root, COMPARISON, lambda d: d["response"]["body"].update(
+        state={"mode": "scenario", "date": "2024-06-14", "scenarioId": "liquidity_minus50"}))
+    found = problems(root)
+    assert_reported(found, "201_scenario_outage", "provenance does not confirm the record's state")
+    assert_reported(found, "201_scenario_outage", "field-for-field", "/state")
+
+
+def test_comparison_corridor_null_with_results_is_reported(root):
+    edit(root, COMPARISON, lambda d: d["response"]["body"]["transaction"].update(corridor=None))
+    assert_reported(problems(root), "201_scenario_outage", "corridor is null exactly when every policy was skipped")
+
+
+def test_comparison_aliases_resolve_in_place(root):
+    # baseline -> waterfall, ruleBased -> cheapestFeasible, in the caller's order.
+    edit(root, COMPARISON, lambda d: d["request"]["body"].update(policies=["baseline", "ruleBased", "ppoProjected"]))
+    assert problems(root) == []
+    edit(root, COMPARISON, lambda d: d["request"]["body"].update(policies=["ruleBased", "baseline", "ppoProjected"]))
+    assert_reported(problems(root), "201_scenario_outage", "resolve to ['cheapestFeasible', 'waterfall', 'ppoProjected']")
+
+
+def test_comparison_alias_and_canonical_duplicate_is_reported(root):
+    edit(root, COMPARISON, lambda d: d["request"]["body"].update(policies=["baseline", "waterfall", "ppoProjected"]))
+    assert_reported(problems(root), "201_scenario_outage", "distinct canonical names or aliases")
+
+
+def test_comparison_default_policies_depend_on_the_role(root):
+    edit(root, COMPARISON, lambda d: d["request"]["body"].pop("policies"))
+    assert problems(root) == []  # analyst: waterfall, cheapestFeasible, ppoProjected
+    edit(root, COMPARISON, lambda d: d["request"]["headers"].update(Authorization="Bearer mock-viewer"))
+    assert_reported(problems(root), "201_scenario_outage", "resolve to ['waterfall', 'cheapestFeasible']")
+
+
+def test_comparison_engine_request_must_list_policies(root):
+    edit(root, "inference/compare/200_scenario_outage_ppo_skipped.json", lambda d: d["request"]["body"].pop("policies"))
+    assert_reported(problems(root), "201_scenario_outage", "must list its policies")
+
+
+def test_comparison_policy_names_and_defaults_match_the_backend():
+    assert check_contracts.COMPARISON_ALIASES == {"baseline": "waterfall", "ruleBased": "cheapestFeasible"}
+    assert check_contracts.COMPARISON_DEFAULTS == {"analyst": ["waterfall", "cheapestFeasible", "ppoProjected"],
+                                                   "viewer": ["waterfall", "cheapestFeasible"]}

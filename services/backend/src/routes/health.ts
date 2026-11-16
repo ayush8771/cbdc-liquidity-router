@@ -36,3 +36,11 @@ export function healthCheck(database: DatabaseProbe, inference: InferenceHealthP
     });
   };
 }
+
+// GET /api/v1/health/live, the liveness check (API contract §3.1, §3.9; path
+// and body final). Public, HTTP 200 with exactly {"status": "ok"} while the
+// process can serve HTTP. It checks no dependency, neither the database nor
+// inference, so a database or inference outage never makes it fail.
+export const livenessCheck: RequestHandler = (_req, res) => {
+  res.status(200).json({ status: "ok" });
+};

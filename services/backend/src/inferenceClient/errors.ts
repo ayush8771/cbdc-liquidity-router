@@ -129,7 +129,8 @@ export const PASSTHROUGH_CODES: Readonly<Record<string, { status: number; messag
 // Without the option they map to 502 INFERENCE_ERROR as above.
 // POLICY_DISABLED: team decision, Step 6E-3, for POST /v1/route from
 // transaction creation, and for POST /v1/explain from the explanation
-// endpoint (§3.5: passed through). Comparisons don't opt in.
+// endpoint (§3.5: passed through). Comparisons don't opt in: /v1/compare
+// reports a disabled policy in `skipped` (§2.9), so the code would be a fault.
 export const OPT_IN_PASSTHROUGH_CODES = Object.freeze({
   POLICY_DISABLED: { status: 409, message: "The experimental PPO policy has no approved checkpoint enabled." },
 });
