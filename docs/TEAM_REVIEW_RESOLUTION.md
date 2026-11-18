@@ -62,7 +62,7 @@ Anvesh's open points, kept explicit:
 - `meanFeeCostPct` source and formula: Q11, blocking.
 - Database failure behaviour beyond readiness, for example a write failing after inference succeeded: **not defined by the contract.** Added to the Dev B follow-ups.
 - Explaining a stored PPO decision after its checkpoint is disabled: **resolved by the owner** (§7).
-- The mock fixture selection rule: Q20.
+- The mock fixture selection rule: Q20. **Deferred** by the owner on 18 November 2026; it concerns mock mode only and does not block integration against a running inference service.
 - Dev A and Dev B implementation issues: §6.
 
 ## 3. Varshini's findings
@@ -73,7 +73,7 @@ Anvesh's open points, kept explicit:
 | 2 | `/state` `scenarioId` rules and mode mismatch; unknown scenario alignment | **Done:** required with `scenario`, rejected with replay; any string accepted and `UNKNOWN_SCENARIO` passed through, the same as on POST (contract §2.5, §3.7; both OpenAPI files) |
 | 3 | Validated request in `TransactionRecord` (retry with the same inputs) | **Not added, non-blocking.** Persistence already supports it (`stateSpec`, `requestedPolicy`, `clientReference`); it's an additive field for owner review |
 | 4 | Sender/receiver and failure code in history summaries | **Not added, non-blocking.** Persisted, so it's additive |
-| 5 | List query behaviour | **Documented** from the backend implementation: `from` inclusive, `to` exclusive, sort enum, the `completed` and `corridor` filters never match failed rows, no `status` filter, unknown query params ignored (contract §3.3; app OpenAPI). A non-UUID `:id` is open (Q11a) |
+| 5 | List query behaviour | **Documented** from the backend implementation: `from` inclusive, `to` exclusive, sort enum, the `completed` and `corridor` filters never match failed rows, no `status` filter, unknown query params ignored (contract §3.3; app OpenAPI). A non-UUID `:id` returns 404 (Q11a, owner decision, 18 November 2026) |
 | 6 | `bridgeUids` on warnings | **Not added, non-blocking:** a contract expansion for owner review |
 | 7 | `meanFeeCostPct` | **Blocking, Q11** |
 | 8 | `state`/`policies` on comparison records, result order, analyst default | **Open, non-blocking (Q18)** |
@@ -104,11 +104,11 @@ Anvesh's open points, kept explicit:
 **Non-blocking:**
 - Q11: the dashboard window defaults. *Ayush, with Anvesh.*
 - Q21: adopt the minimum start budget, and its default. *Ayush.*
-- Q11a: what a non-UUID id returns. *Anvesh.*
+- Q11a: what a non-UUID id returns. *Anvesh.* **Decided 18 November 2026:** 404 (contract §3.4).
 - Q12: the remaining health check values. *Ayush.*
-- Q14: whether 405 is checked before or after auth. *Anvesh.*
+- Q14: whether 405 is checked before or after auth. *Anvesh.* **Decided 18 November 2026:** after authentication, except the public health endpoints (contract §3.0).
 - Q18: comparison defaults and ordering. *Anvesh and Varshini.*
-- Q20: the mock fixture selection rule. *Nisarga, Anvesh and Varshini.*
+- Q20: the mock fixture selection rule. *Nisarga, Anvesh and Varshini.* **Deferred 18 November 2026;** not blocking integration against a running inference service.
 - The additive frontend suggestions C3, C4 and C6 (§3), for owner review.
 - Confirm the canonicalisation details in contract §2.11 (parsed model, venue sort, `history: null`). *Ayush/Dev A, at implementation.*
 
@@ -330,6 +330,14 @@ Prepared from the repository at `feature/phase2-backend` `5414275`, by inspectin
 | Q22 (legacy failed rows, new) | **Open.** A failed row saved before `failureCode` existed returns `failure: null` | `src/routes/transactions.ts` (GET `:id` comment) | A decision by the contract owner (contract §10) |
 | Q20 (mock fixture selection) | **Open.** The backend has no fixture-backed mock: in `INFERENCE_MODE=mock` every inference-backed route returns 503 | `src/server.ts` (no mock handler); `src/inferenceClient/client.ts` | Nisarga, Anvesh, Varshini |
 | F1 (Phase 1 cost unit) | **Open**, unchanged (§14) | — | Ayush |
+
+**Update, 18 November 2026.** The table above is the state at `5414275`. Since then, the owner (Ayush) has decided:
+- **Q11a:** 404 for a non-UUID `:id`, as implemented.
+- **Q14:** authentication before method validation, except the public health endpoints. The backend was changed to match (`src/middleware/methodNotAllowed.ts`, `src/app.ts`), and tests were updated (`test/unit/errors.test.ts` and the per-route method tests).
+- **Q22:** legacy failed rows may return `failure: null`, as implemented; new failed transactions must store their actual failure code.
+- **Q20:** deferred; it does not block live inference integration.
+
+Contract §3.0, §3.4 and §10 record these.
 
 ### 16.2 Dev B follow-ups from §6
 

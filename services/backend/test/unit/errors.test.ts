@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import express from "express";
-import { API_ROUTES, createApp } from "../../src/app.js";
+import { API_ROUTES, createApp, GET_WITHOUT_HEAD, PUBLIC_PATHS } from "../../src/app.js";
+import type { DevUser } from "../../src/config/devTokens.js";
 import { ApiError, errorHandler, notFound } from "../../src/middleware/errors.js";
 import { requestId } from "../../src/middleware/requestId.js";
+import { newToken, sha256Hex } from "../helpers/devTokens.js";
 import { captureLogger, startServer } from "../helpers/server.js";
 
 type Envelope = { error: { code: string; message: string; details: Record<string, unknown>; requestId: string } };
 
 const SECRET = "db-password-and-internal-detail";
+
+const viewerToken = newToken();
+const users: DevUser[] = [
+  { userId: "u-viewer-1", email: "viewer@example.test", role: "viewer", tokenSha256: sha256Hex(viewerToken) },
+];
+const AUTH = { Authorization: `Bearer ${viewerToken}` };
 
 async function json(res: Response): Promise<Envelope> {
   assert.match(res.headers.get("content-type") ?? "", /^application\/json/);
@@ -48,7 +56,7 @@ describe("404 JSON responses (real app)", () => {
 describe("405 METHOD_NOT_ALLOWED (real app, §4)", () => {
   let server: Awaited<ReturnType<typeof startServer>>;
   before(async () => {
-    server = await startServer(createApp({ logger: captureLogger().logger }));
+    server = await startServer(createApp({ logger: captureLogger().logger, users }));
   });
   after(() => server.close());
 
@@ -68,8 +76,8 @@ describe("405 METHOD_NOT_ALLOWED (real app, §4)", () => {
     ["GET", "/api/v1/comparisons", "POST"],
     ["DELETE", "/api/v1/comparisons", "POST"],
   ] as const) {
-    it(`${method} ${path} -> 405 with Allow: ${allow}`, async () => {
-      const res = await fetch(`${server.baseUrl}${path}`, { method, headers: { "X-Request-Id": "mna-1" } });
+    it(`${method} ${path} -> 405 with Allow: ${allow} (authenticated)`, async () => {
+      const res = await fetch(`${server.baseUrl}${path}`, { method, headers: { "X-Request-Id": "mna-1", ...AUTH } });
       assert.equal(res.status, 405);
       assert.equal(res.headers.get("allow"), allow);
       assert.equal(res.headers.get("x-request-id"), "mna-1");
@@ -84,11 +92,6 @@ describe("405 METHOD_NOT_ALLOWED (real app, §4)", () => {
     });
   }
 
-  it("needs no token: 405 is checked before authentication (§10 Q14)", async () => {
-    const res = await fetch(`${server.baseUrl}/api/v1/transactions`, { method: "DELETE" });
-    assert.equal(res.status, 405);
-  });
-
   it("still returns 401, not 405, for a registered method without a token", async () => {
     const res = await fetch(`${server.baseUrl}/api/v1/transactions`);
     assert.equal(res.status, 401);
@@ -96,7 +99,7 @@ describe("405 METHOD_NOT_ALLOWED (real app, §4)", () => {
 
   it("matches as Express does: case-insensitive, trailing slash, query ignored; names the registered path", async () => {
     for (const path of ["/API/V1/Transactions", "/api/v1/transactions/", "/api/v1/transactions?x=<script>"]) {
-      const res = await fetch(`${server.baseUrl}${path}`, { method: "DELETE" });
+      const res = await fetch(`${server.baseUrl}${path}`, { method: "DELETE", headers: AUTH });
       assert.equal(res.status, 405, path);
       const body = await json(res);
       assert.equal(body.error.message, "Method DELETE is not allowed on /api/v1/transactions.", path);
@@ -122,6 +125,90 @@ describe("405 METHOD_NOT_ALLOWED (real app, §4)", () => {
   it("answers HEAD with the GET route, not 405", async () => {
     const res = await fetch(`${server.baseUrl}/api/v1/health`, { method: "HEAD" });
     assert.notEqual(res.status, 405);
+  });
+});
+
+// §10 Q14 (owner decision): authentication comes before method validation,
+// except on the public health paths. Every registered path, every
+// unsupported method, with no, malformed, unknown and valid tokens.
+describe("405 and authentication order (§10 Q14)", () => {
+  let server: Awaited<ReturnType<typeof startServer>>;
+  before(async () => {
+    server = await startServer(createApp({ logger: captureLogger().logger, users }));
+  });
+  after(() => server.close());
+
+  const CANDIDATES = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+  const implicitHead = (route: string, methods: readonly string[]): boolean =>
+    methods.includes("GET") && !GET_WITHOUT_HEAD.includes(route);
+  const unsupported = (route: string, methods: readonly string[]): string[] =>
+    CANDIDATES.filter((m) => !methods.includes(m) && !(m === "HEAD" && implicitHead(route, methods)));
+  const expectedAllow = (route: string, methods: readonly string[]): string =>
+    methods.flatMap((m) => (m === "GET" && implicitHead(route, methods) ? ["GET", "HEAD"] : [m])).join(", ");
+
+  it("the public paths are exactly the two health endpoints", () => {
+    assert.deepEqual([...PUBLIC_PATHS], ["/api/v1/health", "/api/v1/health/live"]);
+  });
+
+  for (const [route, methods] of Object.entries(API_ROUTES)) {
+    const path = route.replace(/:[^/]+/g, "00000000-0000-4000-8000-000000000000");
+    const allow = expectedAllow(route, methods);
+    for (const method of unsupported(route, methods)) {
+      if (PUBLIC_PATHS.includes(route)) {
+        it(`${method} ${route} is public: 405 with Allow: ${allow}, no token needed`, async () => {
+          const res = await fetch(`${server.baseUrl}${path}`, { method });
+          assert.equal(res.status, 405);
+          assert.equal(res.headers.get("allow"), allow);
+        });
+        continue;
+      }
+      for (const [name, headers] of [
+        ["no token", {}],
+        ["a malformed token", { Authorization: "Bearer not-a-token" }],
+        ["an unknown token", { Authorization: `Bearer ${newToken()}` }],
+      ] as const) {
+        it(`${method} ${route} with ${name}: 401, no Allow`, async () => {
+          const res = await fetch(`${server.baseUrl}${path}`, { method, headers: { "X-Request-Id": "q14", ...headers } });
+          assert.equal(res.status, 401);
+          assert.equal(res.headers.get("allow"), null);
+          if (method !== "HEAD") {
+            const body = await json(res);
+            assertEnvelope(body);
+            assert.deepEqual(body.error, {
+              code: "UNAUTHENTICATED",
+              message: "Missing or invalid bearer token.",
+              details: {},
+              requestId: "q14",
+            });
+          }
+        });
+      }
+      it(`${method} ${route} with a valid token: 405 with Allow: ${allow}`, async () => {
+        const res = await fetch(`${server.baseUrl}${path}`, { method, headers: AUTH });
+        assert.equal(res.status, 405);
+        assert.equal(res.headers.get("allow"), allow);
+      });
+    }
+  }
+
+  it("HEAD /api/v1/transactions/:id/explanation: 401 without a token, 405 with Allow: GET with one", async () => {
+    const path = "/api/v1/transactions/00000000-0000-4000-8000-000000000000/explanation";
+    const anon = await fetch(`${server.baseUrl}${path}`, { method: "HEAD" });
+    assert.equal(anon.status, 401);
+    assert.equal(anon.headers.get("allow"), null);
+    const authed = await fetch(`${server.baseUrl}${path}`, { method: "HEAD", headers: AUTH });
+    assert.equal(authed.status, 405);
+    assert.equal(authed.headers.get("allow"), "GET");
+  });
+
+  it("an unknown path is still 404 with or without a token, never 401 or 405", async () => {
+    for (const headers of [{}, AUTH]) {
+      for (const method of ["GET", "DELETE"]) {
+        const res = await fetch(`${server.baseUrl}/api/v1/nope`, { method, headers });
+        assert.equal(res.status, 404, method);
+        assert.equal(res.headers.get("allow"), null);
+      }
+    }
   });
 });
 

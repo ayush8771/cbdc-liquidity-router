@@ -242,7 +242,7 @@ describe("GET /api/v1/transactions/:id: failed", () => {
     });
   });
 
-  it("returns failure: null for a historical failed row with no failureCode, inventing nothing (interim)", async () => {
+  it("returns failure: null for a historical failed row with no failureCode, inventing nothing (Q22)", async () => {
     const { repository } = fakeRepository([failedRow(null, { clientReference: "old-1" })]);
     const { res, body } = await get(`/api/v1/transactions/${FAILED_ID}`, { repository });
     assert.equal(res.status, 200);

@@ -75,6 +75,9 @@ export const API_ROUTES: RouteMethods = Object.freeze({
   "/api/v1/dashboard/summary": ["GET"],
 });
 
+/** Registered paths that need no token (§3.0, §3.9), including for their 405s. */
+export const PUBLIC_PATHS: readonly string[] = Object.freeze(["/api/v1/health", "/api/v1/health/live"]);
+
 /**
  * GET paths where HEAD is 405 instead of an implicit GET. The explanation GET
  * may call inference and store an Explanation, so HEAD must never run it.
@@ -117,8 +120,9 @@ export function createApp(options: AppOptions = {}): Express {
   );
   app.get("/api/v1/transactions/:id", authenticated, getTransaction(options.transactions, logger));
   // Before the GET route, so Express never answers this HEAD with the GET
-  // handler. Like every 405, it runs before authentication (§10 Q14).
-  app.head("/api/v1/transactions/:id/explanation", () => {
+  // handler. Authenticated first, like every protected 405 (§10 Q14): no
+  // token is 401, a valid token is 405.
+  app.head("/api/v1/transactions/:id/explanation", authenticated, () => {
     throw methodNotAllowedError("HEAD", "/api/v1/transactions/:id/explanation", "GET");
   });
   app.get(
@@ -139,7 +143,15 @@ export function createApp(options: AppOptions = {}): Express {
   // so browsers send no preflight. A future CORS middleware must be mounted
   // before the routes and this handler, and answer preflights itself;
   // otherwise every preflight would get this 405.
-  app.use(methodNotAllowed(API_ROUTES, { getWithoutHead: GET_WITHOUT_HEAD }));
+  // Protected paths authenticate first (§10 Q14): 401 without a valid token,
+  // 405 with one. The health paths stay public: 405 with no token.
+  app.use(
+    methodNotAllowed(API_ROUTES, {
+      getWithoutHead: GET_WITHOUT_HEAD,
+      authenticate: authenticated,
+      publicPaths: PUBLIC_PATHS,
+    }),
+  );
   app.use(notFound);
   app.use(errorHandler(logger));
 

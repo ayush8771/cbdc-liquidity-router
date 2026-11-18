@@ -171,7 +171,7 @@ export function comparisonBody(fields: {
 //   policies: a viewer reads one that compared ppoProjected too
 //   (FORBIDDEN_POLICY is about requesting a policy; nothing is requested here).
 // - :id must be UUID syntax, any version and either case. Anything else is
-//   404 NOT_FOUND, exactly like an unknown UUID (the Q11a team decision used
+//   404 NOT_FOUND, exactly like an unknown UUID (the Q11a owner decision used
 //   for GET /transactions/:id), checked before the database is touched.
 // - Rebuilt from the stored row alone: its columns, stateSpec, policies and
 //   the verbatim engineResponse, mapped and confirmed as the POST did it.

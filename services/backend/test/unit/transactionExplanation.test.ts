@@ -656,10 +656,13 @@ describe("GET /api/v1/transactions/:id/explanation: configuration and database f
 });
 
 describe("GET /api/v1/transactions/:id/explanation: methods", () => {
-  it("returns 405 with Allow: GET for other methods, before auth and without a lookup", async () => {
+  it("returns 401 without a token and 405 with Allow: GET with one for other methods (§10 Q14), without a lookup", async () => {
     for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
       const { store, lookups } = fakeStore([routedTarget()]);
-      const res = await request(ROUTED_ID, { store, method, token: null });
+      const anon = await request(ROUTED_ID, { store, method, token: null });
+      assertError(anon, 401, "UNAUTHENTICATED");
+      assert.equal(anon.headers.get("allow"), null, method);
+      const res = await request(ROUTED_ID, { store, method, token: analystToken });
       assertError(res, 405, "METHOD_NOT_ALLOWED");
       assert.equal(res.headers.get("allow"), "GET", method);
       assert.equal(res.body!.error.message, `Method ${method} is not allowed on /api/v1/transactions/:id/explanation.`);
@@ -675,9 +678,10 @@ describe("GET /api/v1/transactions/:id/explanation: methods", () => {
     })],
     ["a stored-less ppoProjected decision", ppoTarget()],
   ] as const) {
-    it(`returns 405 with Allow: GET for HEAD with ${name}, without inference, lookup or writes`, async () => {
+    it(`returns 405 with Allow: GET for HEAD with ${name} (401 without a token), without inference, lookup or writes`, async () => {
       const { store, lookups, saves, stored } = fakeStore([target]);
       for (const token of [analystToken, null]) {
+        const expected = token === null ? { status: 401, allow: null } : { status: 405, allow: "GET" };
         const res = await request(target.id, {
           store,
           method: "HEAD",
@@ -687,8 +691,8 @@ describe("GET /api/v1/transactions/:id/explanation: methods", () => {
             "/v1/explain": { status: 200, body: engineExplainResponse() },
           },
         });
-        assert.equal(res.status, 405);
-        assert.equal(res.headers.get("allow"), "GET");
+        assert.equal(res.status, expected.status);
+        assert.equal(res.headers.get("allow"), expected.allow);
         assert.equal(res.text, "");
         assert.deepEqual(res.calls, []);
       }
@@ -715,7 +719,11 @@ describe("GET /api/v1/transactions/:id/explanation: methods", () => {
         headers: { Authorization: `Bearer ${analystToken}` },
       });
       assert.notEqual(res.status, 405);
-      const del = await fetch(`${server.baseUrl}/api/v1/transactions/${ROUTED_ID}`, { method: "DELETE" });
+      const del = await fetch(`${server.baseUrl}/api/v1/transactions/${ROUTED_ID}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${analystToken}` },
+      });
+      assert.equal(del.status, 405);
       assert.equal(del.headers.get("allow"), "GET, HEAD");
     } finally {
       await server.close();

@@ -76,15 +76,18 @@ Details: `services/backend/README.md`.
 - **Docker:** the backend `Dockerfile`, and a configurable bind host for containers (arch §7.3).
 - **Response-size limit:** a limit on inference responses, which waits for expected sizes from Dev A.
 
+### Decided on 18 November 2026 (owner decisions, contract §10)
+
+- **Q11a:** a non-UUID `:id` returns 404 on the transaction, explanation and comparison detail routes. Already implemented; unchanged.
+- **Q22:** legacy failed rows may return `failure: null`; new failed transactions store their actual failure code. Already implemented; unchanged.
+- **Q14:** authentication before method validation, except the public health endpoints. The backend was changed to match: an unauthenticated unsupported method is now 401, an authenticated one 405 with `Allow`. Unit tests pass under Node 24.7.0, outside the `engines` range; the change is not yet committed or run under Node 20.
+
 ### Blocked or awaiting decision (Dev B)
 
 | Item | Waiting on |
 |---|---|
-| Fixture-backed mock mode: in `INFERENCE_MODE=mock`, every inference-backed route returns 503 today | Q20 decision (Nisarga, Anvesh, Varshini) |
+| Fixture-backed mock mode: in `INFERENCE_MODE=mock`, every inference-backed route returns 503 today | Q20 decision (Nisarga, Anvesh, Varshini); deferred by the owner on 18 November 2026, not blocking live inference integration |
 | Calling the real inference service | Dev A's service on this integration line, and `infra/compose.yaml` (Dev D) |
-| Q11a (non-UUID `:id`; implemented as 404) | Recorded decision by Anvesh |
-| Q14 (405 before or after auth; implemented before) | Recorded decision by Anvesh |
-| Q22 (legacy failed rows return `failure: null`) | Decision by the contract owner (Ayush) |
 | Caller-facing behaviour when a database write fails after inference succeeded (implemented as 500) | Not defined by the contract (`TEAM_REVIEW_RESOLUTION.md` §6) |
 | `AuditLog` `action` and `outcome` values (provisional in the schema) | Team agreement |
 
@@ -118,10 +121,10 @@ Details: `services/backend/README.md`.
 ## Next tasks, in dependency order
 
 1. **Verify the backend against PostgreSQL at the committed `5414275`** (Dev B; **verification only**: no implementation or test changes are needed). A pre-commit run reported 1543 passed, but no run of the commit is recorded. Run `npx prisma migrate deploy` and `npm test` with `CBDC_TEST_DATABASE_URL` on a disposable `*_test` database, then record the commit, date, PostgreSQL version and summary lines. It needs no decision and no other developer.
-2. **Contract housekeeping** (Anvesh, Ayush): record decisions for Q11a and Q14 (Anvesh) and Q22 (Ayush), and confirm the Q18 wording in contract §3.6 during branch review.
+2. **Contract housekeeping** (Ayush): confirm the Q18 wording in contract §3.6 during branch review. Q11a, Q14 and Q22 are recorded in contract §10.
 3. **Short inference health timeout** (Dev B, contract §5).
 4. **Backend CI workflow** `phase2-backend.yml` (Dev B with Dev D, arch §5.4).
 5. **Review and merge** `feature/phase2-backend` into `feature/phase2-platform` (project owner). The branch also carries the Q18 contract, OpenAPI, fixture and checker changes.
-6. **Fixture-backed mock mode**, after the Q20 decision.
+6. **Fixture-backed mock mode** (not implemented), once Q20 is decided. Q20 is deferred and does not block integration against a running inference service.
 7. **Cross-service integration** (M2): the inference service merged, `infra/compose.yaml`, and the backend calling the real `/v1/*`.
 8. **End to end** (M3), and formal OpenAPI approval.

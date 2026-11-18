@@ -368,9 +368,9 @@ export function transactionBody(fields: {
 //   paths only.
 // - Failed: from the stored columns; decision null, transaction.corridor null,
 //   failure {code, message} from failureCode.
-//   PENDING contract-owner clarification: a failed row saved before failureCode
-//   existed has none. It returns failure: null, which the OpenAPI schema
-//   allows but §3.4's prose ("failure set") doesn't. No code is invented.
+//   A failed row saved before failureCode existed has none, and returns
+//   failure: null (owner decision, contract §3.4 / §10 Q22). No code is
+//   invented; new failed rows always store their actual code (saveFailed).
 // - Writes nothing: no audit row (§6.2: audit rows are for mutating calls).
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

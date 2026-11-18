@@ -564,9 +564,15 @@ describe("GET /api/v1/dashboard/summary", () => {
   });
 
   for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
-    it(`${method} returns 405 METHOD_NOT_ALLOWED with Allow: GET, HEAD, before authentication`, async () => {
+    it(`${method} returns 401 without a token and 405 METHOD_NOT_ALLOWED with Allow: GET, HEAD with one (§10 Q14)`, async () => {
       const { repository, calls } = fakeRepository();
-      const res = await request(repository, PATH, { method, headers: { "X-Request-Id": "dash-405" } });
+      const anon = await request(repository, PATH, { method, headers: { "X-Request-Id": "dash-405" } });
+      assert.equal(anon.status, 401);
+      assert.equal(anon.headers.get("allow"), null);
+      const res = await request(repository, PATH, {
+        method,
+        headers: { "X-Request-Id": "dash-405", ...auth(viewerToken) },
+      });
       assert.equal(res.status, 405);
       assert.equal(res.headers.get("allow"), "GET, HEAD");
       assert.deepEqual(res.body, {

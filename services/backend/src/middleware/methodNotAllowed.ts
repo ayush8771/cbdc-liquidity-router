@@ -14,8 +14,12 @@ import { ApiError } from "./errors.js";
 // - The message names the method and the registered path, never the raw URL,
 //   so no caller-supplied text (query, odd casing, an :id value) is echoed:
 //   e.g. "Method DELETE is not allowed on /api/v1/transactions/:id."
-// - It runs before authentication, because no route (and so no auth) matched
-//   the method (contract §10 Q14: 405 is checked before authentication).
+// - Authentication comes first (contract §10 Q14, owner decision): on a
+//   protected path the request is authenticated before the 405 is decided, so
+//   a missing or invalid token gets 401 and only an authenticated caller learns
+//   the Allow list. Public paths (the health endpoints) skip authentication.
+//   No route answered the request, so no route has authenticated it yet: the
+//   token is checked exactly once.
 
 export type RouteMethods = Readonly<Record<string, readonly string[]>>;
 
@@ -31,10 +35,19 @@ export function methodNotAllowedError(method: string, path: string, allow: strin
  */
 export interface MethodNotAllowedOptions {
   getWithoutHead?: readonly string[];
+  /**
+   * The routes' authentication middleware, run before the 405 on every path
+   * not in publicPaths (§10 Q14). Without one, the 405 needs no token.
+   */
+  authenticate?: RequestHandler;
+  /** Registered paths that need no authentication, e.g. the health endpoints. */
+  publicPaths?: readonly string[];
 }
 
 export function methodNotAllowed(routes: RouteMethods, options: MethodNotAllowedOptions = {}): RequestHandler {
-  const table: Array<{ pattern: RegExp; path: string; allow: string }> = [];
+  const table: Array<{ pattern: RegExp; path: string; allow: string; isPublic: boolean }> = [];
+  const publicPaths = options.publicPaths ?? [];
+  const authenticate = options.authenticate;
   for (const [path, methods] of Object.entries(routes)) {
     const upper = methods.map((m) => m.toUpperCase());
     const implicitHead = !(options.getWithoutHead ?? []).includes(path);
@@ -42,13 +55,16 @@ export function methodNotAllowed(routes: RouteMethods, options: MethodNotAllowed
     const allow = upper.flatMap((m) =>
       m === "GET" && implicitHead && !upper.includes("HEAD") ? ["GET", "HEAD"] : [m],
     );
-    table.push({ pattern: toPattern(path), path, allow: allow.join(", ") });
+    table.push({ pattern: toPattern(path), path, allow: allow.join(", "), isPublic: publicPaths.includes(path) });
   }
-  return (req, _res, next) => {
+  return (req, res, next) => {
     const path = normalise(req.path);
     const route = table.find((r) => r.pattern.test(path));
     if (route === undefined) return next();
-    next(methodNotAllowedError(req.method, route.path, route.allow));
+    const error = methodNotAllowedError(req.method, route.path, route.allow);
+    if (route.isPublic || authenticate === undefined) return next(error);
+    // A 401 from authenticate is passed on as is; otherwise the 405.
+    authenticate(req, res, (authError?: unknown) => next(authError ?? error));
   };
 }
 

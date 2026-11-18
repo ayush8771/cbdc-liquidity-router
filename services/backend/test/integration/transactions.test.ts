@@ -1056,7 +1056,9 @@ describe("GET /api/v1/dashboard/summary (PostgreSQL integration)", { skip }, () 
       const head = await call("", { method: "HEAD", headers: { Authorization: `Bearer ${viewerToken}` } });
       assert.equal(head.status, 200);
       assert.equal(head.text, "");
-      const post = await call("", { method: "POST" });
+      // Authentication comes first (§10 Q14): 401 without a token, 405 with one.
+      assert.equal((await call("", { method: "POST" })).status, 401);
+      const post = await call("", { method: "POST", headers: { Authorization: `Bearer ${viewerToken}` } });
       assert.equal(post.status, 405);
       assert.equal(post.headers.get("allow"), "GET, HEAD");
     });

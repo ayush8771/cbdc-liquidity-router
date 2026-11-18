@@ -925,8 +925,13 @@ describe("comparison routes: method handling (§4)", () => {
   ] as const) {
     it(`${method} ${path.replace(UNKNOWN_ID, ":id")} -> 405 with Allow: ${allow}, saving nothing`, async () => {
       const { store, saves, lookups } = fakeStore();
-      // Without a token: 405 is decided before authentication (§10 Q14).
-      const res = await call(path, { store, method, token: null });
+      // Authentication comes first (§10 Q14): no token is 401, without Allow.
+      const anon = await call(path, { store, method, token: null });
+      assert.equal(anon.status, 401);
+      assert.equal(anon.headers.get("allow"), null);
+      assert.equal(anon.calls.length, 0);
+      // A valid token: 405 with Allow.
+      const res = await call(path, { store, method, token: viewerToken });
       assert.equal(res.status, 405);
       assert.equal(res.headers.get("allow"), allow);
       if (method !== "HEAD") {

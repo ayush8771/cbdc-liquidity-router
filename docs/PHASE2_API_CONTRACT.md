@@ -658,7 +658,8 @@ Each result's `decision_id` is computed for that one policy (§2.11), never over
 The full design is in arch §8. In summary:
 
 - **Mode.** `AUTH_MODE=dev` is the only supported mode. The backend refuses to start if `NODE_ENV=production`, if `AUTH_MODE` is unset or different, or if the token file is missing or invalid.
-- **Header.** Every endpoint except `GET /api/v1/health` requires `Authorization: Bearer <token>`, where the token is 64 hex characters (32 random bytes) generated locally by each developer.
+- **Header.** Every endpoint except `GET /api/v1/health` and `GET /api/v1/health/live` (§3.9) requires `Authorization: Bearer <token>`, where the token is 64 hex characters (32 random bytes) generated locally by each developer.
+- **Authentication before method validation** (owner decision, Q14). On every protected path, the token is checked before the method. A missing, malformed or unknown token is `401 UNAUTHENTICATED`, also for a method the path doesn't support, and the 401 carries no `Allow` header. Only an authenticated caller gets `405 METHOD_NOT_ALLOWED` with `Allow` (§4). The two public health paths are the exception: an unsupported method there is `405` with `Allow`, without a token. Unknown paths stay `404 NOT_FOUND`, with or without a token.
 - **Storage.** The backend stores only SHA-256 hashes of tokens, in the git-ignored `services/backend/dev-tokens.json`. Each hash maps to a user ID, an email and a role (`viewer` or `analyst`).
 - **Roles.** Only `analyst` may request `ppoProjected`, in a transaction or a comparison. Anyone else gets `403 FORBIDDEN_POLICY`.
 - **Frontend.** It keeps the token in memory, mirrored to `sessionStorage`. It never uses `localStorage`, cookies, URLs, logs or `VITE_*` variables. It sends the token only to the same-origin `/api/v1`.
@@ -819,7 +820,9 @@ Query rules (they match the backend's implementation, `services/backend/src/rout
 
 ### 3.4 `GET /api/v1/transactions/:id`
 
-Returns the same body as the 201 response in §3.2. That includes failed transactions, with `status: "failed"`, `decision: null`, `transaction.corridor: null` and `failure` set. Unknown IDs return `404 NOT_FOUND`. What a non-UUID `:id` returns (404 or 422) is not yet defined (§10, Q11a). *Implementation note, not a rule:* the backend currently returns `404 NOT_FOUND` for a non-UUID `:id` on all three `:id` routes (§3.4, §3.5, §3.6).
+Returns the same body as the 201 response in §3.2. That includes failed transactions, with `status: "failed"`, `decision: null`, `transaction.corridor: null` and `failure` set from the stored failure code. Unknown IDs return `404 NOT_FOUND`. A non-UUID `:id` also returns `404 NOT_FOUND`, exactly like an unknown UUID, on all three `:id` routes (§3.4, §3.5, §3.6), checked before the database is read (owner decision, Q11a).
+
+**Legacy failed transactions** (owner decision, Q22). A failed transaction saved before the `failureCode` column existed (migration `20261104120000_failure_code_fee_cost_usd`) has no stored code. It is returned with `failure: null`; the backend never invents a code. Every failed transaction created since then must store its actual failure code, so `failure` is non-null for it.
 
 ### 3.5 `GET /api/v1/transactions/:id/explanation`
 
@@ -843,7 +846,7 @@ The request is the same as §3.2, with `"policies": [...]` in place of `policy`.
 {"id", "createdAt", "createdBy", "transaction", "state", "policies", "results": [decision…], "skipped": [...], "sameState": true, "note": "..."}
 ```
 
-`GET /api/v1/comparisons/:id` returns the same body (200), rebuilt from the stored record without calling inference. Unknown IDs return `404 NOT_FOUND`, as for transactions (§3.4). A non-UUID ID follows the same open question as for transactions (§10, Q11a); the backend currently returns `404 NOT_FOUND` for it. Any authenticated user may read any comparison (§3.1).
+`GET /api/v1/comparisons/:id` returns the same body (200), rebuilt from the stored record without calling inference. Unknown IDs return `404 NOT_FOUND`, as for transactions (§3.4). A non-UUID ID returns `404 NOT_FOUND`, as for transactions (§3.4, Q11a). Any authenticated user may read any comparison (§3.1).
 
 **Policies** (owner decision, Q18):
 - Each entry of `policies` is a canonical policy name or a comparison alias:
@@ -973,7 +976,7 @@ The Application API uses `requestId` in place of `request_id`. The `code` values
 | 401 | `UNAUTHENTICATED` | app | Missing, malformed or unknown token |
 | 403 | `FORBIDDEN_POLICY` | app | A non-analyst requested `ppoProjected`. Checked before any call to inference. |
 | 404 | `NOT_FOUND` | both | Unknown resource |
-| 405 | `METHOD_NOT_ALLOWED` | both | The path exists, but not with this method. The response has an `Allow` header listing the path's methods (RFC 9110). |
+| 405 | `METHOD_NOT_ALLOWED` | both | The path exists, but not with this method. The response has an `Allow` header listing the path's methods (RFC 9110). In the app, protected paths authenticate first: without a valid token the answer is `401`, not `405` (§3.0, Q14). |
 | 409 | `DECISION_MISMATCH` | app | Recomputed `decision_id` differs from the stored one |
 | 409 | `POLICY_DISABLED` | inference (passed through by app) | `ppo_projected` requested but no approved checkpoint is enabled. The app doesn't persist it. In comparisons it appears in `skipped`, not as an error. |
 | 409 | `TRANSACTION_FAILED` | app | Explanation requested for a transaction whose `status` is `failed` |
@@ -1144,7 +1147,7 @@ These are **requirements** that Dev A's inference service and its tests must mee
 
 ## 10. Open decisions (v0.4 revision)
 
-Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A3), Q12 (R5), Q13, Q15, Q17, Q18 (comparisons, §3.6), Q21 (A2), Q3a and Q9a, and the corrections R1–R6. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
+Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A3), Q12 (R5), Q13, Q15, Q17, Q18 (comparisons, §3.6), Q21 (A2), Q3a and Q9a, and the corrections R1–R6. On 18 November 2026 they also resolved Q11a (§3.4), Q14 (§3.0) and Q22 (§3.4), and deferred Q20. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
 
 **Blocking: needed before the dependent implementation lands**
 
@@ -1152,12 +1155,12 @@ None open. Q11-dep, the `feeCostUsd` column that `meanFeeCostPct` needs (§3.8),
 
 **Non-blocking: they can follow v0.4**
 
-The backend implements an interim behaviour for Q11a and Q14. Each stays open until its decider records a decision here; the interim behaviour is not a contract rule.
+**Resolved on 18 November 2026** (owner decisions, Ayush):
+- **Q11a:** a non-UUID `:id` returns `404 NOT_FOUND` on `GET /transactions/:id`, `/transactions/:id/explanation` and `/comparisons/:id` (§3.4).
+- **Q14:** authentication comes before method validation, except on the public health endpoints. Unauthenticated unsupported-method requests return `401`; authenticated ones return `405` with the correct `Allow` (§3.0, §4).
+- **Q22:** legacy failed transactions with no historical failure code may return `failure: null`. New failed transactions must record their actual failure code (§3.4).
 
 | # | Question | Notes | Decides |
 |---|---|---|---|
-| Q11a | A non-UUID `:id`: `404 NOT_FOUND` or `422 VALIDATION_ERROR`? | Backend at `5414275`: `404 NOT_FOUND` on `GET /transactions/:id`, `/transactions/:id/explanation` and `/comparisons/:id`, checked before the database is read | Anvesh |
-| Q14 | Is `405` checked before or after authentication in the app? | The fixtures send a token, so they don't depend on it. Backend at `5414275`: `405` before authentication, with or without a token | Anvesh |
-| Q22 | A failed transaction saved before `failureCode` existed has no code. Should `GET /transactions/:id` return it with `failure: null`? | Raised by Dev B, 16 November 2026. §3.4 says `failure` is set on failed transactions; the app OpenAPI allows `failure: null`. Backend at `5414275` returns `failure: null` for such legacy rows and invents no code. Rows saved since the migration always have a code | Ayush (contract owner) |
 | F1 | **Phase 1 cost-baseline unit** (a technical finding, not a Phase 2 contract change). `real_cost_baseline` looks like percentage points but is used as a fraction in the reward. Any correction would change Phase 1 rewards, so it needs a separately reviewed and versioned change. Phase 2 passes the value through unchanged | Evidence and the open points: `docs/TEAM_REVIEW_RESOLUTION.md` §14 | Ayush |
-| Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback | Nisarga, Anvesh, Varshini |
+| Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback. **Deferred** by the owner on 18 November 2026; it does not block live inference integration | Nisarga, Anvesh, Varshini |

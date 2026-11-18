@@ -60,7 +60,7 @@ The server binds to `127.0.0.1:4000` only (`src/server.ts`), because development
 | TypeScript | **Clean.** Last verified 2026-11-16: `tsc --noEmit` and a full build both exit 0 | `npm run typecheck`, `npm run build` |
 | PostgreSQL integration suites | **Previously reported as passing; not independently verified at the current commit.** A run on the pre-commit working tree reported 1543 passed (see §7.3). No run of the committed `5414275` is recorded in the repository | `test/integration/transactions.test.ts` |
 | Live inference service | **Not integrated.** Every inference path is tested only against injected mock handlers | §8 |
-| Fixture-backed mock mode | **Not implemented.** Blocked on contract §10 Q20 | §4.6 |
+| Fixture-backed mock mode | **Not implemented.** Its fixture selection rule (contract §10 Q20) is deferred; this does not block integration against a running inference service | §4.6 |
 | Backend CI workflow (`phase2-backend.yml`, arch §5.4) | **Not created.** No CI job runs these tests | §8 |
 | Docker image | **Not created** (no `Dockerfile`) | §8 |
 
@@ -102,8 +102,10 @@ History, comparisons, explanations and the dashboard show every user's records t
   - Reading a stored record is not "requesting a policy", so a viewer may read a stored `ppoProjected` transaction, explanation or comparison.
 - **405 METHOD_NOT_ALLOWED** ([`src/middleware/methodNotAllowed.ts`](src/middleware/methodNotAllowed.ts)):
   - Any unregistered method on a registered path, `OPTIONS` included, gets 405 with an `Allow` header.
-  - `HEAD` is allowed wherever `GET` is, except on `/transactions/:id/explanation`, where it is 405, because that GET may call inference and write.
-  - The 405 is decided **before authentication**, because no route, and so no auth, matches the method. Contract §10 still lists this ordering as open (Q14); this is the implemented behaviour.
+  - `HEAD` is allowed wherever `GET` is, except on `/transactions/:id/explanation`, where it is 405 (after authentication), because that GET may call inference and write.
+  - **Authentication comes first** (contract §3.0, owner decision Q14). On a protected path, an unsupported method without a valid token is `401 UNAUTHENTICATED`, with no `Allow` header; with a valid token it is 405 with `Allow`.
+  - The fallback handler runs the same `requireAuth` middleware as the routes, and only for requests no route answered, so a token is checked once per request. Supported methods are unchanged.
+  - The public paths `/api/v1/health` and `/api/v1/health/live` (`PUBLIC_PATHS` in [`src/app.ts`](src/app.ts)) skip authentication: an unsupported method there is 405 without a token.
 - **Unknown paths:** `404 NOT_FOUND`, with or without a token.
 - **JSON bodies** ([`src/middleware/jsonBody.ts`](src/middleware/jsonBody.ts)):
   - Accepted: `application/json`, UTF-8, at most 100 kB (`JSON_BODY_LIMIT`). The top level must be an object or array, and an empty body is rejected.
@@ -114,7 +116,7 @@ History, comparisons, explanations and the dashboard show every user's records t
   - Query parameters: a documented parameter given twice is rejected; unknown parameters are ignored (§3.3).
 - **`:id` parameters** (`/transactions/:id`, `/transactions/:id/explanation`, `/comparisons/:id`):
   - Anything that isn't UUID syntax returns `404 NOT_FOUND`, like an unknown UUID, without touching the database.
-  - Contract §3.4, §3.6 and §10 list the non-UUID case as open (Q11a); this is the implemented behaviour, not a contract rule.
+  - This is the owner decision Q11a (contract §3.4).
 - **Database errors** and missing configuration (no `DATABASE_URL` for a database route) return `500 INTERNAL_ERROR`. Prisma errors are logged with class name and code only, never their message.
   - How such failures should be reported to callers is not defined by the contract (§6.2; `docs/TEAM_REVIEW_RESOLUTION.md` §6).
 
@@ -255,7 +257,7 @@ From [`src/inferenceClient/errors.ts`](src/inferenceClient/errors.ts). Messages 
 - **Routes that don't call inference are unaffected.** That covers `/health/live`, `/auth/me`, `GET /transactions`, `GET /transactions/:id`, `GET /comparisons/:id`, `/dashboard/summary`, and a stored explanation.
 - **Health is separate:** `/api/v1/health` makes no inference call in mock mode and reports `inference: "mock"`. Its HTTP status depends only on the database: 200 `ok` when the database is up, 503 when it isn't (§3.2).
 
-Mock handlers are used only by the tests. A fixture-backed mock that answers from `contracts/fixtures/inference/` is not implemented. Its selection rule, for choosing between several fixtures for one operation, is open in contract §10 (Q20: Nisarga, Anvesh, Varshini).
+Mock handlers are used only by the tests. A fixture-backed mock that answers from `contracts/fixtures/inference/` is not implemented. Its selection rule, for choosing between several fixtures for one operation, is deferred by the owner (contract §10 Q20: Nisarga, Anvesh, Varshini). The deferral concerns mock mode only; it does not block integration against a running inference service.
 
 ### 4.7 Integration dependencies
 
@@ -482,16 +484,11 @@ Verified against the code at `5414275`. Project-wide items are tracked in [`docs
 
 - **PostgreSQL at the committed HEAD is not independently verified.** A pre-commit run reported 1543 passed; see §7.3 for what that does and doesn't establish.
 - **Not run against the real inference service.** Every inference path is tested with mock handlers (§4.7).
-- **Mock mode is not usable for inference-backed routes.** Without an injected mock handler they return 503; the other routes and health are unaffected (§4.6). A fixture-backed mock is blocked on Q20.
+- **Mock mode is not usable for inference-backed routes.** Without an injected mock handler they return 503; the other routes and health are unaffected (§4.6). A fixture-backed mock is not implemented; its selection rule (Q20) is deferred, which does not block integration against a running inference service.
 - **Inference health timeout.** The health probe uses the 15 s `INFERENCE_TIMEOUT_MS`, so `/api/v1/health` can take up to 15 s while inference hangs. Contract §5 asks the backend to use its own short timeout for this check (3 s was proposed); that is not implemented yet.
 - **No response-size limit** on inference bodies; only the timeout bounds them. A limit awaits expected sizes from Dev A.
-- **Legacy failed rows.** A failed transaction saved before `20261104120000_failure_code_fee_cost_usd` has no `failureCode`. `GET :id` returns it with `failure: null`, which the app OpenAPI allows and contract §3.4's prose ("`failure` set") doesn't. This is pending clarification by the contract owner. Rows saved since the migration always have a code.
-- **Open contract decisions affecting this service** (contract §10):
-  - Q11a: a non-UUID `:id` (implemented as 404);
-  - Q14: 405 before or after auth (implemented before);
-  - Q20: mock fixture selection.
-
-  The decider for Q11a and Q14 is Anvesh. They remain open until formally closed in the contract.
+- **Legacy failed rows** (owner decision Q22, contract §3.4). A failed transaction saved before `20261104120000_failure_code_fee_cost_usd` has no `failureCode`, and `GET :id` returns it with `failure: null`. No code is invented. A newly created failed transaction must store its actual failure code: `saveFailed` refuses anything that isn't one of the §3.2 failure codes.
+- **Contract decisions affecting this service** (contract §10). Q11a (non-UUID `:id` → 404), Q14 (authentication before 405) and Q22 (legacy `failure: null`) were decided by the owner on 18 November 2026. Q20 (mock fixture selection) is deferred and does not block live inference integration.
 - **Database-failure reporting** to callers is not defined by the contract; it is implemented as `500 INTERNAL_ERROR`.
 - **Provisional schema values:** the `AuditLog.action` and `outcome` names and several indexes (§5.1).
 - **No backend CI workflow and no Dockerfile** (arch §5.4, §7.3).

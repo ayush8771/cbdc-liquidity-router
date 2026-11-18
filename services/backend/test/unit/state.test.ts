@@ -576,9 +576,12 @@ describe("GET /api/v1/state", () => {
     });
 
     for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
-      it(`returns 405 METHOD_NOT_ALLOWED with Allow: GET, HEAD for ${method}, before auth, without calling inference`, async () => {
+      it(`returns 401 without a token, then 405 with Allow: GET, HEAD for ${method} with one (§10 Q14), without calling inference`, async () => {
         const { client, calls } = mockClient(okWith(REPLAY.body));
-        const res = await withApp({ inferenceClient: client }, (get) => get(REPLAY_PATH, { method, headers: {} }));
+        const anon = await withApp({ inferenceClient: client }, (get) => get(REPLAY_PATH, { method, headers: {} }));
+        assert.equal(anon.status, 401);
+        assert.equal(anon.headers.get("allow"), null);
+        const res = await withApp({ inferenceClient: client }, (get) => get(REPLAY_PATH, { method }));
         assert.equal(res.status, 405);
         assert.equal(res.headers.get("allow"), "GET, HEAD");
         assert.equal(res.body!.error.code, "METHOD_NOT_ALLOWED");
