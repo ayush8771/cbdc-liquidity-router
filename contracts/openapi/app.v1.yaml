@@ -427,6 +427,13 @@ components:
     Policy:
       type: string
       enum: [waterfall, cheapestFeasible, ppoProjected]
+    ComparisonPolicyName:
+      description: |
+        A policy name in a comparison request (§3.6, Q18): a canonical Policy, or a comparison-only alias,
+        baseline (= waterfall) or ruleBased (= cheapestFeasible). Aliases are mapped to the canonical name in
+        place; they are never stored or returned.
+      type: string
+      enum: [waterfall, cheapestFeasible, ppoProjected, baseline, ruleBased]
     PolicyStatus:
       type: string
       enum: [default, baseline, experimental]
@@ -814,11 +821,16 @@ components:
           type: number
         state: {$ref: '#/components/schemas/StateSpec'}
         policies:
-          description: A viewer who omits it gets only the non-experimental policies.
+          description: |
+            Canonical names or aliases (ComparisonPolicyName), compared in the order given. Two entries naming the
+            same canonical policy, such as baseline and waterfall, are a VALIDATION_ERROR, which uniqueItems
+            alone can't express. Omitted: waterfall, cheapestFeasible, ppoProjected for an analyst; waterfall,
+            cheapestFeasible for anyone else (§3.6, Q18). A viewer who lists ppoProjected gets 403
+            FORBIDDEN_POLICY.
           type: array
           minItems: 1
           uniqueItems: true
-          items: {$ref: '#/components/schemas/Policy'}
+          items: {$ref: '#/components/schemas/ComparisonPolicyName'}
         clientReference: {type: ['string', 'null'], maxLength: 200}
 
     # ---------- decision (camelCase of inference RouteResponse minus `transaction`) ----------
@@ -1065,14 +1077,28 @@ components:
         limitations: {type: array, minItems: 1, items: {type: string}}
 
     ComparisonRecord:
+      description: |
+        Returned by POST (201) and GET :id (200), identically (§3.6). results and skipped follow the order of
+        policies.
       type: object
       additionalProperties: false
-      required: [id, createdAt, createdBy, transaction, results, skipped, sameState, note]
+      required: [id, createdAt, createdBy, transaction, state, policies, results, skipped, sameState, note]
       properties:
         id: {type: string, format: uuid}
         createdAt: {$ref: '#/components/schemas/Timestamp'}
         createdBy: {type: string}
         transaction: {$ref: '#/components/schemas/Transaction'}
+        state:
+          description: |
+            The effective state the comparison used (Q18): the validated request state (an explicit venue's
+            omitted history as null), confirmed against every result's provenance. Stored as stateSpec.
+          allOf: [{$ref: '#/components/schemas/StateSpec'}]
+        policies:
+          description: The resolved list sent to the engine, canonical names only, in result order (Q18).
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Policy'}
         results: {type: array, items: {$ref: '#/components/schemas/Decision'}}
         skipped:
           type: array
@@ -1082,8 +1108,14 @@ components:
             required: [policy, code, message]
             properties:
               policy: {$ref: '#/components/schemas/Policy'}
-              code: {type: string, enum: [POLICY_DISABLED, POLICY_UNAVAILABLE_FOR_STATE]}
-              message: {type: string}
+              code:
+                description: |
+                  Closed in CI. At run time an undocumented code is passed through and treated generically (§1).
+                type: string
+                enum: [POLICY_DISABLED, POLICY_UNAVAILABLE_FOR_STATE]
+              message:
+                description: The engine's skipped[].message, unchanged (Q18). Not an error, so §4's fixed text doesn't apply.
+                type: string
         sameState: {type: boolean, const: true}
         note: {type: string}
 

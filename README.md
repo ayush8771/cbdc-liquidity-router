@@ -34,7 +34,7 @@ The research objective is to determine whether an RL agent can learn **liquidity
 The project is organized into three **Major Phases**, distinct from the internal **Stage 1A–1F** numbering below — these are two separate schemes and should not be conflated:
 
 - **Major Phase 1 — Offline AI/RL Foundation**: Stages 1A–1F make up the offline AI/RL foundation. Stages 1A–1D and 1F are implemented and validated; Stage 1E is complete as an infrastructure milestone, with its knowledge population deferred.
-- **Major Phase 2 — Full-Stack Web Orchestration**: a future FastAPI/React application layer. Not started.
+- **Major Phase 2 — Full-Stack Web Orchestration**: a FastAPI inference service, an Express/PostgreSQL application backend and a React web app, built on the Phase 1 engine without changing it. **In progress** on feature branches. The design and API contract are approved (`docs/PHASE2_ARCHITECTURE.md`, `docs/PHASE2_API_CONTRACT.md`). The backend's endpoints are implemented, but services are not yet integrated end to end. Status: `docs/PHASE2_STATUS.md`.
 - **Major Phase 3 — Real-Time Streaming & Production**: future live data feeds and production inference. Not started.
 
 Internal stages of Major Phase 1:
@@ -351,10 +351,10 @@ These tests validate **implementation mechanics and regression safety** — corr
   - **learned capacity awareness:** make PPO itself respond to liquidity, through training changes (needs approval), or formally adopt the projection as part of the policy;
   - **realistic stress:** calibrated, historically grounded stress scenarios;
   - **Stage 1E knowledge content:** populate it with real, cited facts.
-- **Major Phase 2 — Full-Stack Web Orchestration**: FastAPI backend, React dashboard.
+- **Major Phase 2 — Full-Stack Web Orchestration**: FastAPI inference service, Express/PostgreSQL backend, React web app. In progress; see `docs/PHASE2_STATUS.md`.
 - **Major Phase 3 — Real-Time Streaming & Production**: live data feeds, production inference.
 
-Major Phases 2–3 are not implemented yet, and Stage 1E's knowledge population is deferred. See `docs/FUTURE_PHASES_ROADMAP.md`.
+Major Phase 2 is in progress and not yet integrated end to end. Major Phase 3 is not started, and Stage 1E's knowledge population is deferred. See `docs/FUTURE_PHASES_ROADMAP.md`.
 
 ## Reproducibility
 

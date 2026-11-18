@@ -62,7 +62,7 @@ Anvesh's open points, kept explicit:
 - `meanFeeCostPct` source and formula: Q11, blocking.
 - Database failure behaviour beyond readiness, for example a write failing after inference succeeded: **not defined by the contract.** Added to the Dev B follow-ups.
 - Explaining a stored PPO decision after its checkpoint is disabled: **resolved by the owner** (§7).
-- The mock fixture selection rule: Q20.
+- The mock fixture selection rule: Q20. **Deferred** by the owner on 18 November 2026; it concerns mock mode only and does not block integration against a running inference service.
 - Dev A and Dev B implementation issues: §6.
 
 ## 3. Varshini's findings
@@ -73,7 +73,7 @@ Anvesh's open points, kept explicit:
 | 2 | `/state` `scenarioId` rules and mode mismatch; unknown scenario alignment | **Done:** required with `scenario`, rejected with replay; any string accepted and `UNKNOWN_SCENARIO` passed through, the same as on POST (contract §2.5, §3.7; both OpenAPI files) |
 | 3 | Validated request in `TransactionRecord` (retry with the same inputs) | **Not added, non-blocking.** Persistence already supports it (`stateSpec`, `requestedPolicy`, `clientReference`); it's an additive field for owner review |
 | 4 | Sender/receiver and failure code in history summaries | **Not added, non-blocking.** Persisted, so it's additive |
-| 5 | List query behaviour | **Documented** from the backend implementation: `from` inclusive, `to` exclusive, sort enum, the `completed` and `corridor` filters never match failed rows, no `status` filter, unknown query params ignored (contract §3.3; app OpenAPI). A non-UUID `:id` is open (Q11a) |
+| 5 | List query behaviour | **Documented** from the backend implementation: `from` inclusive, `to` exclusive, sort enum, the `completed` and `corridor` filters never match failed rows, no `status` filter, unknown query params ignored (contract §3.3; app OpenAPI). A non-UUID `:id` returns 404 (Q11a, owner decision, 18 November 2026) |
 | 6 | `bridgeUids` on warnings | **Not added, non-blocking:** a contract expansion for owner review |
 | 7 | `meanFeeCostPct` | **Blocking, Q11** |
 | 8 | `state`/`policies` on comparison records, result order, analyst default | **Open, non-blocking (Q18)** |
@@ -96,21 +96,25 @@ Anvesh's open points, kept explicit:
 
 ## 5. Remaining questions (contract §10)
 
+> **Historical list (revision 1).** Several items below were resolved later: Q11 window defaults (A3), Q12 (R5) and Q21 (A2) in §7–§8, Q18 by the owner (contract §3.6), and Q11-dep by the backend migration. The current state is in §16 and contract §10.
+
 **Blocking:**
 - **Q11-dep:** the `feeCostUsd` Prisma migration that `meanFeeCostPct` needs (see §7). *Anvesh.*
 
 **Non-blocking:**
 - Q11: the dashboard window defaults. *Ayush, with Anvesh.*
 - Q21: adopt the minimum start budget, and its default. *Ayush.*
-- Q11a: what a non-UUID id returns. *Anvesh.*
+- Q11a: what a non-UUID id returns. *Anvesh.* **Decided 18 November 2026:** 404 (contract §3.4).
 - Q12: the remaining health check values. *Ayush.*
-- Q14: whether 405 is checked before or after auth. *Anvesh.*
+- Q14: whether 405 is checked before or after auth. *Anvesh.* **Decided 18 November 2026:** after authentication, except the public health endpoints (contract §3.0).
 - Q18: comparison defaults and ordering. *Anvesh and Varshini.*
-- Q20: the mock fixture selection rule. *Nisarga, Anvesh and Varshini.*
+- Q20: the mock fixture selection rule. *Nisarga, Anvesh and Varshini.* **Deferred 18 November 2026;** not blocking integration against a running inference service.
 - The additive frontend suggestions C3, C4 and C6 (§3), for owner review.
 - Confirm the canonicalisation details in contract §2.11 (parsed model, venue sort, `history: null`). *Ayush/Dev A, at implementation.*
 
 ## 6. Implementation follow-ups (not contract changes)
+
+> **Dev B status:** see §16.2. The Dev A, C and D lists below are unchanged by this update.
 
 **Dev A (inference):**
 - Return a real `decision_id`. Today it is `null`, so the backend rejects every live route (the earlier blocker). Implement it to contract §2.11, and fix the exact artefact list, including the risk-proxy and cost-baseline tables.
@@ -310,3 +314,53 @@ Before, `executed_usd` and `completion_ratio` were listed under `metrics`, where
 - The two OpenAPI files are machine-readable draft representations, not independently normative specifications. If they differ from the written contract, the written contract takes precedence until Ayush explicitly approves OpenAPI status.
 - The `DRAFT – pending approval` labels stay in `contracts/README.md`, `contracts/openapi/inference.v1.yaml` and `contracts/openapi/app.v1.yaml`. They are deliberately not changed.
 - A separate OpenAPI approval review will happen later. It does not delay implementation against the approved v0.4 contract.
+
+## 16. Reconciliation with the backend implementation (16 November 2026)
+
+Prepared from the repository at `feature/phase2-backend` `5414275`, by inspecting the code, migrations and tests. It records facts and pointers only. **No decision is made or closed here,** and no API behaviour changes.
+
+### 16.1 Contract questions
+
+| # | State at `5414275` | Evidence | Still needs |
+|---|---|---|---|
+| Q18 (comparisons) | **Decided and applied.** Contract §3.6 records it as an owner decision (Ayush): the aliases `baseline` and `ruleBased`, the role defaults, `state` and `policies` in the record, result order, and `skipped[].message` unchanged. The app OpenAPI, the fixtures (`app/comparisons/201_aliases.json`, `201_scenario_outage.json`, `200_get.json`) and the checker were updated with it | Contract §3.6; `contracts/openapi/app.v1.yaml` (`ComparisonPolicyName`, `ComparisonRecord`); `infra/scripts/check_contracts.py` (`check_comparison_record`, `check_comparison_request`) | This file had no earlier record of the Q18 decision. The owner may want to confirm the §3.6 wording when reviewing the branch |
+| Q11-dep (`feeCostUsd`) | **Done** | `services/backend/prisma/migrations/20261104120000_failure_code_fee_cost_usd`; `RoutingDecision.feeCostUsd` in `schema.prisma`; used by `src/db/dashboard.ts` | — |
+| Q11a (non-UUID `:id`) | **Open.** The backend returns 404 on all three `:id` routes. Code comments call it a "team decision", but no decision is recorded in the contract or here | `src/routes/transactions.ts`, `explanations.ts`, `comparisons.ts` | A recorded decision by Anvesh (contract §10) |
+| Q14 (405 vs auth) | **Open.** The backend checks 405 before authentication | `src/middleware/methodNotAllowed.ts`; `test/unit/errors.test.ts` | A recorded decision by Anvesh (contract §10) |
+| Q22 (legacy failed rows, new) | **Open.** A failed row saved before `failureCode` existed returns `failure: null` | `src/routes/transactions.ts` (GET `:id` comment) | A decision by the contract owner (contract §10) |
+| Q20 (mock fixture selection) | **Open.** The backend has no fixture-backed mock: in `INFERENCE_MODE=mock` every inference-backed route returns 503 | `src/server.ts` (no mock handler); `src/inferenceClient/client.ts` | Nisarga, Anvesh, Varshini |
+| F1 (Phase 1 cost unit) | **Open**, unchanged (§14) | — | Ayush |
+
+**Update, 18 November 2026.** The table above is the state at `5414275`. Since then, the owner (Ayush) has decided:
+- **Q11a:** 404 for a non-UUID `:id`, as implemented.
+- **Q14:** authentication before method validation, except the public health endpoints. The backend was changed to match (`src/middleware/methodNotAllowed.ts`, `src/app.ts`), and tests were updated (`test/unit/errors.test.ts` and the per-route method tests).
+- **Q22:** legacy failed rows may return `failure: null`, as implemented; new failed transactions must store their actual failure code.
+- **Q20:** deferred; it does not block live inference integration.
+
+Contract §3.0, §3.4 and §10 record these.
+
+### 16.2 Dev B follow-ups from §6
+
+"Implemented" means present in the code with passing unit tests (1469 passed on 2026-11-16, Node 24.7.0). PostgreSQL integration: a run on the pre-commit working tree, about 49 minutes before `5414275`, was **reported** as 1543 passed, 0 failed, with the database empty afterwards. That evidence is a Claude Code session log outside the repository, so it is historical and not independently reproducible. No run of the committed `5414275` is recorded (`services/backend/README.md` §7.3).
+
+| §6 item | State |
+|---|---|
+| Tighten request validation (country pattern, `amountUsd > 0`, 30-item history) | Implemented (`src/validation/transactionRequest.ts`) |
+| `failureCode` migration | Implemented (migration above, with a CHECK constraint) |
+| `details.cause`; `Retry-After` forwarding; explicit field-path mapping table | Implemented (`src/inferenceClient/errors.ts`, `fieldPaths.ts`) |
+| Database-down readiness 503 with the Health body; liveness endpoint; mock health `ok` | Implemented (`src/routes/health.ts`) |
+| `scenarioId` rules on `/state`; 405 middleware | Implemented (`src/routes/state.ts`, `src/middleware/methodNotAllowed.ts`) |
+| Comparison persistence only on 200 | Implemented (`src/routes/comparisons.ts`, `src/db/comparisons.ts`) |
+| Behaviour when a database write fails after inference succeeded | **Still undefined by the contract.** Implemented as `500 INTERNAL_ERROR` with nothing saved |
+| Not in §6, but in contract §5: the inference health check's own short timeout | **Not implemented.** The probe uses `INFERENCE_TIMEOUT_MS` (15 s) |
+
+### 16.3 Documentation corrected with this reconciliation
+
+- **Contract:**
+  - header: PR #4 is merged;
+  - §3.4 and §3.6: non-UUID IDs stated as open (Q11a), with the backend's behaviour noted;
+  - §3.8 and §6.3: the `feeCostUsd` and `failureCode` migration exists;
+  - §10: Q11-dep closed as done, implementation notes for Q11a and Q14, Q22 added.
+- **Architecture §11:** item 2 answered by the approved rules; item 8 updated for Q11-dep and Q18.
+- **Pointers and README:** pointers to `docs/PHASE2_STATUS.md`; `services/backend/README.md` rewritten to match the code.
+- **Not changed:** the OpenAPI files, fixtures and checker. The DRAFT labels stay. One stale-but-true OpenAPI description remains: `meanFeeCostPct` says it "needs the feeCostUsd column (Dev B migration)", which now exists. It is left to Dev D, the OpenAPI owner.

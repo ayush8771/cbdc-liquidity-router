@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# Secrets: never commit these (arch §8.2)
+.env
+.env.*
+dev-tokens.json

@@ -1,6 +1,6 @@
 # Major Phase 2 — API Contract
 
-**Status:** v0.4, **approved**. The project owner merged it into `feature/phase2-platform` through PR #3 on 4 November 2026. Further approved corrections are in the follow-up PR #4, which applies on top of v0.4 once it is merged. `docs/TEAM_REVIEW_RESOLUTION.md` records what each review changed and what is still open.
+**Status:** v0.4, **approved**. The project owner merged it into `feature/phase2-platform` through PR #3 on 4 November 2026. The approved follow-up corrections of PR #4 were merged into `feature/phase2-platform` on 4 November 2026 (`dc6cf48`). `docs/TEAM_REVIEW_RESOLUTION.md` records what each review changed and what is still open; its §16 reconciles this document with the backend implementation as of 16 November 2026. Implementation progress is tracked in `docs/PHASE2_STATUS.md`, not here.
 **Normative source.** This document is the authoritative, approved Phase 2 v0.4 specification. Both OpenAPI files in `contracts/openapi/` remain DRAFT pending separate approval; they are machine-readable representations, not independently normative. The approved contract takes precedence over any discrepancy (`docs/TEAM_REVIEW_RESOLUTION.md` §15).
 **Architecture and roles:** `docs/PHASE2_ARCHITECTURE.md`. Section references written "arch §n" point there.
 
@@ -29,6 +29,13 @@
   - audit wording (§6.2);
   - unknown enum values handled at run time (§1).
 - **Fixtures corrected:** risk fallback on every 2024-06-14 decision, a PPO-enabled meta fixture, a dashboard derived from the stored transactions, and new health and validation fixtures.
+
+**Owner decision Q18 (comparisons, Ayush; applied 16 November 2026):**
+- policy aliases `baseline` (= `waterfall`) and `ruleBased` (= `cheapestFeasible`) in comparison requests; only canonical names are stored and returned;
+- the default for an omitted `policies`: `waterfall`, `cheapestFeasible`, `ppoProjected` for an analyst, the same without `ppoProjected` for anyone else; results follow the policy order;
+- the record returns the effective `state` and the resolved `policies`;
+- `skipped[].message` is the engine's text, unchanged;
+- the engine alone decides PPO availability in a comparison; the backend makes no checkpoint check of its own (§3.6).
 
 **Changes in v0.4:**
 - **Errors (§4):**
@@ -651,7 +658,8 @@ Each result's `decision_id` is computed for that one policy (§2.11), never over
 The full design is in arch §8. In summary:
 
 - **Mode.** `AUTH_MODE=dev` is the only supported mode. The backend refuses to start if `NODE_ENV=production`, if `AUTH_MODE` is unset or different, or if the token file is missing or invalid.
-- **Header.** Every endpoint except `GET /api/v1/health` requires `Authorization: Bearer <token>`, where the token is 64 hex characters (32 random bytes) generated locally by each developer.
+- **Header.** Every endpoint except `GET /api/v1/health` and `GET /api/v1/health/live` (§3.9) requires `Authorization: Bearer <token>`, where the token is 64 hex characters (32 random bytes) generated locally by each developer.
+- **Authentication before method validation** (owner decision, Q14). On every protected path, the token is checked before the method. A missing, malformed or unknown token is `401 UNAUTHENTICATED`, also for a method the path doesn't support, and the 401 carries no `Allow` header. Only an authenticated caller gets `405 METHOD_NOT_ALLOWED` with `Allow` (§4). The two public health paths are the exception: an unsupported method there is `405` with `Allow`, without a token. Unknown paths stay `404 NOT_FOUND`, with or without a token.
 - **Storage.** The backend stores only SHA-256 hashes of tokens, in the git-ignored `services/backend/dev-tokens.json`. Each hash maps to a user ID, an email and a role (`viewer` or `analyst`).
 - **Roles.** Only `analyst` may request `ppoProjected`, in a transaction or a comparison. Anyone else gets `403 FORBIDDEN_POLICY`.
 - **Frontend.** It keeps the token in memory, mirrored to `sessionStorage`. It never uses `localStorage`, cookies, URLs, logs or `VITE_*` variables. It sends the token only to the same-origin `/api/v1`.
@@ -812,7 +820,9 @@ Query rules (they match the backend's implementation, `services/backend/src/rout
 
 ### 3.4 `GET /api/v1/transactions/:id`
 
-Returns the same body as the 201 response in §3.2. That includes failed transactions, with `status: "failed"`, `decision: null`, `transaction.corridor: null` and `failure` set. Unknown IDs return `404 NOT_FOUND`. What a non-UUID `:id` returns (404 or 422) is not yet defined (§10, Q11a).
+Returns the same body as the 201 response in §3.2. That includes failed transactions, with `status: "failed"`, `decision: null`, `transaction.corridor: null` and `failure` set from the stored failure code. Unknown IDs return `404 NOT_FOUND`. A non-UUID `:id` also returns `404 NOT_FOUND`, exactly like an unknown UUID, on all three `:id` routes (§3.4, §3.5, §3.6), checked before the database is read (owner decision, Q11a).
+
+**Legacy failed transactions** (owner decision, Q22). A failed transaction saved before the `failureCode` column existed (migration `20261104120000_failure_code_fee_cost_usd`) has no stored code. It is returned with `failure: null`; the backend never invents a code. Every failed transaction created since then must store its actual failure code, so `failure` is non-null for it.
 
 ### 3.5 `GET /api/v1/transactions/:id/explanation`
 
@@ -830,17 +840,40 @@ Returns the camelCase mapping of the `/v1/explain` response, plus `"transactionI
 
 ### 3.6 `POST /api/v1/comparisons`
 
-The request is the same as §3.2, with `"policies": [...]` in place of `policy`. It is strict in the same way, and `policies: null` is rejected. A viewer who includes `ppoProjected` gets `403 FORBIDDEN_POLICY`. If a viewer omits `policies`, the backend sends only the non-experimental policies. A disabled policy is reported in `skipped`, never as an error. The response is HTTP 201 with `{"id", "createdAt", "createdBy", "transaction", "results": [decision…], "skipped": [...], "sameState": true, "note": "..."}`.
+The request is the same as §3.2, with `"policies": [...]` in place of `policy`. It is strict in the same way, and `policies: null` is rejected. The response is HTTP 201 with:
+
+```json
+{"id", "createdAt", "createdBy", "transaction", "state", "policies", "results": [decision…], "skipped": [...], "sameState": true, "note": "..."}
+```
+
+`GET /api/v1/comparisons/:id` returns the same body (200), rebuilt from the stored record without calling inference. Unknown IDs return `404 NOT_FOUND`, as for transactions (§3.4). A non-UUID ID returns `404 NOT_FOUND`, as for transactions (§3.4, Q11a). Any authenticated user may read any comparison (§3.1).
+
+**Policies** (owner decision, Q18):
+- Each entry of `policies` is a canonical policy name or a comparison alias:
+  - `baseline` means `waterfall`;
+  - `ruleBased` means `cheapestFeasible`.
+- Aliases are mapped in place, so the caller's order is kept. Only canonical names are sent to the engine, stored and returned; an alias never appears in a record.
+- Two entries that name the same policy, such as `baseline` and `waterfall`, are a `422 VALIDATION_ERROR`, like any duplicate.
+- An omitted `policies` means, in this order:
+  - for an `analyst`: `waterfall`, `cheapestFeasible`, `ppoProjected`;
+  - for anyone else: `waterfall`, `cheapestFeasible`. A viewer who omits `policies` gets only the non-experimental policies.
+- A viewer who lists `ppoProjected` gets `403 FORBIDDEN_POLICY`, before validation, inference and persistence. No alias names `ppoProjected`.
+- The backend always sends the resolved list to `/v1/compare`, so the engine's own default (§2.9) never applies.
+- `policies` in the record is that resolved canonical list. `results` and `skipped` follow its order, whatever order the engine answers in.
+
+**PPO availability.** The engine alone decides whether `ppo_projected` can run (§7): a disabled or unavailable policy comes back in `skipped`, and the comparison is still saved. The backend makes no `/v1/version` call and no checkpoint check of its own for a comparison. It never substitutes or retries a policy: a result for any policy it didn't send makes the response invalid (`502 INFERENCE_ERROR`), so there is no fallback to raw PPO.
+
+**`skipped`.** Each entry is `{"policy", "code", "message"}`, with `policy` mapped to its app name. `message` is the engine's text, **unchanged** (owner decision, Q18). A skipped entry is part of a 201, not an error, so the §4 rule that app error messages are the backend's fixed text doesn't apply to it. The documented codes are `POLICY_DISABLED` and `POLICY_UNAVAILABLE_FOR_STATE`. Like any enum, the list is closed in CI, and at run time an undocumented code is passed through and treated generically (§1).
+
+**`state`** is the effective state the comparison used (owner decision, Q18): the validated request state, with an explicit venue's omitted `history` written as `null`. Every result's provenance must confirm it: `state_mode`, `state_date` (the date, or the reference date in explicit mode) and `scenario_id` (null outside scenario mode). Otherwise the engine response is invalid (`502 INFERENCE_ERROR`) and nothing is saved. When every policy is skipped, no result confirms it, and it is the validated request state.
 
 **A comparison is an independent record.**
 - It creates no transaction record, has no `transactionId`, and never appears in `GET /api/v1/transactions` or the dashboard.
-- It stores its own transaction fields, the state spec, the policy list sent to the engine, its creator and the verbatim `/v1/compare` response (§6.3).
+- It stores its own transaction fields, the effective state (`stateSpec`), the resolved canonical policy list, its creator and the verbatim `/v1/compare` response (§6.3).
+- The record and its audit row are written in one database transaction (§6.2).
 - `transaction.corridor` is null only if every policy was skipped. In that case no result confirms the corridor, and it is not derived.
-- A comparison is persisted **only** when `/v1/compare` returns 200, including a 200 in which some or all policies are skipped. On any error nothing is saved, and the §3.2 error is returned with no `transactionId` (confirmed by Dev B).
-- Not yet defined (§10, Q18):
-  - which list the backend sends when an **analyst** omits `policies`;
-  - the order of `results`;
-  - whether the record echoes `state` and `policies`. Both are stored, but not returned.
+- A comparison is persisted **only** when `/v1/compare` returns 200, including a 200 in which some or all policies are skipped. On any error nothing is saved, and the §3.2 error is returned with no `transactionId` (confirmed by Dev B). An engine `409 POLICY_DISABLED` for `/v1/compare` breaks §2.9, so the app returns `502 INFERENCE_ERROR` for it.
+- The same request sent twice creates two records (§6.1: records are append-only).
 
 ### 3.7 `GET /api/v1/state`
 
@@ -878,8 +911,7 @@ The aggregates are computed from stored decision fields only, never recomputed f
   - `byCorridor` covers routed transactions only, because a failed row has no corridor. `byCorridor.count` is **renamed `routed`**: the routed decisions on that corridor. It also has `allowedRouted` and `completionRate`.
 - **Means** (owner decision): `meanRewardAmountBased`, `meanLatencyTerm` and `meanRiskTerm` average over the allowed routed decisions, and are **null** when `allowedRouted` is 0.
 - **`meanFeeCostPct`** (owner decision) = **100 × AVG(`feeCostUsd` / `executedUsd`)** over the allowed routed decisions with `executedUsd > 0`, and null when there are none. It is a percentage: 1.4 means 1.4 %.
-  - **Dependency:** the backend has no `feeCostUsd` column today. Dev B must add it to `RoutingDecision` with a Prisma migration, copied from `metrics.fee_cost_usd`.
-  - That migration is **not part of this contracts change** and has not been made. Until it lands, the backend can't compute this field from stored columns.
+  - **Dependency (Q11-dep, done):** the field needs a `feeCostUsd` column on `RoutingDecision`, copied from `metrics.fee_cost_usd`. Dev B added it in the Prisma migration `services/backend/prisma/migrations/20261104120000_failure_code_fee_cost_usd`. The migration also backfills existing decisions from the stored `engineResponse`, where `metrics.fee_cost_usd` is a JSON number. A decision with a NULL `feeCostUsd` is skipped by the mean, never counted as 0.
 - The dashboard fixture is derived from the stored transactions and their records. The checker recomputes `allowedRouted`, `routed`, `completionRate`, every mean and `meanFeeCostPct` from them.
 
 ### 3.9 `GET /api/v1/health`, `GET /api/v1/meta`
@@ -944,7 +976,7 @@ The Application API uses `requestId` in place of `request_id`. The `code` values
 | 401 | `UNAUTHENTICATED` | app | Missing, malformed or unknown token |
 | 403 | `FORBIDDEN_POLICY` | app | A non-analyst requested `ppoProjected`. Checked before any call to inference. |
 | 404 | `NOT_FOUND` | both | Unknown resource |
-| 405 | `METHOD_NOT_ALLOWED` | both | The path exists, but not with this method. The response has an `Allow` header listing the path's methods (RFC 9110). |
+| 405 | `METHOD_NOT_ALLOWED` | both | The path exists, but not with this method. The response has an `Allow` header listing the path's methods (RFC 9110). In the app, protected paths authenticate first: without a valid token the answer is `401`, not `405` (§3.0, Q14). |
 | 409 | `DECISION_MISMATCH` | app | Recomputed `decision_id` differs from the stored one |
 | 409 | `POLICY_DISABLED` | inference (passed through by app) | `ppo_projected` requested but no approved checkpoint is enabled. The app doesn't persist it. In comparisons it appears in `skipped`, not as an error. |
 | 409 | `TRANSACTION_FAILED` | app | Explanation requested for a transaction whose `status` is `failed` |
@@ -1011,12 +1043,14 @@ Each transaction request (including the full state spec, so explicit states can 
 | Model | Key fields |
 |---|---|
 | `User` | `id`, `email`, `role` (`viewer`/`analyst`); seeded from `dev-tokens.json`, without the hashes |
-| `TransactionRequest` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor` (null when `failed`), `amountUsd`, `stateMode`, `stateSpec` (JSON), `simulationDate`, `requestedPolicy`, `status`, `failureCode` (null unless `status` is `failed`; needs a new migration), `clientReference` (≤ 200 characters) |
+| `TransactionRequest` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor` (null when `failed`), `amountUsd`, `stateMode`, `stateSpec` (JSON), `simulationDate`, `requestedPolicy`, `status`, `failureCode` (null unless `status` is `failed`; added by migration `20261104120000_failure_code_fee_cost_usd`, with a CHECK constraint that forbids a code on a non-failed row; failed rows saved before it have no code), `clientReference` (≤ 200 characters) |
 | `RoutingDecision` | `id`, `transactionId`, `decisionId`, `policy`, `policyStatus`, `allowed`, `completed`, `completionRatio`, `executedUsd`, `unroutedEnvUsd`, `unroutedAmountBasedUsd`, `rewardEnv`, `rewardAmountBased`, `valuesProvenance`, `stateFrameSha256`, `checkpointSha256`, `knowledgeSha256`, `gitCommit`, `engineResponse` (JSON) |
 | `Allocation` | `id`, `decisionId`, `slot`, `bridgeUid`, `shareRequested`, `amountRequestedUsd`, `amountExecutedUsd`, `amountClippedUsd`, `liquidityUsd`, `congestion`, `risk`, `shareBeforeProjection` |
-| `Comparison` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor`, `amountUsd`, `simulationDate`, `clientReference`, `stateMode`, `stateSpec` (JSON), `policies`, `engineResponse` (JSON). An independent record: no `TransactionRequest` is created, and there is no `transactionId`. |
+| `Comparison` | `id`, `createdAt`, `createdById`, `senderCountry`, `receiverCountry`, `corridor`, `amountUsd`, `simulationDate`, `clientReference`, `stateMode`, `stateSpec` (JSON), `policies`, `engineResponse` (JSON). An independent record: no `TransactionRequest` is created, and there is no `transactionId`. `stateSpec` is the effective state and `policies` the resolved canonical list, in order; both are returned as `state` and `policies` (§3.6, Q18). |
 | `Explanation` | `id`, `decisionId`, `engineResponse` (JSON), `createdAt` |
 | `AuditLog` | `id`, `at`, `userId`, `action`, `requestId`, `entityType`, `entityId`, `outcome` |
+
+The finalised models are in `services/backend/prisma/schema.prisma`. Beyond this outline, `RoutingDecision` also stores `latencyTerm`, `riskTerm` and `feeCostUsd` (§3.8). `Allocation` refers to its decision through `routingDecisionId`, to avoid a clash with the `decisionId` hash. Fields the schema marks `PROVISIONAL`, such as the `AuditLog` `action` and `outcome` values, are not agreed contract values.
 
 ---
 
@@ -1113,20 +1147,20 @@ These are **requirements** that Dev A's inference service and its tests must mee
 
 ## 10. Open decisions (v0.4 revision)
 
-Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A3), Q12 (R5), Q13, Q15, Q17, Q21 (A2), Q3a and Q9a, and the corrections R1–R6. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
+Ayush's owner decisions resolved Q1–Q10, Q11 (including the window defaults, A3), Q12 (R5), Q13, Q15, Q17, Q18 (comparisons, §3.6), Q21 (A2), Q3a and Q9a, and the corrections R1–R6. On 18 November 2026 they also resolved Q11a (§3.4), Q14 (§3.0) and Q22 (§3.4), and deferred Q20. Those rules are now stated in the sections above. `docs/TEAM_REVIEW_RESOLUTION.md` maps each one to where it landed. The questions below are still open: the contract states no rule for them, or states an interim rule marked as such.
 
 **Blocking: needed before the dependent implementation lands**
 
-| # | Question | Positions | Decides |
-|---|---|---|---|
-| Q11-dep | `meanFeeCostPct` needs a `feeCostUsd` column on `RoutingDecision`, added by a Prisma migration (§3.8) | Formula decided by the owner; the migration is not made | Anvesh (implementation) |
+None open. Q11-dep, the `feeCostUsd` column that `meanFeeCostPct` needs (§3.8), was the last blocking item. It is **done**: Dev B added it in the Prisma migration `services/backend/prisma/migrations/20261104120000_failure_code_fee_cost_usd`.
 
 **Non-blocking: they can follow v0.4**
 
+**Resolved on 18 November 2026** (owner decisions, Ayush):
+- **Q11a:** a non-UUID `:id` returns `404 NOT_FOUND` on `GET /transactions/:id`, `/transactions/:id/explanation` and `/comparisons/:id` (§3.4).
+- **Q14:** authentication comes before method validation, except on the public health endpoints. Unauthenticated unsupported-method requests return `401`; authenticated ones return `405` with the correct `Allow` (§3.0, §4).
+- **Q22:** legacy failed transactions with no historical failure code may return `failure: null`. New failed transactions must record their actual failure code (§3.4).
+
 | # | Question | Notes | Decides |
 |---|---|---|---|
-| Q11a | A non-UUID `:id`: `404 NOT_FOUND` or `422 VALIDATION_ERROR`? | Not implemented yet | Anvesh |
-| Q14 | Is `405` checked before or after authentication in the app? | The fixtures send a token, so they don't depend on it | Anvesh |
-| Q18 | Comparisons: the analyst default for an omitted `policies`, the order of `results`, and whether the record echoes `state` and `policies` | Both are already persisted (§6.3) | Anvesh and Varshini |
 | F1 | **Phase 1 cost-baseline unit** (a technical finding, not a Phase 2 contract change). `real_cost_baseline` looks like percentage points but is used as a fraction in the reward. Any correction would change Phase 1 rewards, so it needs a separately reviewed and versioned change. Phase 2 passes the value through unchanged | Evidence and the open points: `docs/TEAM_REVIEW_RESOLUTION.md` §14 | Ayush |
-| Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback | Nisarga, Anvesh, Varshini |
+| Q20 | Mock fixture selection: how MSW and the backend mock pick between several fixtures for one operation (for example the PPO-enabled meta) | C proposed method, path, query and deep-equal body, ignoring headers, plus a warning on fallback. **Deferred** by the owner on 18 November 2026; it does not block live inference integration | Nisarga, Anvesh, Varshini |
