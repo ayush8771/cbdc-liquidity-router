@@ -254,7 +254,8 @@ describe("TransactionDetailPage at 1024px and above", () => {
       expect(decisionIdCell().textContent, d.id).toBe(d.decision!.decisionId);
       unmount();
     }
-  });
+    // It renders every preview page in turn (about 3.5 s alone), so the default 5 s is too tight when the whole suite runs in parallel.
+  }, 30_000);
 
   it("shows a dash for a failed transaction's decision ID, because it has no decision, and invents none", () => {
     mockWidth(1280);

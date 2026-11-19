@@ -10,6 +10,8 @@ import "@fontsource/playfair-display/400.css";
 import "@fontsource/playfair-display/500.css";
 import "./styles/globals.css";
 import { routes } from "./app/routes";
+import { DataModeContext, dataModeFromEnv } from "./api/dataMode";
+import { AuthProvider } from "./auth/AuthProvider";
 
 const router = createBrowserRouter(routes);
 
@@ -18,6 +20,10 @@ if (!root) throw new Error("Missing #root element");
 
 createRoot(root).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <DataModeContext.Provider value={dataModeFromEnv(import.meta.env.VITE_API_MODE)}>
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
+    </DataModeContext.Provider>
   </StrictMode>,
 );

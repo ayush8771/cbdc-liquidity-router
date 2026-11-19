@@ -10,7 +10,8 @@ export function PolicyCell({ policy, tier }: { policy: PolicyKey; tier: PolicyTi
   if (policy === "waterfall" && tier === "default") return <MandatoryLabel kind="defaultWaterfall" />;
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <span>{POLICY_NAMES[policy]}</span>
+      {/* An unknown policy name from the API is shown as written (contract §1). */}
+      <span>{POLICY_NAMES[policy] ?? policy}</span>
       {tier === "experimental" ? <MandatoryLabel kind="experimental" /> : null}
     </span>
   );

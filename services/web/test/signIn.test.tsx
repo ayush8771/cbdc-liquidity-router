@@ -1,15 +1,27 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { server } from "./msw/server";
 import { renderRoute } from "./renderRoute";
 
-const TOKEN = "a1b2c3d4".repeat(8); // 64 characters; a made-up value for tests
+const TOKEN = "a1b2c3d4".repeat(8); // 64 characters; a made-up value for tests, unknown to the mock API
 
-describe("SignInPage (visual only until the API client exists)", () => {
+// The page needs a real (signed-out) session, and /auth/me is answered by MSW. See auth.test.tsx for the
+// sign-in flow itself; this file keeps the page's own behaviour and its visual previews covered.
+const renderSignIn = (path: string) => renderRoute(path, { auth: "real" });
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => {
+  server.resetHandlers();
+  sessionStorage.clear();
+});
+afterAll(() => server.close());
+
+describe("SignInPage", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("shows the dev-auth banner and a labelled token field", () => {
-    renderRoute("/sign-in");
+    renderSignIn("/sign-in");
     expect(screen.getByText("Development authentication — not secure")).toBeInTheDocument();
     const field = screen.getByLabelText(/Development token/);
     expect(field).toHaveAttribute("type", "password");
@@ -17,38 +29,42 @@ describe("SignInPage (visual only until the API client exists)", () => {
   });
 
   it("asks for a token when submitted empty", async () => {
-    renderRoute("/sign-in");
+    renderSignIn("/sign-in");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(screen.getByText("Enter your development token.")).toBeInTheDocument();
     expect(screen.getByLabelText(/Development token/)).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("says sign-in is not connected, and never stores, sends or keeps the token", async () => {
+  it("checks a token once with the API, and a rejected token is never stored", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    renderRoute("/sign-in");
+    renderSignIn("/sign-in");
 
-    const field = screen.getByLabelText(/Development token/);
-    await userEvent.type(field, "a".repeat(64));
+    await userEvent.type(screen.getByLabelText(/Development token/), "a".repeat(64));
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(screen.getByText("Sign-in isn't connected yet")).toBeInTheDocument();
-    expect(field).toHaveValue("");
+    expect(await screen.findByRole("alert")).toHaveTextContent("That token wasn't accepted");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]![0])).toMatch(/\/api\/v1\/auth\/me$/);
     expect(setItem).not.toHaveBeenCalled();
-    expect(fetchSpy).not.toHaveBeenCalled();
     expect(document.cookie).toBe("");
   });
 });
 
 describe("SignInPage preview-mode notice and Show/Hide (desktop additions)", () => {
-  it("always shows that authentication isn't connected", () => {
-    renderRoute("/sign-in");
+  it("shows the preview-mode notice only while a visual preview is on screen", () => {
+    renderSignIn("/sign-in");
+    expect(screen.queryByText("Preview mode")).not.toBeInTheDocument();
+  });
+
+  it("says a preview is illustrative", () => {
+    renderSignIn("/sign-in?state=invalid");
     expect(screen.getByText("Preview mode")).toBeInTheDocument();
-    expect(screen.getByText(/Authentication isn't connected\. Nothing you enter here is checked, stored or sent\./)).toBeInTheDocument();
+    expect(screen.getByText(/The message below is illustrative, not a result\./)).toBeInTheDocument();
   });
 
   it("shows and hides the token, and hides it again after a submit", async () => {
-    renderRoute("/sign-in");
+    renderSignIn("/sign-in");
     const field = screen.getByLabelText(/Development token/);
     await userEvent.type(field, TOKEN);
 
@@ -63,17 +79,18 @@ describe("SignInPage preview-mode notice and Show/Hide (desktop additions)", () 
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(field).toHaveAttribute("type", "password");
     expect(screen.getByRole("button", { name: "Show token" })).toBeInTheDocument();
+    await screen.findByRole("alert"); // the (rejected) check has finished
   });
 
   it("keeps empty-input validation", async () => {
-    renderRoute("/sign-in");
+    renderSignIn("/sign-in");
     await userEvent.type(screen.getByLabelText(/Development token/), "   ");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(screen.getByText("Enter your development token.")).toBeInTheDocument();
   });
 
   it("marks every new element as desktop only (hidden below lg)", () => {
-    renderRoute("/sign-in?state=error");
+    renderSignIn("/sign-in?state=error");
     expect(screen.getByRole("button", { name: "Show token" }).className).toMatch(/\bhidden\b.*\blg:inline-flex\b/);
     for (const el of [screen.getByText("Preview mode"), screen.getByRole("alert")]) {
       const wrapper = el.closest(".hidden");
@@ -87,7 +104,7 @@ describe("SignInPage cannot expose the token", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("keeps the token out of the URL, the history and the form data, with Show on", async () => {
-    const { router } = renderRoute("/sign-in");
+    const { router } = renderSignIn("/sign-in");
     const field = screen.getByLabelText(/Development token/) as HTMLInputElement;
     await userEvent.type(field, TOKEN);
     await userEvent.click(screen.getByRole("button", { name: "Show token" }));
@@ -97,6 +114,7 @@ describe("SignInPage cannot expose the token", () => {
     expect([...new FormData(field.form!).values()].join("")).not.toContain(TOKEN);
 
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("alert"); // the (rejected) check has finished
     expect(router.state.location.pathname).toBe("/sign-in");
     expect(router.state.location.search).toBe("");
     expect(router.state.location.hash).toBe("");
@@ -105,7 +123,7 @@ describe("SignInPage cannot expose the token", () => {
   });
 
   it("ignores any other URL parameter and never renders it", () => {
-    renderRoute(`/sign-in?state=success&token=${TOKEN}`);
+    renderSignIn(`/sign-in?state=success&token=${TOKEN}`);
     expect(document.body).not.toHaveTextContent(TOKEN);
     expect(screen.getByLabelText(/Development token/)).toHaveValue("");
     // "success" is not a state: no preview message of any kind appears.
@@ -116,7 +134,7 @@ describe("SignInPage cannot expose the token", () => {
   it.each(["checking", "invalid", "error"])("touches no network, storage or cookie in the %s preview", async (state) => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    renderRoute(`/sign-in?state=${state}`);
+    renderSignIn(`/sign-in?state=${state}`);
 
     await userEvent.type(screen.getByLabelText(/Development token/), TOKEN);
     await userEvent.click(screen.getByRole("button", { name: "Show token" }));
@@ -132,20 +150,20 @@ describe("SignInPage cannot expose the token", () => {
 
 describe("SignInPage visual previews (?state=)", () => {
   it("shows the checking state: a status message and a disabled Checking… button", () => {
-    renderRoute("/sign-in?state=checking");
+    renderSignIn("/sign-in?state=checking");
     expect(screen.getByRole("status")).toHaveTextContent("Checking your token…");
     expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
     expect(screen.getByText("Preview of this state. Nothing was checked.")).toBeInTheDocument();
   });
 
   it("shows the invalid-token state", () => {
-    renderRoute("/sign-in?state=invalid");
+    renderSignIn("/sign-in?state=invalid");
     expect(screen.getByRole("alert")).toHaveTextContent("That token wasn't accepted");
     expect(screen.getByRole("alert")).toHaveTextContent("Check it and try again.");
   });
 
   it("shows the error state with Try again", () => {
-    renderRoute("/sign-in?state=error");
+    renderSignIn("/sign-in?state=error");
     expect(screen.getByRole("alert")).toHaveTextContent("We couldn't check your token");
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
@@ -155,7 +173,7 @@ describe("SignInPage visual previews (?state=)", () => {
     ["invalid", "Exit preview"],
     ["checking", "Exit preview"],
   ])("%s: %s only clears the visual preview, replaces the history entry and keeps the typed token", async (state, action) => {
-    const { router } = renderRoute(`/sign-in?state=${state}`);
+    const { router } = renderSignIn(`/sign-in?state=${state}`);
     const field = screen.getByLabelText(/Development token/);
     await userEvent.type(field, "typed-value");
 
@@ -166,11 +184,11 @@ describe("SignInPage visual previews (?state=)", () => {
     expect(field).toHaveValue("typed-value");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.queryByText("Sign-in isn't connected yet")).not.toBeInTheDocument(); // no outcome was simulated
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument(); // no outcome was simulated
   });
 
   it("leaves the preview on submit, then behaves as before", async () => {
-    const { router } = renderRoute("/sign-in?state=error");
+    const { router } = renderSignIn("/sign-in?state=error");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(router.state.location.search).toBe("");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

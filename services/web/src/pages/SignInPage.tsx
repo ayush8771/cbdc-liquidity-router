@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
+import { returnPath } from "../auth/RequireAuth";
 import { DevAuthBanner } from "../components/layout/DevAuthBanner";
 import { Wordmark } from "../components/layout/Wordmark";
 import { Button } from "../components/ui/Button";
@@ -7,7 +9,7 @@ import { Card } from "../components/ui/Card";
 import { FormField } from "../components/ui/FormField";
 import { Icon } from "../components/ui/Icon";
 import { Notice } from "../components/ui/Notice";
-import { PreviewModeStrip, SignInStatus } from "../features/auth/SignInStatus";
+import { CONTENT as STATUS_CONTENT, PreviewModeStrip, SignInStatus } from "../features/auth/SignInStatus";
 import { TokenField } from "../features/auth/TokenField";
 import { useSignInPreview } from "../features/auth/useSignInPreview";
 import { cx } from "../lib/cx";
@@ -19,38 +21,59 @@ const LEDGER = [
   { term: "Scope", detail: "Historical replay and synthetic simulation only" },
 ];
 
-type Outcome = "idle" | "not-connected";
+/** What the last real attempt came to. The wording is the same as the previews' (SignInStatus). */
+type Failure = "invalid" | "unavailable";
 
 /**
- * Development sign-in (arch §8.3). VISUAL ONLY for now: validating the token
- * with GET /api/v1/auth/me needs the shared contracts and API client. Until
- * then, the token is never stored, sent or logged.
+ * Development sign-in (arch §8.3). The token is checked with GET /api/v1/auth/me
+ * (see AuthProvider) and kept only if the API accepts it. It is never put in a
+ * URL, a form submission or a log.
  *
- * The preview-mode notice, the Show/Hide control and the checking / invalid /
- * error previews are desktop only (`lg` and up). Below that the page is
- * unchanged. The previews are purely visual (?state=), see useSignInPreview.
+ * The Show/Hide control and the checking / invalid / error previews are desktop
+ * only (`lg` and up), and the previews are still purely visual (?state=), see
+ * useSignInPreview. The real checking and failure messages show at every width.
  */
 export function SignInPage() {
   const [token, setToken] = useState("");
   const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<Outcome>("idle");
+  const [checking, setChecking] = useState(false);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const preview = useSignInPreview();
+  const auth = useAuth();
+  const location = useLocation();
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     // A new attempt: hide the token again and leave any visual preview.
     setRevealed(false);
     preview.reset();
+    if (checking) return;
     if (token.trim() === "") {
       setError("Enter your development token.");
-      setOutcome("idle");
+      setFailure(null);
       return;
     }
     setError(null);
-    setToken("");
-    setOutcome("not-connected");
+    setFailure(null);
+    setChecking(true);
+    const result = await auth.signIn(token);
+    // On success the session changes and this page is replaced (see below).
+    if (result.ok) return;
+    setChecking(false);
+    setFailure(result.reason);
   }
+
+  // Already signed in (or just signed in): go where the guard turned the visitor away, or home.
+  if (auth.status === "signedIn") return <Navigate to={returnPath(location.state)} replace />;
+
+  const real = checking
+    ? STATUS_CONTENT.checking
+    : failure === "invalid"
+      ? STATUS_CONTENT.invalid
+      : failure === "unavailable"
+        ? STATUS_CONTENT.error
+        : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -93,7 +116,7 @@ export function SignInPage() {
 
           <section aria-labelledby="signin-heading" className="flex items-center lg:items-start">
             <Card className="w-full p-6 sm:p-8">
-              <PreviewModeStrip />
+              <PreviewModeStrip active={preview.state !== null} />
               <div className="mb-8 space-y-2">
                 <h2 id="signin-heading" className="font-serif-display text-title text-ink-primary">
                   Sign in
@@ -131,14 +154,31 @@ export function SignInPage() {
 
                 <SignInStatus state={preview.state} onReset={preview.reset} />
 
-                <Button
-                  type="submit"
-                  className={cx("w-full", preview.state === "checking" && "lg:hidden")}
-                  iconEnd={<Icon name="arrowRight" size={16} />}
-                >
-                  Sign in
-                </Button>
-                {preview.state === "checking" ? (
+                {checking ? (
+                  // The real check, at every width. A second submit is ignored while it runs.
+                  <Button
+                    type="submit"
+                    disabled
+                    className="w-full"
+                    iconStart={
+                      <span
+                        aria-hidden="true"
+                        className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                      />
+                    }
+                  >
+                    Checking…
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    className={cx("w-full", preview.state === "checking" && "lg:hidden")}
+                    iconEnd={<Icon name="arrowRight" size={16} />}
+                  >
+                    Sign in
+                  </Button>
+                )}
+                {preview.state === "checking" && !checking ? (
                   <div className="hidden lg:block">
                     <Button
                       disabled
@@ -155,11 +195,18 @@ export function SignInPage() {
                   </div>
                 ) : null}
 
-                <div aria-live="polite">
-                  {outcome === "not-connected" ? (
-                    <Notice tone="warning" title="Sign-in isn't connected yet">
-                      Token validation with <code className="text-ink-body">GET /api/v1/auth/me</code> will be added once
-                      the shared API contracts are merged. Your token was not stored or sent.
+                <div aria-live="polite" className="space-y-3">
+                  {real ? (
+                    <Notice tone={real.tone} role={real.role} title={real.title}>
+                      {real.body}
+                    </Notice>
+                  ) : auth.sessionNotice === "expired" ? (
+                    <Notice tone="warning" title="Your session has ended">
+                      Sign in again to continue.
+                    </Notice>
+                  ) : auth.sessionNotice === "unavailable" ? (
+                    <Notice tone="warning" title="We couldn't check your saved session">
+                      Sign in again, or try later if the service is unavailable.
                     </Notice>
                   ) : null}
                 </div>
@@ -187,16 +234,6 @@ export function SignInPage() {
                   <li>Paste the token here. It is for development only and is not production security.</li>
                 </ol>
               </details>
-
-              <div className="mt-6">
-                <Link
-                  to="/"
-                  className="inline-flex items-center gap-1.5 rounded-pill text-ui text-ink-muted hover:text-paper-white"
-                >
-                  Preview the application layout
-                  <Icon name="arrowRight" size={14} />
-                </Link>
-              </div>
             </Card>
           </section>
         </div>

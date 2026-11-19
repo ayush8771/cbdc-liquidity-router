@@ -41,7 +41,7 @@ const columns: TableColumn<TransactionSummaryView>[] = [
     header: "State",
     cell: (r) => (
       <span className="block">
-        <span className="block">{STATE_MODE_NAMES[r.stateMode]}</span>
+        <span className="block">{STATE_MODE_NAMES[r.stateMode] ?? r.stateMode}</span>
         <span className="block text-meta text-ink-muted">{formatDate(r.simulationDate)}</span>
       </span>
     ),

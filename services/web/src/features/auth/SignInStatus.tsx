@@ -4,26 +4,29 @@ import { StatusIndicator } from "../../components/ui/StatusIndicator";
 import type { SignInPreviewState } from "./useSignInPreview";
 
 /**
- * Always-visible notice that sign-in is not connected. Desktop only (`lg`
- * and up); below that the page is exactly as it was.
+ * Shown only while a visual preview (?state=) is on screen: sign-in itself is
+ * now real (GET /api/v1/auth/me), and the preview message below it is not.
+ * Desktop only (`lg` and up); below that the page is exactly as it was.
  */
-export function PreviewModeStrip() {
+export function PreviewModeStrip({ active }: { active: boolean }) {
+  if (!active) return null;
   return (
     <div className="hidden lg:block">
       <div className="mb-6 space-y-2 border-b border-line-subtle pb-6">
         <StatusIndicator tone="neutral" label="Preview mode" />
         <p className="text-ui text-ink-muted">
-          Authentication isn&apos;t connected. Nothing you enter here is checked, stored or sent.
+          You are viewing a preview of a sign-in state. The message below is illustrative, not a result.
         </p>
       </div>
     </div>
   );
 }
 
-// Outcomes of GET /api/v1/auth/me in the rev 5 contract: 200, 401
-// UNAUTHENTICATED ("Missing or invalid token.") and 500 INTERNAL_ERROR. The
-// wording is this UI's own; engine or backend text is never shown.
-const CONTENT: Record<
+// Outcomes of GET /api/v1/auth/me (contract §3.0): 200, 401 UNAUTHENTICATED
+// ("Missing or invalid token.") and 500 INTERNAL_ERROR. The wording is this
+// UI's own; engine or backend text is never shown. The real sign-in states
+// reuse this wording (see SignInPage).
+export const CONTENT: Record<
   SignInPreviewState,
   { tone: NoticeTone; role: "status" | "alert"; title: string; body: string; action: string }
 > = {

@@ -401,6 +401,8 @@ describe("failures", () => {
     await user.click(submitButton());
     await screen.findByRole("alert");
     await router.navigate("/transactions/new"); // the scenario parameter is removed
+    // Wait for the page to render the new URL: a click that lands before it still sees the old scenario.
+    await waitFor(() => expect(screen.queryByText(/Preview failure mode/)).not.toBeInTheDocument());
     await user.click(submitButton());
     expect(await screen.findByText("Routed and fully executed")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

@@ -1,4 +1,7 @@
 import { useParams } from "react-router-dom";
+import { useDataMode } from "../api/dataMode";
+import { useApiQuery } from "../api/useApiQuery";
+import { useAuth } from "../auth/AuthContext";
 import { MandatoryLabel } from "../components/labels/MandatoryLabel";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -11,6 +14,8 @@ import { StatusIndicator } from "../components/ui/StatusIndicator";
 import { AllocationTable } from "../features/transactions/detail/AllocationTable";
 import { DecisionPanel, WarningsPanel } from "../features/transactions/detail/DecisionPanel";
 import { DetailOverview } from "../features/transactions/detail/DetailOverview";
+import { ExplanationCard } from "../features/transactions/detail/ExplanationCard";
+import { describeDetailError, fetchTransactionDetail, isNotFound } from "../features/transactions/detailApi";
 import { isTransactionId } from "../features/transactions/filters";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { getPreviewTransactionDetail } from "../preview/previewDetail";
@@ -78,15 +83,33 @@ function PendingTransactionDetail() {
 }
 
 /**
- * Transaction detail on PREVIEW DATA, from 1024px up. The heading and the ID
- * are the same in every state, including an ID the preview data doesn't know.
- * Preview states: ?state=loading and ?state=error.
+ * Transaction detail, from 1024px up. The heading and the ID are the same in
+ * every state, including an ID the data doesn't know.
+ *
+ * Data mode (src/api/dataMode.ts): live by default, from
+ * GET /api/v1/transactions/:id through the signed-in session's client, with an
+ * Explanation card that asks for GET .../explanation only when the user clicks
+ * Explain. In preview mode (VITE_API_MODE=preview) it shows the preview data,
+ * never calls the API and has no Explanation card; only then do the review
+ * states ?state=loading and ?state=error apply.
  */
 function DesktopTransactionDetail() {
   const { id = "" } = useParams();
+  const live = useDataMode() === "live";
+  const { api } = useAuth();
   const valid = isTransactionId(id);
-  const { state, clear } = usePreviewState();
-  const detail = valid ? getPreviewTransactionDetail(id.trim().toLowerCase()) : undefined;
+  const { state: previewState, clear } = usePreviewState();
+  const state = live ? "ready" : previewState;
+  const normalizedId = id.trim().toLowerCase();
+
+  const query = useApiQuery(`detail:${normalizedId}`, () => fetchTransactionDetail(api, normalizedId), live && valid);
+  const liveDetail = query.status === "success" ? query.data : undefined;
+  const detail = live ? liveDetail : valid ? getPreviewTransactionDetail(normalizedId) : undefined;
+
+  const liveLoading = live && valid && query.status === "loading";
+  const notFound = live && query.status === "error" && isNotFound(query.error);
+  const liveFailed = live && query.status === "error" && !notFound ? query : null;
+  const failure = liveFailed ? describeDetailError(liveFailed.error, "transaction") : null;
 
   return (
     <div className="space-y-8">
@@ -102,11 +125,11 @@ function DesktopTransactionDetail() {
             "This address doesn't contain a valid transaction ID."
           )
         }
-        actions={<StatusIndicator tone="neutral" label="Not connected" />}
+        actions={<StatusIndicator tone="neutral" label={live ? "Live data" : "Not connected"} />}
         meta={detail ? <MandatoryLabel kind="simulated" /> : undefined}
       />
 
-      {valid ? <PreviewNotice /> : null}
+      {valid && !live ? <PreviewNotice /> : null}
 
       {!valid ? (
         <Card padded={false}>
@@ -114,9 +137,35 @@ function DesktopTransactionDetail() {
             Check the address, or open a transaction from History.
           </EmptyState>
         </Card>
-      ) : state === "loading" ? (
+      ) : state === "loading" || liveLoading ? (
         <Card>
           <LoadingState label="Loading the transaction" rows={8} />
+        </Card>
+      ) : liveFailed && failure ? (
+        <Card padded={false}>
+          <ErrorState
+            title="Couldn't load this transaction"
+            message={
+              <>
+                <p>{failure.message}</p>
+                {failure.details.length > 0 ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-left">
+                    {failure.details.map((d) => (
+                      <li key={d}>{d}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            }
+            reference={failure.reference}
+            action={
+              failure.canRetry ? (
+                <Button variant="secondary" onClick={liveFailed.retry}>
+                  Try again
+                </Button>
+              ) : undefined
+            }
+          />
         </Card>
       ) : state === "error" ? (
         <Card padded={false}>
@@ -153,6 +202,7 @@ function DesktopTransactionDetail() {
             <WarningsPanel decision={detail.decision} />
           </div>
           <AllocationTable decision={detail.decision} />
+          {live ? <ExplanationCard key={detail.id} transactionId={detail.id} decision={detail.decision} /> : null}
         </>
       )}
     </div>
@@ -160,8 +210,9 @@ function DesktopTransactionDetail() {
 }
 
 /**
- * Transaction detail. From 1024px up it shows the preview-data page; below
- * that it renders the existing placeholder, unchanged.
+ * Transaction detail. From 1024px up it shows the detail page (live API data,
+ * or preview data in preview mode); below that it renders the existing
+ * placeholder, unchanged.
  */
 export function TransactionDetailPage() {
   const isDesktop = useMediaQuery(DESKTOP);

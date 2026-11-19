@@ -1,5 +1,6 @@
 import { NAVIGATION } from "../../app/navigation";
-import { ButtonLink } from "../ui/Button";
+import { useAuth } from "../../auth/AuthContext";
+import { Button, ButtonLink } from "../ui/Button";
 import { NavItem } from "./NavItem";
 import { Wordmark } from "./Wordmark";
 
@@ -18,11 +19,32 @@ export function SidebarNav({ onNavigate }: SidebarNavProps) {
   );
 }
 
-/** Session area. Nothing here claims a signed-in user until auth is wired to /api/v1/auth/me. */
+/** Session area. It names the user only after GET /api/v1/auth/me has accepted the token. */
 export function SessionPanel() {
+  const { status, user, signOut } = useAuth();
+
+  if (status === "signedIn" && user) {
+    return (
+      <div className="space-y-3 rounded-card border border-line-subtle bg-surface-card p-4">
+        <div className="space-y-1">
+          <p className="text-meta text-ink-muted">Signed in as</p>
+          <p className="break-all text-ui text-ink-body">{user.email}</p>
+          <p className="text-meta text-ink-muted">
+            Role: <span className="text-ink-body">{user.role}</span>
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" className="w-full" onClick={signOut}>
+          Sign out
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3 rounded-card border border-line-subtle bg-surface-card p-4">
-      <p className="text-meta text-ink-muted">Not signed in. The session will be checked once the API is connected.</p>
+      <p className="text-meta text-ink-muted">
+        {status === "restoring" ? "Checking your session…" : "Not signed in."}
+      </p>
       <ButtonLink to="/sign-in" variant="secondary" size="sm" className="w-full">
         Sign in
       </ButtonLink>

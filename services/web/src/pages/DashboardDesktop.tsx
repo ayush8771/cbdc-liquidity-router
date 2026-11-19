@@ -1,4 +1,7 @@
 import { useSearchParams } from "react-router-dom";
+import { useDataMode } from "../api/dataMode";
+import { useApiQuery } from "../api/useApiQuery";
+import { useAuth } from "../auth/AuthContext";
 import { MandatoryLabel } from "../components/labels/MandatoryLabel";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { Card, CardHeader } from "../components/ui/Card";
@@ -9,6 +12,7 @@ import { Notice } from "../components/ui/Notice";
 import { PageHeading } from "../components/ui/PageHeading";
 import { StatusIndicator } from "../components/ui/StatusIndicator";
 import { ActivityBars } from "../features/dashboard/ActivityBars";
+import { describeDashboardError, fetchDashboardSummary, fetchRecentTransactions, toDashboardApiQuery } from "../features/dashboard/dashboardApi";
 import { DashboardFilters } from "../features/dashboard/DashboardFilters";
 import {
   describeWindow,
@@ -20,6 +24,7 @@ import {
 } from "../features/dashboard/dashboardQuery";
 import { KpiGrid } from "../features/dashboard/KpiGrid";
 import { CorridorMetricsTable, PolicyMetricsTable } from "../features/dashboard/PolicyMetricsTable";
+import { describeHistoryError } from "../features/transactions/historyApi";
 import { TransactionList } from "../features/transactions/TransactionList";
 import { POLICY_NAMES } from "../features/transactions/types";
 import { formatCorridor } from "../lib/format";
@@ -33,32 +38,61 @@ import { usePreviewState } from "../preview/usePreviewState";
 const RECENT_COUNT = 5;
 
 /**
- * The desktop dashboard (1024px and up) on PREVIEW DATA. It will read
- * GET /api/v1/dashboard/summary and GET /api/v1/transactions once the shared
- * contracts are integrated. Filters live in the URL under the contract's query
- * names. Preview states: ?state=loading, ?state=empty and ?state=error.
+ * The desktop dashboard (1024px and up). Filters live in the URL under the
+ * contract's query names (readDashboardParams) and are sent to
+ * GET /api/v1/dashboard/summary. A filter that can't be applied blocks the
+ * summary: no request is made and nothing is corrected for the user.
+ *
+ * Data mode (src/api/dataMode.ts): live by default, through the signed-in
+ * session's API client. The summary and the recent transactions (the first
+ * page of GET /api/v1/transactions) are two separate requests with their own
+ * loading and error states, so one failing never hides the other. In preview
+ * mode (VITE_API_MODE=preview) it shows the illustrative preview data instead
+ * and never calls the API; only then do the review states ?state=loading,
+ * ?state=empty and ?state=error apply.
  */
 export function DashboardDesktop() {
+  const live = useDataMode() === "live";
+  const { api } = useAuth();
   const [params, setParams] = useSearchParams();
-  const { state, clear } = usePreviewState();
+  const { state: previewState, clear } = usePreviewState();
+  const state = live ? "ready" : previewState;
   const { filters, problems } = readDashboardParams(params);
   const hasProblems = Object.keys(problems).length > 0;
 
+  // Live data: two independent requests.
+  const summaryQuery = useApiQuery(
+    JSON.stringify(toDashboardApiQuery(filters)),
+    () => fetchDashboardSummary(api, filters),
+    live && !hasProblems,
+  );
+  const recentQuery = useApiQuery(`recent:${RECENT_COUNT}`, () => fetchRecentTransactions(api, RECENT_COUNT), live && !hasProblems);
+
   // A filter that can't be applied blocks the summary: nothing is corrected for the user.
-  const summary = hasProblems
-    ? null
-    : queryPreviewDashboard({ corridor: filters.corridor, policy: filters.policy, window: toWindow(filters) });
+  const summary = live
+    ? summaryQuery.status === "success"
+      ? summaryQuery.data
+      : null
+    : hasProblems
+      ? null
+      : queryPreviewDashboard({ corridor: filters.corridor, policy: filters.policy, window: toWindow(filters) });
+  const summaryLoading = live && !hasProblems && summaryQuery.status === "loading";
+  const summaryFailure = live && !hasProblems && summaryQuery.status === "error" ? describeDashboardError(summaryQuery.error) : null;
 
   const update = (next: Filters) => {
     const nextParams = writeDashboardParams(next);
-    const previewState = params.get("state");
-    if (previewState) nextParams.set("state", previewState);
+    const previewParam = params.get("state");
+    if (previewParam) nextParams.set("state", previewParam);
     setParams(nextParams);
   };
 
   const filtersActive = hasDashboardFilters(filters);
   const isEmpty = state === "empty" || (summary !== null && summary.totals.transactions === 0);
   const recent = PREVIEW_TRANSACTIONS.slice(0, RECENT_COUNT);
+  // The recent transactions and the closing notice show whenever the summary area isn't blocked by a bad
+  // filter (live: whatever the summary's own state), as in the preview they show with the summary.
+  const showTail = live ? !hasProblems : summary !== null && state !== "error" && !hasProblems;
+  const recentFailure = live && recentQuery.status === "error" ? describeHistoryError(recentQuery.error) : null;
 
   return (
     <div className="space-y-8">
@@ -66,11 +100,11 @@ export function DashboardDesktop() {
         eyebrow="Overview"
         title="Dashboard"
         description="Aggregates over stored routing decisions, by policy and corridor."
-        actions={<StatusIndicator tone="neutral" label="Not connected" />}
+        actions={<StatusIndicator tone="neutral" label={live ? "Live data" : "Not connected"} />}
         meta={<MandatoryLabel kind="placeholderWeights" />}
       />
 
-      <PreviewNotice />
+      {live ? null : <PreviewNotice />}
 
       <Card>
         <DashboardFilters filters={filters} problems={problems} onChange={update} />
@@ -80,6 +114,32 @@ export function DashboardDesktop() {
         <Notice tone="warning" title="The summary isn't shown">
           A filter can&apos;t be applied. Fix the highlighted filters; nothing has been changed for you.
         </Notice>
+      ) : summaryFailure && summaryQuery.status === "error" ? (
+        <Card padded={false}>
+          <ErrorState
+            title="Couldn't load the dashboard"
+            message={
+              <>
+                <p>{summaryFailure.message}</p>
+                {summaryFailure.details.length > 0 ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-left">
+                    {summaryFailure.details.map((d) => (
+                      <li key={d}>{d}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            }
+            reference={summaryFailure.reference}
+            action={
+              summaryFailure.canRetry ? (
+                <Button variant="secondary" onClick={summaryQuery.retry}>
+                  Try again
+                </Button>
+              ) : undefined
+            }
+          />
+        </Card>
       ) : state === "error" ? (
         <Card padded={false}>
           <ErrorState
@@ -93,14 +153,16 @@ export function DashboardDesktop() {
             }
           />
         </Card>
-      ) : summary ? (
+      ) : summary || summaryLoading ? (
         <>
-          <p className="text-ui text-ink-secondary">
-            <span className="text-ink-muted">Window: </span>
-            <span data-testid="window">{describeWindow(summary.window)}</span>
-          </p>
+          {summary ? (
+            <p className="text-ui text-ink-secondary">
+              <span className="text-ink-muted">Window: </span>
+              <span data-testid="window">{describeWindow(summary.window)}</span>
+            </p>
+          ) : null}
 
-          {state === "loading" ? (
+          {state === "loading" || summaryLoading ? (
             <section aria-labelledby="totals-heading" className="space-y-4">
               <h2 id="totals-heading" className="sr-only">
                 Totals
@@ -108,7 +170,7 @@ export function DashboardDesktop() {
               <LoadingState label="Loading dashboard" rows={0} />
               <KpiGrid totals={null} />
             </section>
-          ) : isEmpty ? (
+          ) : !summary ? null : isEmpty ? (
             <Card padded={false}>
               <EmptyState
                 icon="route"
@@ -170,7 +232,7 @@ export function DashboardDesktop() {
                     categoryHeader="Policy"
                     items={summary.byPolicy.map((p) => ({
                       key: p.policy,
-                      label: POLICY_NAMES[p.policy],
+                      label: POLICY_NAMES[p.policy] ?? p.policy,
                       value: p.count,
                       completionRate: p.completionRate,
                     }))}
@@ -194,11 +256,15 @@ export function DashboardDesktop() {
                     <strong className="font-medium text-ink-secondary">Allowed routed</strong> counts routed decisions
                     the feasibility rules allowed: it is the denominator of the completion rate and of every mean.
                   </p>
-                  <p>
-                    A dash means the value isn&apos;t available. The preview data has no fee cost, reward, latency or
-                    risk values, so those columns stay empty here. Reward, latency and risk use placeholder weights:
-                    the table is not a ranking.
-                  </p>
+                  {live ? (
+                    <p>A dash means the value isn&apos;t available.</p>
+                  ) : (
+                    <p>
+                      A dash means the value isn&apos;t available. The preview data has no fee cost, reward, latency or
+                      risk values, so those columns stay empty here. Reward, latency and risk use placeholder weights:
+                      the table is not a ranking.
+                    </p>
+                  )}
                 </div>
               </Card>
 
@@ -214,6 +280,11 @@ export function DashboardDesktop() {
             </>
           )}
 
+        </>
+      ) : null}
+
+      {showTail ? (
+        <>
           <Card aria-label="Recent transactions">
             <CardHeader
               title="Recent transactions"
@@ -224,7 +295,31 @@ export function DashboardDesktop() {
                 </ButtonLink>
               }
             />
-            {state === "loading" ? (
+            {live ? (
+              recentQuery.status === "loading" ? (
+                <LoadingState label="Loading recent transactions" rows={5} announce={false} />
+              ) : recentFailure && recentQuery.status === "error" ? (
+                <Notice tone="danger" role="alert" title="Couldn't load recent transactions">
+                  <p>{recentFailure.message}</p>
+                  {recentFailure.reference ? (
+                    <p className="mt-2 text-meta text-ink-muted">
+                      Reference: <code className="select-all text-ink-secondary">{recentFailure.reference}</code>
+                    </p>
+                  ) : null}
+                  <div className="mt-3">
+                    <Button variant="secondary" size="sm" onClick={recentQuery.retry}>
+                      Try again
+                    </Button>
+                  </div>
+                </Notice>
+              ) : recentQuery.status === "success" ? (
+                <TransactionList
+                  rows={recentQuery.data}
+                  caption="Recent transactions"
+                  empty={<p className="text-ui text-ink-muted">No transactions yet.</p>}
+                />
+              ) : null
+            ) : state === "loading" ? (
               <LoadingState label="Loading recent transactions" rows={5} announce={false} />
             ) : (
               <TransactionList rows={recent} caption="Recent transactions" />

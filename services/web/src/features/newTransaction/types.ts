@@ -103,9 +103,23 @@ export type ServerError = {
   requestId: string;
 };
 
+/**
+ * Why a live submission's outcome is unknown: no answer arrived in time
+ * (`timeout`), the connection failed (`network`), or an answer arrived that
+ * could not be read (`unreadable`). In all three the request may have reached
+ * the server and the transaction may have been saved.
+ */
+export type UncertainReason = "timeout" | "network" | "unreadable";
+
 export type SubmitResult =
   | { kind: "routed"; transaction: TransactionDetailView }
   | { kind: "error"; error: ServerError };
+
+/**
+ * What a live submission can come to: a definite answer (SubmitResult), or no
+ * way to tell. The preview service only ever returns a SubmitResult.
+ */
+export type LiveSubmitResult = SubmitResult | { kind: "uncertain"; reason: UncertainReason };
 
 /** The form-level message shown above the Submit button. */
 export type FormErrorView = {

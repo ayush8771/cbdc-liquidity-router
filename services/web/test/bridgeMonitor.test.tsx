@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { render as renderUi, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DataModeContext } from "../src/api/dataMode";
 import { ILLUSTRATIVE_CORRIDORS, ILLUSTRATIVE_LOCATIONS } from "../src/features/globe/illustrativeData";
 import { BridgeMonitorPage } from "../src/pages/BridgeMonitorPage";
 
@@ -29,6 +31,10 @@ vi.mock("../src/features/globe/Globe", () => ({
     );
   },
 }));
+
+// These tests are about the preview page (no data, no requests), so it renders in preview mode, where it
+// needs no session and no router. The live page is tested in bridgeMonitorLive.test.tsx.
+const render = (ui: ReactElement) => renderUi(<DataModeContext.Provider value="preview">{ui}</DataModeContext.Provider>);
 
 type Environment = { width: number; reducedMotion: boolean };
 const original = window.matchMedia;

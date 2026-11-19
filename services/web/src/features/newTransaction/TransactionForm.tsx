@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { MandatoryLabel } from "../../components/labels/MandatoryLabel";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -23,6 +23,14 @@ type TransactionFormProps = {
   onChange: (next: FormValues) => void;
   onSubmit: () => void;
   onReset: () => void;
+  /**
+   * Other screens that take the same transaction fields (Compare) swap in their own policy
+   * control and button wording. Left out, the form is exactly the New Transaction form.
+   */
+  policyField?: ReactNode;
+  submitLabel?: string;
+  submittingLabel?: string;
+  cardLabel?: string;
 };
 
 const legend = "mb-4 text-body-sm font-medium text-ink-primary";
@@ -42,6 +50,10 @@ export function TransactionForm({
   onChange,
   onSubmit,
   onReset,
+  policyField,
+  submitLabel = "Route transaction",
+  submittingLabel = "Routing…",
+  cardLabel = "New transaction form",
 }: TransactionFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const set = (patch: Partial<FormValues>) => onChange({ ...values, ...patch });
@@ -56,7 +68,7 @@ export function TransactionForm({
     set({ venues: values.venues.map((v, i) => (i === index ? { ...v, ...patch } : v)) });
 
   return (
-    <Card aria-label="New transaction form">
+    <Card aria-label={cardLabel}>
       <form
         ref={formRef}
         noValidate
@@ -115,6 +127,7 @@ export function TransactionForm({
               )}
             </FormField>
 
+            {policyField ?? (
             <FormField
               label="Policy"
               error={errors.policy}
@@ -149,6 +162,7 @@ export function TransactionForm({
                 </Select>
               )}
             </FormField>
+            )}
 
             <FormField label="Client reference" error={errors.clientReference} helper="Optional. Up to 200 characters.">
               {({ invalid, ...control }) => (
@@ -329,11 +343,11 @@ export function TransactionForm({
                 <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               }
             >
-              Routing…
+              {submittingLabel}
             </Button>
           ) : (
             <Button type="submit" iconEnd={<Icon name="arrowRight" size={16} />}>
-              Route transaction
+              {submitLabel}
             </Button>
           )}
           <Button variant="tertiary" onClick={onReset} disabled={submitting}>

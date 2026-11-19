@@ -78,8 +78,13 @@ export type TransactionDetailView = {
   amountUsd: number;
   /** YYYY-MM-DD. */
   simulationDate: string;
-  stateMode: StateModeKey;
-  policy: PolicyKey;
+  /**
+   * Null for a failed transaction from the API: its record carries no state mode
+   * (that lives on the decision), and none is made up. Shown as "—".
+   */
+  stateMode: StateModeKey | null;
+  /** Null for a failed transaction from the API, for the same reason. Shown as "—". */
+  policy: PolicyKey | null;
   /** Null for a failed transaction. */
   policyTier: PolicyTier | null;
   clientReference: string | null;

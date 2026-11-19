@@ -8,7 +8,7 @@ import type { TransactionDetailView } from "../detailTypes";
 import { OutcomeBadge } from "../OutcomeBadge";
 import { PolicyCell } from "../PolicyCell";
 import { STATE_MODE_NAMES, type Outcome } from "../types";
-import { orDash } from "./dash";
+import { Dash, orDash } from "./dash";
 
 const OUTCOME_TEXT: Record<Outcome, string> = {
   completed: "Routed and fully executed.",
@@ -89,15 +89,25 @@ export function DetailOverview({ detail }: { detail: TransactionDetailView }) {
             { term: "Corridor", detail: detail.corridor ? formatCorridor(detail.corridor) : orDash(null) },
             { term: "Source", detail: orDash(detail.senderCountry) },
             { term: "Destination", detail: orDash(detail.receiverCountry) },
-            { term: "Policy", detail: <PolicyCell policy={detail.policy} tier={detail.policyTier} /> },
+            {
+              term: "Policy",
+              // A failed transaction from the API has no policy of its own to show.
+              detail: detail.policy ? <PolicyCell policy={detail.policy} tier={detail.policyTier} /> : orDash(null),
+            },
             {
               term: "State",
-              detail: (
+              detail: detail.stateMode ? (
                 <span className="inline-flex flex-wrap items-center gap-2">
                   <span>
-                    {STATE_MODE_NAMES[detail.stateMode]}, {formatDate(detail.simulationDate)}
+                    {STATE_MODE_NAMES[detail.stateMode] ?? detail.stateMode}, {formatDate(detail.simulationDate)}
                   </span>
                   {detail.stateMode === "explicit" ? <MandatoryLabel kind="userSuppliedState" /> : null}
+                </span>
+              ) : (
+                // No state mode on a failed transaction: "—", and the simulation date it did have.
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <Dash />
+                  <span className="text-ink-muted">Simulation date {formatDate(detail.simulationDate)}</span>
                 </span>
               ),
             },
