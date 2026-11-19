@@ -58,8 +58,8 @@ const appVersion = {
   defaultPolicy: "waterfall",
   policies: [
     { policy: "waterfall", status: "default", enabled: true },
-    // Values are not mapped: "ppo_projected" stays as the engine sent it.
-    { policy: "ppo_projected", status: "experimental", enabled: false, disabledReason: "no approved checkpoint configured" },
+    // Policy names are enum values and are mapped (§3.2; fixture app/meta/200_meta.json).
+    { policy: "ppoProjected", status: "experimental", enabled: false, disabledReason: "no approved checkpoint configured" },
   ],
   checkpoint: { checkpointId: "ck-1", sha256: "a".repeat(64), approvedBy: "x", approvedOn: "2026-11-01", sourceRun: "outputs/experiments/x" },
   knowledge: { knowledgeVersion: "2026-11-02.1", sha256: "e".repeat(64) },
@@ -181,6 +181,71 @@ describe("GET /api/v1/meta", () => {
       const { client } = mockClient(() => ({ status: 200, body: { ...engineVersion, future_field: { nested_key: "v" } } }));
       const res = await withServer({ inferenceClient: client }, (url) => getMeta(url));
       assert.deepEqual(res.body!.futureField, { nestedKey: "v" });
+    });
+
+    describe("policy names (contract fixtures app/meta/200_meta*.json)", () => {
+      const fixture = (path: string) =>
+        JSON.parse(readFileSync(new URL(`../../../../contracts/fixtures/${path}`, import.meta.url), "utf8")) as {
+          response: { body: Record<string, any> };
+        };
+      for (const [engine, app] of [
+        ["inference/meta/200_version.json", "app/meta/200_meta.json"],
+        ["inference/meta/200_version_ppo_enabled.json", "app/meta/200_meta_ppo_enabled.json"],
+      ] as const) {
+        it(`maps ${engine} to exactly the body of ${app}`, async () => {
+          const engineBody = fixture(engine).response.body;
+          const appBody = fixture(app).response.body;
+          const { client } = mockClient(() => ({ status: 200, body: engineBody }));
+          const res = await withServer({ inferenceClient: client }, (url) => getMeta(url));
+          assert.equal(res.status, 200);
+          const { backendVersion, inferenceMode, ...rest } = res.body!;
+          const { backendVersion: _b, inferenceMode: _i, ...expected } = appBody;
+          assert.deepEqual(rest, expected);
+          assert.equal(backendVersion, BACKEND_VERSION);
+          assert.equal(inferenceMode, "mock");
+          assert.deepEqual(
+            res.body!.policies.map((p: { policy: string }) => p.policy),
+            ["waterfall", "cheapestFeasible", "ppoProjected"],
+          );
+        });
+      }
+
+      it("keeps status, enabled and disabledReason unchanged", async () => {
+        const engineBody = fixture("inference/meta/200_version.json").response.body;
+        const { client } = mockClient(() => ({ status: 200, body: engineBody }));
+        const res = await withServer({ inferenceClient: client }, (url) => getMeta(url));
+        assert.deepEqual(
+          res.body!.policies.map((p: Record<string, unknown>) => [p.status, p.enabled, p.disabledReason]),
+          engineBody.policies.map((p: Record<string, unknown>) => [p.status, p.enabled, p.disabled_reason]),
+        );
+      });
+
+      it("maps defaultPolicy and keeps an unknown policy name as sent", async () => {
+        const body = {
+          ...engineVersion,
+          default_policy: "cheapest_feasible",
+          policies: [...engineVersion.policies, { policy: "future_policy", status: "experimental", enabled: false }],
+        };
+        const { client } = mockClient(() => ({ status: 200, body }));
+        const res = await withServer({ inferenceClient: client }, (url) => getMeta(url));
+        assert.equal(res.status, 200);
+        assert.equal(res.body!.defaultPolicy, "cheapestFeasible");
+        assert.deepEqual(
+          res.body!.policies.map((p: { policy: string }) => p.policy),
+          ["waterfall", "ppoProjected", "future_policy"],
+        );
+      });
+
+      it("does not change the cached /v1/version body: a second read maps the same way", async () => {
+        const { client, calls } = mockClient();
+        const [first, second] = await withServer({ inferenceClient: client }, async (url) => [
+          await getMeta(url),
+          await getMeta(url),
+        ]);
+        assert.equal(calls.length, 1);
+        assert.deepEqual(first.body, second.body);
+        assert.equal(engineVersion.policies[1]!.policy, "ppo_projected");
+      });
     });
 
     it("forwards the request ID to /v1/version and ignores query parameters", async () => {
