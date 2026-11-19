@@ -1,0 +1,159 @@
+{
+  "description": "Partial completion (status routed, completed false).",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "transaction",
+    "fixture": "inference/route/200_cheapest_feasible_partial.json"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-201_cheapest_feasible_partial"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      },
+      "policy": "cheapestFeasible"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "X-Request-Id": "fixture-201_cheapest_feasible_partial"
+    },
+    "body": {
+      "id": "30bfe62e-365d-533c-8da6-3cefa289f713",
+      "createdAt": "2026-11-02T10:00:00Z",
+      "createdBy": "u-analyst-1",
+      "status": "routed",
+      "transaction": {
+        "senderCountry": "GBR",
+        "receiverCountry": "PHL",
+        "amountUsd": 300000.0,
+        "corridor": "GBR->PHL",
+        "simulationDate": "2024-06-14",
+        "clientReference": null
+      },
+      "failure": null,
+      "decision": {
+        "decisionId": "sha256:1000c6a38dfafbfd2e19b3191fd810ed2b18eebf32615eeedbcb8b332caac678",
+        "policy": "cheapestFeasible",
+        "policyStatus": "baseline",
+        "feasibility": {
+          "allowed": true,
+          "reason": null,
+          "decisiveFactIds": [],
+          "knowledgeVersion": "2026-11-02.1"
+        },
+        "allocations": [
+          {
+            "slot": 0,
+            "bridgeUid": "GBR->PHL#0",
+            "dataSourceTag": "real_static_bridge",
+            "feePct": 0.02,
+            "liquidityUsd": 412345.6,
+            "congestion": 0.31,
+            "risk": 0.0,
+            "shareRequested": 0.0,
+            "amountRequestedUsd": 0.0,
+            "amountExecutedUsd": 0.0,
+            "amountClippedUsd": 0.0,
+            "shareBeforeProjection": null
+          },
+          {
+            "slot": 1,
+            "bridgeUid": "GBR->PHL#1",
+            "dataSourceTag": "synthetic_bridge_expansion",
+            "feePct": 0.014,
+            "liquidityUsd": 150000.0,
+            "congestion": 0.22,
+            "risk": 0.0,
+            "shareRequested": 1.0,
+            "amountRequestedUsd": 300000.0,
+            "amountExecutedUsd": 150000.0,
+            "amountClippedUsd": 150000.0,
+            "shareBeforeProjection": null
+          },
+          {
+            "slot": 2,
+            "bridgeUid": "GBR->PHL#2",
+            "dataSourceTag": "synthetic_bridge_expansion",
+            "feePct": 0.03,
+            "liquidityUsd": 85000.0,
+            "congestion": 0.48,
+            "risk": 0.0,
+            "shareRequested": 0.0,
+            "amountRequestedUsd": 0.0,
+            "amountExecutedUsd": 0.0,
+            "amountClippedUsd": 0.0,
+            "shareBeforeProjection": null
+          }
+        ],
+        "totals": {
+          "amountUsd": 300000.0,
+          "requestedUsd": 300000.0,
+          "executedUsd": 150000.0,
+          "unroutedEnvUsd": 150000.0,
+          "unroutedAmountBasedUsd": 150000.0,
+          "completionRatio": 0.5,
+          "completed": false,
+          "bridgesUsed": 1
+        },
+        "metrics": {
+          "feeCostUsd": 2100.0,
+          "baselineCostPct": 0.0612,
+          "costTerm": 0.0236,
+          "latencyTerm": 0.11,
+          "riskTerm": 0.0,
+          "unroutedTermEnv": 0.5,
+          "unroutedTermAmountBased": 0.5,
+          "rewardEnv": -0.5864,
+          "rewardAmountBased": -0.5864,
+          "rewardWeights": {
+            "lambdaLatency": 1.0,
+            "lambdaRisk": 1.0,
+            "lambdaUnrouted": 1.0,
+            "status": "placeholder"
+          }
+        },
+        "diagnostics": {
+          "regime": "splitting_needed",
+          "combinedLiquidityUsd": 647345.6,
+          "projectionApplied": false
+        },
+        "provenance": {
+          "stateMode": "historicalReplay",
+          "stateDate": "2024-06-14",
+          "split": "test",
+          "scenarioId": null,
+          "valuesProvenance": "synthetic_simulation",
+          "engineVersion": "0.1.0",
+          "gitCommit": "bc9905e",
+          "knowledgeSha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "dailyStateSha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "stateFrameSha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "checkpoint": null,
+          "device": "cpu",
+          "platform": "linux-x86_64"
+        },
+        "warnings": [
+          {
+            "code": "PARTIAL_COMPLETION",
+            "message": "Executed 50.0% of the amount; the rest is unrouted."
+          },
+          {
+            "code": "RISK_FALLBACK_USED",
+            "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+          }
+        ]
+      }
+    }
+  }
+}

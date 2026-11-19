@@ -1,0 +1,84 @@
+{
+  "description": "FIXTURE ONLY: camelCase of inference/meta/200_version_ppo_enabled.json, for the PPO-enabled mock scenario.",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "meta",
+    "fixture": "inference/meta/200_version_ppo_enabled.json"
+  },
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/meta",
+    "headers": {
+      "Authorization": "Bearer mock-viewer",
+      "X-Request-Id": "fixture-200_meta_ppo_enabled"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_meta_ppo_enabled"
+    },
+    "body": {
+      "apiVersion": "v1",
+      "engineVersion": "0.1.0",
+      "phase1BaselineTag": "phase1-complete",
+      "gitCommit": "bc9905e",
+      "defaultPolicy": "waterfall",
+      "policies": [
+        {
+          "policy": "waterfall",
+          "status": "default",
+          "enabled": true
+        },
+        {
+          "policy": "cheapestFeasible",
+          "status": "baseline",
+          "enabled": true
+        },
+        {
+          "policy": "ppoProjected",
+          "status": "experimental",
+          "enabled": true
+        }
+      ],
+      "checkpoint": {
+        "checkpointId": "fixture-only-not-approved",
+        "sha256": "0fd441744e610e3356e8f64ea85cc4b6e5ecfc1f4f136eba18e960f4109891c9",
+        "approvedBy": "fixture (no checkpoint is approved)",
+        "approvedOn": "2026-11-02",
+        "sourceRun": "outputs/experiments/<illustrative>/ppo_checkpoint.pt"
+      },
+      "knowledge": {
+        "knowledgeVersion": "2026-11-02.1",
+        "sha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2"
+      },
+      "data": {
+        "dailyStateSha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+        "bridgeNetworkSha256": "99982af37c10504f74143274a3bb24260a95f200ab26bcea258b263fe8fe942f",
+        "normalizationStatsSha256": "bc70dfaa92305476877da2c63121c7aa26b78f97146111f23373870170212123",
+        "macroRiskProxySha256": "6fc4c870234003442f4f4b9859b9c62428e7cda94ed784f1447720705e944683",
+        "rpwCorridorQuarterlySha256": "2b6abc03ea7c888ac566bc196f70495c6778acdc158cdade0a98d312e281cf8e",
+        "scenariosSha256": "d33a57209667d415ebe732059a37651fd9e926387cf9069565369eecff415f33",
+        "dateRange": {
+          "start": "2011-01-01",
+          "end": "2025-09-30"
+        }
+      },
+      "rewardWeights": {
+        "lambdaLatency": 1.0,
+        "lambdaRisk": 1.0,
+        "lambdaUnrouted": 1.0,
+        "status": "placeholder"
+      },
+      "runtime": {
+        "platform": "linux-x86_64",
+        "python": "3.10.11",
+        "torch": "2.13.0+cpu",
+        "device": "cpu",
+        "lockFile": "services/inference/requirements/linux-x86_64-cpu.txt"
+      },
+      "backendVersion": "0.1.0",
+      "inferenceMode": "mock"
+    }
+  }
+}

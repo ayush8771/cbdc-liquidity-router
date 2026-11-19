@@ -1,0 +1,58 @@
+{
+  "description": "Negative liquidity.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-422_invalid_state_value"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "explicit",
+        "reference_date": "2024-06-14",
+        "venues": [
+          {
+            "bridge_uid": "GBR->PHL#0",
+            "liquidity_usd": -1.0,
+            "congestion": 0.35,
+            "history": null
+          },
+          {
+            "bridge_uid": "GBR->PHL#1",
+            "liquidity_usd": 60000.0,
+            "congestion": 0.2,
+            "history": null
+          },
+          {
+            "bridge_uid": "GBR->PHL#2",
+            "liquidity_usd": 90000.0,
+            "congestion": 0.5,
+            "history": null
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_invalid_state_value"
+    },
+    "body": {
+      "error": {
+        "code": "INVALID_STATE_VALUE",
+        "message": "liquidity_usd must be finite and >= 0.",
+        "details": {
+          "field": "state.venues[0].liquidity_usd"
+        },
+        "request_id": "fixture-422_invalid_state_value"
+      }
+    }
+  }
+}

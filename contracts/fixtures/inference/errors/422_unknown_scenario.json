@@ -1,0 +1,39 @@
+{
+  "description": "scenario_id not defined.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-422_unknown_scenario"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "scenario",
+        "date": "2024-06-14",
+        "scenario_id": "liquidity_minus90"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_unknown_scenario"
+    },
+    "body": {
+      "error": {
+        "code": "UNKNOWN_SCENARIO",
+        "message": "Unknown scenario_id liquidity_minus90.",
+        "details": {
+          "field": "state.scenario_id"
+        },
+        "request_id": "fixture-422_unknown_scenario"
+      }
+    }
+  }
+}

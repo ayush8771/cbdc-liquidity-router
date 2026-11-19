@@ -1,0 +1,38 @@
+{
+  "description": "No data after 2025-09-30.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-422_date_out_of_range"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2025-10-15"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_date_out_of_range"
+    },
+    "body": {
+      "error": {
+        "code": "DATE_OUT_OF_RANGE",
+        "message": "simulation_date 2025-10-15 is outside 2011-01-01 to 2025-09-30.",
+        "details": {
+          "field": "state.date"
+        },
+        "request_id": "fixture-422_date_out_of_range"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "userId": "u-analyst-1",
+      "email": "analyst@example.test",
+      "role": "analyst",
+      "tokenSha256": "<replace with the SHA-256 of your own token: 64 lowercase hex characters>"
+    },
+    {
+      "userId": "u-viewer-1",
+      "email": "viewer@example.test",
+      "role": "viewer",
+      "tokenSha256": "<replace with the SHA-256 of a second token: 64 lowercase hex characters>"
+    }
+  ]
+}

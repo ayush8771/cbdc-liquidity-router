@@ -1,0 +1,51 @@
+{
+  "description": "Explicit venue with a risk field (§2.4).",
+  "source": "illustrative",
+  "request_valid": false,
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-422_validation_error"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "explicit",
+        "referenceDate": "2024-06-14",
+        "venues": [
+          {
+            "bridgeUid": "GBR->PHL#0",
+            "liquidityUsd": 210000.0,
+            "congestion": 0.35,
+            "risk": 0.2
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_validation_error"
+    },
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Request failed validation.",
+        "details": {
+          "errors": [
+            {
+              "field": "state.venues[0].risk",
+              "message": "Unknown field."
+            }
+          ]
+        },
+        "requestId": "fixture-422_validation_error"
+      }
+    }
+  }
+}

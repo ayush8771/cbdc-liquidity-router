@@ -1,0 +1,37 @@
+{
+  "description": "Inference unreachable or the 15 s timeout elapsed. Persisted as failed.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-503_inference_unavailable"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "X-Request-Id": "fixture-503_inference_unavailable"
+    },
+    "body": {
+      "error": {
+        "code": "INFERENCE_UNAVAILABLE",
+        "message": "The inference service is unavailable.",
+        "details": {
+          "transactionId": "23419d39-c4bc-5776-9483-5b6626eb7d3b"
+        },
+        "requestId": "fixture-503_inference_unavailable"
+      }
+    }
+  }
+}

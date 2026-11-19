@@ -1,0 +1,27 @@
+{
+  "description": "DELETE on a POST-only path (§4). Allow lists the path's methods. Sent with a token, so it doesn't depend on whether 405 is checked before authentication (contract §10, Q14).",
+  "source": "illustrative",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/v1/comparisons",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-405_method_not_allowed"
+    }
+  },
+  "response": {
+    "status": 405,
+    "headers": {
+      "Allow": "POST",
+      "X-Request-Id": "fixture-405_method_not_allowed"
+    },
+    "body": {
+      "error": {
+        "code": "METHOD_NOT_ALLOWED",
+        "message": "Method DELETE is not allowed on /api/v1/comparisons.",
+        "details": {},
+        "requestId": "fixture-405_method_not_allowed"
+      }
+    }
+  }
+}

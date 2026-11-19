@@ -1,0 +1,24 @@
+{
+  "description": "Inference unreachable: degraded.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/health",
+    "headers": {
+      "X-Request-Id": "fixture-200_health_inference_unavailable"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_health_inference_unavailable"
+    },
+    "body": {
+      "status": "degraded",
+      "database": "ok",
+      "inference": "unavailable",
+      "authMode": "dev",
+      "time": "2026-11-02T10:00:00Z"
+    }
+  }
+}

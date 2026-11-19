@@ -1,0 +1,73 @@
+{
+  "description": "camelCase mapping of the inference response.",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "identity",
+    "fixture": "inference/state/200_replay_gbr_phl.json"
+  },
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/state",
+    "query": {
+      "corridor": "GBR->PHL",
+      "mode": "historicalReplay",
+      "date": "2024-06-14"
+    },
+    "headers": {
+      "Authorization": "Bearer mock-viewer",
+      "X-Request-Id": "fixture-200_state_replay"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_state_replay"
+    },
+    "body": {
+      "corridor": "GBR->PHL",
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14",
+        "split": "test",
+        "scenarioId": null
+      },
+      "corridorRisk": 0.0,
+      "baselineCostPct": 0.0612,
+      "venues": [
+        {
+          "slot": 0,
+          "bridgeUid": "GBR->PHL#0",
+          "feePct": 0.02,
+          "liquidityUsd": 412345.6,
+          "congestion": 0.31,
+          "dataSourceTag": "real_static_bridge",
+          "valuesProvenance": "synthetic_simulation"
+        },
+        {
+          "slot": 1,
+          "bridgeUid": "GBR->PHL#1",
+          "feePct": 0.014,
+          "liquidityUsd": 150000.0,
+          "congestion": 0.22,
+          "dataSourceTag": "synthetic_bridge_expansion",
+          "valuesProvenance": "synthetic_simulation"
+        },
+        {
+          "slot": 2,
+          "bridgeUid": "GBR->PHL#2",
+          "feePct": 0.03,
+          "liquidityUsd": 85000.0,
+          "congestion": 0.48,
+          "dataSourceTag": "synthetic_bridge_expansion",
+          "valuesProvenance": "synthetic_simulation"
+        }
+      ],
+      "warnings": [
+        {
+          "code": "RISK_FALLBACK_USED",
+          "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+        }
+      ]
+    }
+  }
+}

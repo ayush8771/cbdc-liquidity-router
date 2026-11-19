@@ -1,0 +1,38 @@
+{
+  "description": "Contract §4 example.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-422_date_in_gap_buffer"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2022-01-10"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_date_in_gap_buffer"
+    },
+    "body": {
+      "error": {
+        "code": "DATE_IN_GAP_BUFFER",
+        "message": "simulation_date 2022-01-10 falls within the 30-day gap buffer of a split boundary.",
+        "details": {
+          "field": "state.date"
+        },
+        "request_id": "fixture-422_date_in_gap_buffer"
+      }
+    }
+  }
+}

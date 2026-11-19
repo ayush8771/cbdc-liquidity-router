@@ -1,0 +1,69 @@
+{
+  "description": "camelCase mapping of the inference response. Sorted by scenario id (§2.7).",
+  "source": "phase1_derived",
+  "derived_from": {
+    "kind": "identity",
+    "fixture": "inference/meta/200_scenarios.json"
+  },
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/scenarios",
+    "headers": {
+      "Authorization": "Bearer mock-viewer",
+      "X-Request-Id": "fixture-200_scenarios"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_scenarios"
+    },
+    "body": {
+      "scenarios": [
+        {
+          "scenarioId": "baseline",
+          "description": "Unmodified synthetic bridge state.",
+          "liquidityMultiplier": 1.0,
+          "congestionMultiplier": 1.0,
+          "cheapestVenueLiquidityMultiplier": 1.0
+        },
+        {
+          "scenarioId": "cheapest_venue_outage",
+          "description": "Fee-cheapest venue of each corridor at 10% liquidity.",
+          "liquidityMultiplier": 1.0,
+          "congestionMultiplier": 1.0,
+          "cheapestVenueLiquidityMultiplier": 0.1
+        },
+        {
+          "scenarioId": "combined_stress",
+          "description": "Liquidity x0.7 and congestion x1.5 on all venues.",
+          "liquidityMultiplier": 0.7,
+          "congestionMultiplier": 1.5,
+          "cheapestVenueLiquidityMultiplier": 1.0
+        },
+        {
+          "scenarioId": "congestion_x2",
+          "description": "All venues' congestion doubled.",
+          "liquidityMultiplier": 1.0,
+          "congestionMultiplier": 2.0,
+          "cheapestVenueLiquidityMultiplier": 1.0
+        },
+        {
+          "scenarioId": "liquidity_minus30",
+          "description": "All venues' liquidity scaled by 0.7.",
+          "liquidityMultiplier": 0.7,
+          "congestionMultiplier": 1.0,
+          "cheapestVenueLiquidityMultiplier": 1.0
+        },
+        {
+          "scenarioId": "liquidity_minus50",
+          "description": "All venues' liquidity scaled by 0.5.",
+          "liquidityMultiplier": 0.5,
+          "congestionMultiplier": 1.0,
+          "cheapestVenueLiquidityMultiplier": 1.0
+        }
+      ],
+      "note": "Uniform multipliers from Stage 1F, applied to the whole series. Not calibrated historical shocks."
+    }
+  }
+}

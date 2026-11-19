@@ -1,0 +1,55 @@
+{
+  "description": "Excluded ranges computed from src/preprocessing/split.py in_gap_buffer() over 2011-01-01..2025-09-30.",
+  "source": "phase1_derived",
+  "request": {
+    "method": "GET",
+    "path": "/v1/replay/calendar",
+    "headers": {
+      "X-Request-Id": "fixture-200_replay_calendar"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_replay_calendar"
+    },
+    "body": {
+      "start": "2011-01-01",
+      "end": "2025-09-30",
+      "splits": {
+        "train": {
+          "start": "2011-01-01",
+          "end": "2021-12-31"
+        },
+        "validation": {
+          "start": "2022-01-01",
+          "end": "2023-12-31"
+        },
+        "test": {
+          "start": "2024-01-01",
+          "end": "2025-09-30"
+        }
+      },
+      "gap_buffer_days": 30,
+      "excluded_ranges": [
+        {
+          "start": "2011-01-01",
+          "end": "2011-01-31"
+        },
+        {
+          "start": "2021-12-01",
+          "end": "2022-01-31"
+        },
+        {
+          "start": "2023-12-01",
+          "end": "2024-01-31"
+        },
+        {
+          "start": "2025-08-31",
+          "end": "2025-09-30"
+        }
+      ],
+      "note": "Synthetic daily bridge state. Not real CBDC telemetry. No data after 2025-09-30."
+    }
+  }
+}

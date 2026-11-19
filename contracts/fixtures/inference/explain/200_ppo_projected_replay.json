@@ -1,0 +1,81 @@
+{
+  "description": "PPO explanation: no causal reasons, only the learned shares and the projection's changes (§2.10).",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/explain",
+    "headers": {
+      "X-Request-Id": "fixture-200_ppo_projected_replay"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      },
+      "policy": "ppo_projected"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_ppo_projected_replay"
+    },
+    "body": {
+      "decision_id": "sha256:921879c5bc4d489383760d9cd4b73e9242dedf8d180e1c39b57c709a0a33ccf8",
+      "policy": "ppo_projected",
+      "summary": "Routed 100% of $300,000 across 3 venues using experimental PPO shares adjusted by the capacity projection.",
+      "feasibility": {
+        "allowed": true,
+        "reason": null,
+        "active_facts": [
+          {
+            "fact_id": "global_max_single_transfer_usd",
+            "rule_type": "max_single_transfer_usd",
+            "value": 500000.0,
+            "provenance_tag": "project_assumption",
+            "verified": false,
+            "source": "Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation."
+          }
+        ],
+        "provider": "StaticMemoryProvider"
+      },
+      "venue_explanations": [
+        {
+          "bridge_uid": "GBR->PHL#0",
+          "outcome": "used",
+          "reason_code": "PROJECTION_INCREASED",
+          "text": "PPO share 34.00%; the projection raised it to 36.33%."
+        },
+        {
+          "bridge_uid": "GBR->PHL#1",
+          "outcome": "used",
+          "reason_code": "PROJECTION_INCREASED",
+          "text": "PPO share 33.00%; the projection raised it to 35.33%."
+        },
+        {
+          "bridge_uid": "GBR->PHL#2",
+          "outcome": "used",
+          "reason_code": "PROJECTION_REDUCED_TO_CAPACITY",
+          "text": "PPO share 33.00%; the projection cut it to 28.33%, its simulated liquidity of $85,000."
+        }
+      ],
+      "policy_notes": [
+        "Shares come from a learned policy; there is no causal explanation for them.",
+        "The inference-time capacity projection adjusted the shares: slot 0 +0.0233, slot 1 +0.0233, slot 2 -0.0467.",
+        "ppo_projected is experimental and is not shown to beat the waterfall (docs/STAGE1F_RESULTS.md)."
+      ],
+      "semantic_context": null,
+      "limitations": [
+        "Bridge liquidity and congestion are synthetic simulation values.",
+        "Reward weights are uncalibrated placeholders.",
+        "The only regulatory fact is an assumed $500K cap, not a real regulation.",
+        "Each transaction is independent; routing does not deplete liquidity for later transactions."
+      ]
+    }
+  }
+}

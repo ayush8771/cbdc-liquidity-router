@@ -1,0 +1,37 @@
+{
+  "description": "Engine queue full.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-503_engine_busy"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Retry-After": "1",
+      "X-Request-Id": "fixture-503_engine_busy"
+    },
+    "body": {
+      "error": {
+        "code": "ENGINE_BUSY",
+        "message": "Engine queue is full; retry later.",
+        "details": {},
+        "request_id": "fixture-503_engine_busy"
+      }
+    }
+  }
+}

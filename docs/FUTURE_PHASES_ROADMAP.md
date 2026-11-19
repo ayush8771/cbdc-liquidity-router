@@ -306,7 +306,7 @@ The following are future design decisions, not approved implementation requireme
 - Which live FX/news/economic providers are usable, licensed, reliable, and technically accessible.
 - Whether ScrapeGraphAI is suitable for the chosen ingestion sources.
 - Which message broker or streaming platform is appropriate.
-- The final division of responsibilities between FastAPI and Express.
+- The final division of responsibilities between FastAPI and Express. *(Since decided for Phase 2: see `docs/PHASE2_ARCHITECTURE.md` §2, approved v0.4.)*
 - Deployment target, cloud architecture, database operations, and production service-level objectives.
 
 For each decision, document the problem, alternatives, evidence, trade-offs, risks, and approval before implementation.
@@ -337,4 +337,4 @@ Do not treat it as a command to implement future features. For an implementation
 4. Confirm the relevant design decisions and acceptance criteria with the developer.
 5. Implement only the explicitly approved scope.
 
-**Current intended focus remains Major Phase 1. Stages 1D, 1E (infrastructure) and 1F are complete; the developer chooses which open research item comes next, before Major Phase 2.**
+**Major Phase 1 is complete as the Phase 2 baseline (tag `phase1-complete`): Stages 1D, 1E (infrastructure) and 1F are complete, and its open research items remain open. Major Phase 2 is in progress (16 November 2026); its status is in `docs/PHASE2_STATUS.md`.**

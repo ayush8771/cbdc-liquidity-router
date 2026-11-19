@@ -1,0 +1,26 @@
+{
+  "description": "GET on a POST-only path (§4). Allow lists the path's methods.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-405_method_not_allowed"
+    }
+  },
+  "response": {
+    "status": 405,
+    "headers": {
+      "Allow": "POST",
+      "X-Request-Id": "fixture-405_method_not_allowed"
+    },
+    "body": {
+      "error": {
+        "code": "METHOD_NOT_ALLOWED",
+        "message": "Method GET is not allowed on /v1/route.",
+        "details": {},
+        "request_id": "fixture-405_method_not_allowed"
+      }
+    }
+  }
+}

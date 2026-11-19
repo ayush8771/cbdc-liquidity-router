@@ -1,0 +1,42 @@
+{
+  "description": "ENGINE_BUSY passed through, with Retry-After. Persisted as failed.",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "error",
+    "fixture": "inference/errors/503_engine_busy.json"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-503_engine_busy"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Retry-After": "1",
+      "X-Request-Id": "fixture-503_engine_busy"
+    },
+    "body": {
+      "error": {
+        "code": "ENGINE_BUSY",
+        "message": "The routing engine is busy. Try again later.",
+        "details": {
+          "transactionId": "a121dc5c-b250-5b30-8025-f9e07e76d4e0"
+        },
+        "requestId": "fixture-503_engine_busy"
+      }
+    }
+  }
+}
