@@ -15,7 +15,10 @@ def ver(s):
 
 def satisfies(version, rng):
     # Supports only space-separated comparators (>=, >, <=, <, =) as used in engines; fails loudly otherwise.
-    for op, v in re.findall(r"(>=|<=|>|<|=)?\s*(\d+(?:\.\d+){0,2})", rng):
+    comp = r"(>=|<=|>|<|=)?(\d+(?:\.\d+){0,2})"
+    if not re.fullmatch(rf"\s*{comp}(\s+{comp})*\s*", rng):
+        raise ValueError(f"unsupported engines.node syntax: {rng!r}")
+    for op, v in re.findall(comp, rng):
         v = ver(v + ".0" * (2 - v.count(".")))
         ok = {">=": version >= v, ">": version > v, "<=": version <= v, "<": version < v}.get(op, version == v)
         if not ok:
@@ -27,6 +30,12 @@ def test_satisfies_helper():
     assert satisfies((20, 20, 2), ">=20.6.0 <21")
     assert not satisfies((20, 5, 0), ">=20.6.0 <21")
     assert not satisfies((21, 0, 0), ">=20.6.0 <21")
+
+
+@pytest.mark.parametrize("rng", ["^20.6.0", ">=20 || >=22", "20.x", ">=20.6.0 <21 junk", "~20.6.0", ">= 20.6.0", ""])
+def test_unsupported_range_fails(rng):
+    with pytest.raises(ValueError):
+        satisfies((20, 20, 2), rng)
 
 
 @pytest.mark.skipif(not PKG.exists(), reason="services/backend/package.json is not on this branch yet")
