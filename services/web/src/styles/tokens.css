@@ -1,0 +1,88 @@
+/*
+ * Design tokens — Slash style reference ("Midnight vault with gilded ledger
+ * lines"), from the Refero Extended DESIGN.md export. Section names in the
+ * comments below refer to that file. Values are copied, not reinterpreted,
+ * except where marked "app adaptation".
+ *
+ * Colours are stored as RGB channels (Tailwind 3 needs them for opacity
+ * modifiers such as bg-surface-card/80), so they are named --c-* rather than
+ * the export's --color-* hex variables. Components never use raw hex values.
+ *
+ * Contrast (WCAG 2.1, measured on this palette):
+ *   - Steel is 4.69:1 on Obsidian, 4.8:1 on Onyx, 4.35:1 on Carbon, so it is
+ *     used for text only on Obsidian/Onyx, and as the 3:1 control border;
+ *   - Ash (3.25:1) and Smoke (2.2:1) never carry text here, although the
+ *     export lists Ash for "muted body text" (app adaptation);
+ *   - Graphite and Slate are hairlines only.
+ */
+:root {
+  /* Tokens — Colors */
+  --c-obsidian: 8 8 10; /* #08080a  page canvas */
+  --c-onyx: 4 4 6; /* #040406  card surface */
+  --c-carbon: 18 19 23; /* #121317  elevated panels, input backgrounds */
+  --c-graphite: 28 29 34; /* #1c1d22  hairline borders, dividers, icon wells */
+  --c-slate: 46 48 56; /* #2e3038  secondary borders, muted icon strokes */
+  --c-smoke: 70 72 83; /* #464853  tertiary borders */
+  --c-ash: 94 97 110; /* #5e616e */
+  --c-steel: 119 122 136; /* #777a88  button/tag borders, placeholders */
+  --c-fog: 145 148 161; /* #9194a1  nav text, descriptions, helper text */
+  --c-mist: 172 175 185; /* #acafb9  subdued body copy */
+  --c-silver: 199 201 209; /* #c7c9d1  medium-emphasis text */
+  --c-bone: 226 227 233; /* #e2e3e9  default body text */
+  --c-paper-white: 255 255 255; /* #ffffff  headings, primary action, active nav */
+  --c-black: 0 0 0; /* #000000  primary button text */
+  --c-copper: 204 145 102; /* #cc9166  category labels and editorial links only */
+  --c-gilded: 174 147 87; /* #ae9357  solid fallback of the gilded gradient */
+
+  /* Gilded gradient — chart lines and financial data accents only. */
+  --gradient-gilded: linear-gradient(
+    103deg,
+    rgb(174, 147, 87),
+    rgb(255, 240, 204) 40%,
+    rgb(174, 147, 87) 70%,
+    rgba(189, 157, 79, 0)
+  );
+
+  /* Single-series chart mark (app adaptation): the gilded hue moved into the
+     dataviz validator's dark band (OKLCH L 0.66, C 0.11; L 0.48–0.67, C >= 0.10,
+     >= 3:1 on Onyx and Carbon). #ae9357 itself reads as grey on these surfaces. */
+  --c-chart-mark: 177 140 57; /* #b18c39 */
+
+  /* Semantic status (app adaptation). The export defines only a "desaturated
+     sage" for the active status badge; amber and red are added for warnings
+     and errors. Functional only, never brand accents; each is >= 6.3:1 on
+     every surface. */
+  --c-success: 116 196 152; /* #74c498 */
+  --c-warning: 226 184 99; /* #e2b863 */
+  --c-danger: 236 128 116; /* #ec8074 */
+
+  /* Tokens — Typography. Ivy Presto is a commercial typeface; Playfair
+     Display is the export's first listed substitute. The fallback is a serif
+     (the export falls back to sans) so a missing web font keeps the
+     serif/sans contrast. */
+  --font-display: "Playfair Display", "Times New Roman", serif;
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Display sizes shrink on small screens (app adaptation) but never below
+     28px, the smallest size at which the serif is allowed. Desktop values are
+     the export's. */
+  --text-heading-sm: clamp(2rem, 1.55rem + 1.6vw, 2.75rem); /* 32 → 44 */
+  --text-heading: clamp(2.25rem, 1.6rem + 2.2vw, 3.25rem); /* 36 → 52 */
+  --text-heading-lg: clamp(2.5rem, 1.6rem + 3vw, 4rem); /* 40 → 64 */
+  --text-display: clamp(3rem, 1.75rem + 4.5vw, 5.5rem); /* 48 → 88 */
+
+  /* Layout. The 160px section gap is for marketing pages and is not used in
+     the application (app adaptation). */
+  --page-max-width: 1216px;
+  --card-padding: 24px;
+  --element-gap: 8px;
+  --sidebar-width: 15.5rem; /* 248px, app adaptation */
+
+  /* Border radius */
+  --radius-nav: 2px;
+  --radius-cards: 10px;
+  --radius-full: 9999px; /* tags, icons, inputs, buttons */
+
+  /* Shadows — the only elevation: a 1px ring for icon wells. */
+  --shadow-subtle: rgba(255, 255, 255, 0.2) 0px 0px 0px 1px;
+}
