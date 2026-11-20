@@ -121,6 +121,47 @@ def test_service_in_is_the_input_and_pins_torch():
     assert "cognee" not in [line.split("==")[0].strip() for line in text.splitlines()]
 
 
+# --dry-run and input checks (ported from feature/phase2-platform's compile_locks tests).
+def test_dry_run_prints_commands_and_runs_nothing(monkeypatch, capsys):
+    def no_run(*args, **kwargs):
+        raise AssertionError("--dry-run must not run anything")
+
+    monkeypatch.setattr(compile_locks.subprocess, "run", no_run)
+    monkeypatch.setattr(compile_locks, "fetch", no_run)
+    monkeypatch.setattr(compile_locks.shutil, "which", lambda _: None)  # uv is not needed
+    before = TARGET.output.read_bytes()
+    assert compile_locks.main(["--dry-run"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == len(compile_locks.TARGETS)
+    line = lines[0]
+    assert line.startswith("uv pip compile services/inference/requirements/service.in")
+    assert "--generate-hashes" in line and "--python-version 3.10.11" in line
+    assert f"--find-links {FIND_LINKS}" in line and "--extra-index-url" not in line
+    assert TARGET.output.read_bytes() == before
+
+
+def test_dry_run_and_check_are_mutually_exclusive():
+    with pytest.raises(SystemExit):
+        compile_locks.main(["--dry-run", "--check"])
+
+
+def test_missing_service_in_stops_without_generating(tmp_path, monkeypatch):
+    monkeypatch.setattr(compile_locks, "REPO", tmp_path)
+    monkeypatch.setattr(compile_locks, "SERVICE_IN", tmp_path / "service.in")
+    with pytest.raises(SystemExit) as e:
+        compile_locks.main(["--dry-run"])
+    assert "service.in" in str(e.value)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_missing_uv_is_reported(monkeypatch):
+    monkeypatch.setattr(compile_locks, "REPO", Path("/nonexistent-repo"))
+    monkeypatch.setattr(compile_locks.shutil, "which", lambda _: None)
+    with pytest.raises(SystemExit) as e:
+        compile_locks.find_uv(None)
+    assert "uv not found" in str(e.value)
+
+
 def test_committed_linux_lock_verifies():
     text = TARGET.output.read_text(encoding="utf-8")
     assert compile_locks.verify_lock(text, TARGET) == []

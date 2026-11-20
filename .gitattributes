@@ -4,3 +4,4 @@ infra/** text=auto eol=lf
 contracts/** text=auto eol=lf
 e2e/** text=auto eol=lf
 .github/workflows/phase2-*.yml text=auto eol=lf
+.nvmrc text eol=lf

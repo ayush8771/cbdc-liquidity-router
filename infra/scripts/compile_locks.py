@@ -38,6 +38,7 @@ Usage, from the repository root. Either uv 0.9.5 on the host:
     python infra/scripts/compile_locks.py            # (re)write the locks
     python infra/scripts/compile_locks.py --check    # compile to a temp file and fail on drift
     python infra/scripts/compile_locks.py --verify-only   # only check the committed locks
+    python infra/scripts/compile_locks.py --dry-run  # print the uv commands; needs no uv, no network
 or, with nothing installed on the host, the pinned uv image (PowerShell; use
 $(pwd) and / on Linux):
     docker run --rm -v "${PWD}:/repo:ro" `
@@ -257,10 +258,21 @@ def main(argv: list[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="compile to a temporary file and fail if it differs")
     mode.add_argument("--verify-only", action="store_true", help="only verify the committed lock files")
+    mode.add_argument("--dry-run", action="store_true", help="print the uv commands, run nothing")
     parser.add_argument("--uv", help="path to the uv executable")
     parser.add_argument("--allow-other-uv", action="store_true")
     args = parser.parse_args(argv)
     targets = [TARGETS[name] for name in (args.target or sorted(TARGETS))]
+
+    if not args.verify_only and not SERVICE_IN.is_file():
+        sys.exit(f"{SERVICE_IN.relative_to(REPO)} not found: no lock is generated without the inference inputs.")
+    if args.dry_run:
+        # Nothing is run: no uv, no network, no file written. The torch constraint and the
+        # output are temporary files in a real run; placeholders stand in for their paths.
+        for target in targets:
+            cmd = uv_command(args.uv or "uv", target, Path("<temporary lock file>"), Path("<generated torch constraint>"))
+            print(" ".join(f'"{part}"' if " " in part else part for part in cmd))
+        return 0
 
     if not args.verify_only:
         uv = find_uv(args.uv)

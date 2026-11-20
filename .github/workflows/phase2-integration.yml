@@ -10,6 +10,7 @@ on:
       - "contracts/**"
       - "infra/**"
       - "e2e/**"
+      - "services/backend/**"
       - ".nvmrc"
       - ".github/workflows/phase2-integration.yml"
   pull_request:
@@ -17,6 +18,7 @@ on:
       - "contracts/**"
       - "infra/**"
       - "e2e/**"
+      - "services/backend/**"
       - ".nvmrc"
       - ".github/workflows/phase2-integration.yml"
 
