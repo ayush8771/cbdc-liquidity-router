@@ -1,5 +1,5 @@
 import { createApp } from "./app.js";
-import { ConfigError, loadConfig, type Config } from "./config/config.js";
+import { ConfigError, isLoopbackHost, loadConfig, type Config } from "./config/config.js";
 import { createDatabaseProbe } from "./db/health.js";
 import { disconnectPrismaClient, getPrismaClient } from "./db/prisma.js";
 import { createPrismaComparisonStore } from "./db/comparisons.js";
@@ -13,8 +13,6 @@ import { createShutdown } from "./lifecycle.js";
 import { createLogger } from "./logger.js";
 
 const PORT = 4000;
-// Development auth must stay off public interfaces (arch §8.1).
-const HOST = "127.0.0.1";
 
 // Validate configuration before opening the port; refuse to start on any problem.
 let config: Config;
@@ -24,6 +22,16 @@ try {
   if (!(error instanceof ConfigError)) throw error;
   console.error(`Failed to start backend. ${error.message}`);
   process.exit(1);
+}
+
+// Development auth must stay off public interfaces (arch §8.1). BIND_HOST
+// defaults to loopback; only the container sets 0.0.0.0.
+const HOST = config.bindHost;
+if (!isLoopbackHost(HOST)) {
+  console.warn(
+    `Warning: BIND_HOST=${HOST} is not a loopback address. Development auth is not secure; ` +
+      "use this only inside a container whose port is published on host loopback.",
+  );
 }
 
 const logger = createLogger();

@@ -49,7 +49,7 @@ web (Vite proxy) ──► requestId ─► requestLogger ─► route
                      ─► 201 (or the mapped inference error, with the failed record's id)
 ```
 
-The server binds to `127.0.0.1:4000` only (`src/server.ts`), because development auth must not be exposed beyond the developer's machine (arch §8.1).
+The server binds to `127.0.0.1:4000` by default (`src/server.ts`), because development auth must not be exposed beyond the developer's machine (arch §8.1). Only the container sets `BIND_HOST=0.0.0.0`, and Compose publishes its port on host loopback only (§6.2).
 
 ## 2. Status
 
@@ -340,8 +340,9 @@ From `src/db/dashboard.ts`, contract §3.8:
 | `INFERENCE_URL` | `http://inference:8000` | An `http(s)://` base URL with no credentials, query or fragment |
 | `INFERENCE_MODE` | `live` | `live` or `mock` (§4.6) |
 | `INFERENCE_TIMEOUT_MS` | `15000` | A positive whole number of milliseconds |
+| `BIND_HOST` | `127.0.0.1` | An IPv4 or IPv6 address, or `localhost`. Set `0.0.0.0` **only inside a container** whose port is published on host loopback; the server warns at startup for any non-loopback address |
 
-Neither `PORT` nor `HOST` is configurable: the server listens on `127.0.0.1:4000`.
+The port is not configurable: the server listens on port 4000.
 
 The server doesn't load `.env` by itself. Either set the variables in your shell and use `npm run dev` or `npm start`, or put them in `services/backend/.env` and use the `:env` scripts. On Node 20 these fail with `.env: not found` if the file is missing. Passing `-- --env-file=.env` to `npm run dev` does **not** work. `.env` and `.env.*` are git-ignored.
 
