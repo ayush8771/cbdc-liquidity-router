@@ -48,8 +48,10 @@ def test_version_reports_the_real_engine(live, worker):
     _, client = live
     v = _poll(client, "/v1/version", 200).json()
     assert v["data"]["daily_state_sha256"] == worker.daily_state_sha256  # frame fingerprint from a worker
+    # The Phase 2 SERVICE hash (CRLF->LF normalised), NOT Phase 1's raw-byte KnowledgeBase.sha256,
+    # which differs on a Windows CRLF checkout (contract §2.2, §2.11).
     assert v["knowledge"] == {"knowledge_version": worker.knowledge.knowledge_version,
-                              "sha256": worker.knowledge.sha256}
+                              "sha256": worker.artefacts["knowledge_sha256"]}
     assert v["data"]["date_range"] == {"start": "2011-01-01", "end": "2025-09-30"}
     assert v["runtime"]["torch"] == worker._p.torch.__version__
     assert v["checkpoint"] is None
