@@ -1,0 +1,64 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-surface-void font-sans text-body-xs text-ink-body antialiased;
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply text-ink-primary;
+  }
+
+  ::selection {
+    @apply bg-silver/25 text-paper-white;
+  }
+
+  /* One visible focus style everywhere: a Paper White ring with an Obsidian
+     gap. Not Copper: DESIGN.md keeps Copper off buttons and icons. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-paper-white ring-offset-2 ring-offset-obsidian;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Serif display text: only at 28px and above (design rule). */
+  .font-serif-display {
+    @apply font-display font-normal;
+  }
+
+  /* DESIGN.md "Category Eyebrow": 13px Inter 600, -0.02em. Fog for section
+     types; Copper only for category labels. */
+  .eyebrow {
+    @apply text-eyebrow font-semibold text-ink-muted;
+  }
+
+  .eyebrow-category {
+    @apply text-eyebrow font-semibold text-accent;
+  }
+
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-pill focus:bg-paper-white focus:px-5 focus:py-2.5 focus:text-ui focus:font-medium focus:text-black;
+  }
+}

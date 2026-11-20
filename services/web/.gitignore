@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# Types generated from contracts/openapi/app.v1.yaml (arch §4)
+src/api/generated/
+
+# Never commit environment files; tokens never go in VITE_* variables (arch §8.3)
+.env
+.env.*
