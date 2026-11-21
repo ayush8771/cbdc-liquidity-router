@@ -1,7 +1,8 @@
 name: phase2-stack
 
 # Dev D (arch §5.4). Builds the whole Compose stack, starts it, seeds disposable development users,
-# runs the API smoke test and the runtime security checks, and removes only what it created.
+# runs the API smoke test, the Playwright browser tests (e2e/) and the runtime security checks, and
+# removes only what it created.
 # The individual image builds and tests are in phase2-docker.yml; this workflow does not repeat
 # their test targets.
 #
@@ -197,11 +198,43 @@ jobs:
           set -euo pipefail
           python3 e2e/api-smoke.py --base-url "http://127.0.0.1:$WEB_HOST_PORT" --tokens-file "$CBDC_STACK_DIR/smoke-tokens.json" 2>&1 | tee "$CBDC_STACK_DIR/smoke.log"
 
+      # Browser tests (Playwright, Chromium) against the stack that is already running and seeded. The
+      # project in e2e/ has its own pinned lockfile; nothing is installed in services/web. Trace,
+      # screenshot and video are off and the output goes into the disposable directory, which the cleanup
+      # step deletes, so no recording or report of the sign-in screen is kept or uploaded.
+      - name: Node for the browser tests
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install Playwright and Chromium
+        timeout-minutes: 10
+        working-directory: e2e
+        run: |
+          set -euo pipefail
+          node --version
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        timeout-minutes: 15
+        working-directory: e2e
+        run: |
+          set -euo pipefail
+          export E2E_BASE_URL="http://127.0.0.1:$WEB_HOST_PORT"
+          export E2E_TOKENS_FILE="$CBDC_STACK_DIR/smoke-tokens.json"
+          export E2E_OUTPUT_DIR="$CBDC_STACK_DIR/playwright-output"
+          # A failure writes error-context.md, a page snapshot that lists field values (it can hold what was
+          # typed in the sign-in field). Delete it as soon as this step ends, pass or fail.
+          trap 'rm -rf "$E2E_OUTPUT_DIR"' EXIT
+          npm test 2>&1 | tee "$CBDC_STACK_DIR/playwright.log"
+
+      # Last, so that its log scan also covers the traffic and output of the browser tests.
       - name: Runtime security checks
         timeout-minutes: 5
         run: |
           set -euo pipefail
-          python3 e2e/stack-security.py --project "$COMPOSE_PROJECT_NAME" --web-port "$WEB_HOST_PORT" --tokens-file "$CBDC_STACK_DIR/smoke-tokens.json" --env-file "$CBDC_STACK_DIR/env/postgres.env" --scan "$CBDC_STACK_DIR/smoke.log"
+          python3 e2e/stack-security.py --project "$COMPOSE_PROJECT_NAME" --web-port "$WEB_HOST_PORT" --tokens-file "$CBDC_STACK_DIR/smoke-tokens.json" --env-file "$CBDC_STACK_DIR/env/postgres.env" --scan "$CBDC_STACK_DIR/smoke.log" --scan "$CBDC_STACK_DIR/playwright.log"
 
       # Generated secrets are masked in the log, so container output is safe to print here.
       - name: Diagnostics on failure
