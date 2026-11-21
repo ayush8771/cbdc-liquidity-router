@@ -196,16 +196,23 @@ jobs:
           img_s="cbdc-tokmount-seed:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           echo "CBDC_TOKMOUNT_IMG_B=$img_b" >> "$GITHUB_ENV"
           echo "CBDC_TOKMOUNT_IMG_S=$img_s" >> "$GITHUB_ENV"
-          { echo 'FROM scratch'; echo 'CMD ["x"]'; } | docker build -q -t "$img_b" - > /dev/null
-          docker tag "$img_b" "$img_s"
+          # The step shell runs with -e: every command that may fail is checked explicitly so that the reason is printed.
+          { echo 'FROM scratch'; echo 'CMD ["x"]'; } | docker build -q -t "$img_b" - > /dev/null \
+            || { echo "::error::test setup: could not build the placeholder image"; exit 1; }
+          docker tag "$img_b" "$img_s" || { echo "::error::test setup: could not tag the placeholder image"; exit 1; }
           export CBDC_DEV_TOKENS_FILE="$missing"
           # `create` has no --no-deps, so an override drops depends_on and only backend and seed are created.
           # It also points image at the placeholders. It does not mention volumes: the token mount is unchanged.
-          { echo "services:"; echo "  backend:"; echo "    image: $img_b"; echo "    depends_on: !reset []"; echo "  seed:"; echo "    image: $img_s"; echo "    depends_on: !reset []"; } > "$RUNNER_TEMP/no-deps.yaml"
+          { echo "services:"; echo "  backend:"; echo "    image: $img_b"; echo "    depends_on: !reset []"; echo "  seed:"; echo "    image: $img_s"; echo "    depends_on: !reset []"; } > "$RUNNER_TEMP/no-deps.yaml" \
+            || { echo "::error::test setup: could not write the override file"; exit 1; }
           # One service at a time, so a failure on one cannot hide whether the other was exercised.
           for svc in backend seed; do
-            docker compose -p "$p" -f infra/compose.yaml -f "$RUNNER_TEMP/no-deps.yaml" --profile full --profile seed create --no-build "$svc" > "$RUNNER_TEMP/tokmount.log" 2>&1
-            rc=$?
+            # Failure is the expected outcome, so capture the exit code without letting -e end the step.
+            if docker compose -p "$p" -f infra/compose.yaml -f "$RUNNER_TEMP/no-deps.yaml" --profile full --profile seed create --no-build "$svc" > "$RUNNER_TEMP/tokmount.log" 2>&1; then
+              rc=0
+            else
+              rc=$?
+            fi
             # The log holds mount errors only (no configuration is printed).
             sed "s/^/compose($svc): /" "$RUNNER_TEMP/tokmount.log" | tail -n 4
             echo "$svc: docker compose create exit code: $rc"
