@@ -168,14 +168,71 @@ jobs:
           assert s["seed"].get("profiles") == ["seed"], "seed must be in its own profile only"
           assert s["inference"]["environment"].get("CBDC_REPO_ROOT") == "/repo", "inference must run with CBDC_REPO_ROOT=/repo"
           assert s["backend"]["environment"].get("BIND_HOST") == "0.0.0.0", "backend must bind 0.0.0.0 inside its container"
-          mounts = [v for n in ("backend", "seed") for v in s[n].get("volumes", [])]
-          assert mounts and all(v.get("read_only") is True and v.get("bind", {}).get("create_host_path") is False for v in mounts), "token mounts must be read-only and must not create the host path"
-          print("resolved configuration: only web is published, on 127.0.0.1:80; token mounts read-only")
+          # Compose 2.38 omits bind.create_host_path from its JSON, so an absent field proves nothing and is not
+          # checked here. create_host_path: false is asserted on the source file (infra/scripts/tests/test_compose.py)
+          # and by the behavioural step below.
+          for n in ("backend", "seed"):
+              tok = [v for v in s[n].get("volumes", []) if str(v.get("target", "")).endswith("dev-tokens.json")]
+              assert len(tok) == 1, f"{n} must have exactly one dev-tokens.json mount"
+              assert tok[0].get("type") == "bind", f"{n}: the token mount must be a bind mount"
+              assert tok[0].get("read_only") is True, f"{n}: the token mount must be read-only"
+          print("resolved configuration: only web is published, on 127.0.0.1:80; backend and seed token mounts are read-only binds")
           PY
+
+      # Behaviour, not just configuration: with the token file missing, creating backend and seed must not make
+      # that path appear (neither as a directory nor as a file). Containers are only created, never started.
+      # Placeholder images stand in for the real ones so nothing is pulled or built.
+      - name: A missing token file must not be created
+        run: |
+          set -uo pipefail
+          p="cbdc-tokmount-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          missing="$RUNNER_TEMP/cbdc-missing-$GITHUB_RUN_ID/dev-tokens.json"
+          echo "CBDC_TOKMOUNT_PROJECT=$p" >> "$GITHUB_ENV"
+          echo "CBDC_TOKMOUNT_PARENT=$(dirname "$missing")" >> "$GITHUB_ENV"
+          mkdir -p "$(dirname "$missing")"
+          [ ! -e "$missing" ] || { echo "::error::test setup: the path already exists"; exit 1; }
+          # Unique tags: the real cbdc-backend:local and cbdc-backend-seed:local tags are never touched.
+          img_b="cbdc-tokmount-backend:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          img_s="cbdc-tokmount-seed:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo "CBDC_TOKMOUNT_IMG_B=$img_b" >> "$GITHUB_ENV"
+          echo "CBDC_TOKMOUNT_IMG_S=$img_s" >> "$GITHUB_ENV"
+          { echo 'FROM scratch'; echo 'CMD ["x"]'; } | docker build -q -t "$img_b" - > /dev/null
+          docker tag "$img_b" "$img_s"
+          export CBDC_DEV_TOKENS_FILE="$missing"
+          # `create` has no --no-deps, so an override drops depends_on and only backend and seed are created.
+          # It also points image at the placeholders. It does not mention volumes: the token mount is unchanged.
+          { echo "services:"; echo "  backend:"; echo "    image: $img_b"; echo "    depends_on: !reset []"; echo "  seed:"; echo "    image: $img_s"; echo "    depends_on: !reset []"; } > "$RUNNER_TEMP/no-deps.yaml"
+          # One service at a time, so a failure on one cannot hide whether the other was exercised.
+          for svc in backend seed; do
+            docker compose -p "$p" -f infra/compose.yaml -f "$RUNNER_TEMP/no-deps.yaml" --profile full --profile seed create --no-build "$svc" > "$RUNNER_TEMP/tokmount.log" 2>&1
+            rc=$?
+            # The log holds mount errors only (no configuration is printed).
+            sed "s/^/compose($svc): /" "$RUNNER_TEMP/tokmount.log" | tail -n 4
+            echo "$svc: docker compose create exit code: $rc"
+            if [ -e "$missing" ]; then
+              kind=file; [ -d "$missing" ] && kind=directory
+              echo "::error::SECURITY: $svc silently created a missing token file as a $kind despite create_host_path: false"
+              exit 1
+            fi
+            # The failure must be the missing bind source, not some unrelated error.
+            if [ "$rc" -eq 0 ] || ! grep -qi 'bind source path does not exist' "$RUNNER_TEMP/tokmount.log"; then
+              echo "::error::$svc: create did not fail with a missing-bind-source error, so the test proves nothing"
+              exit 1
+            fi
+            echo "OK: $svc create failed on the missing bind source and the path was not created"
+          done
 
       - name: Remove the generated files
         if: always()
-        run: rm -rf "$RUNNER_TEMP/cbdc-ci-env" "$RUNNER_TEMP/resolved.json"
+        run: |
+          rm -rf "$RUNNER_TEMP/cbdc-ci-env" "$RUNNER_TEMP/resolved.json" "$RUNNER_TEMP/tokmount.log" "$RUNNER_TEMP/no-deps.yaml"
+          # Exact project scoping only: no prune and no volume removal.
+          if [ -n "${CBDC_TOKMOUNT_PROJECT:-}" ]; then
+            docker ps -a -q --filter "label=com.docker.compose.project=$CBDC_TOKMOUNT_PROJECT" | xargs -r docker rm -f > /dev/null
+            docker network ls -q --filter "label=com.docker.compose.project=$CBDC_TOKMOUNT_PROJECT" | xargs -r docker network rm > /dev/null
+            docker rmi "$CBDC_TOKMOUNT_IMG_B" "$CBDC_TOKMOUNT_IMG_S" > /dev/null 2>&1 || true
+            rm -rf "$CBDC_TOKMOUNT_PARENT"
+          fi
 
   backend-docker:
     name: backend images
