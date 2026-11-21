@@ -27,7 +27,9 @@ FROM build AS test
 # build context, so only this target takes those two folders as named contexts.
 COPY --from=contracts fixtures /contracts/fixtures
 COPY --from=docs PHASE2_ARCHITECTURE.md /docs/PHASE2_ARCHITECTURE.md
-RUN npm run lint && npm test
+# Two workers, not one per CPU: with 4 workers a CPU-heavy jsdom test passed alone in about 3 s
+# but exceeded the 5 s default timeout in the full parallel run.
+RUN npm run lint && npm test -- --maxWorkers=2
 
 # ---- runtime (default target) ----
 FROM ${NGINX_IMAGE} AS runtime
