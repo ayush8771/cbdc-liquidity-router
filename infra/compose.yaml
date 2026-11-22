@@ -1,0 +1,128 @@
+# Phase 2 local stack (arch §4, §5.4, §7):  web (nginx) -> backend (Express) -> inference (FastAPI)
+#                                                                      \-> postgres
+# Only the web service is published, on host loopback. The backend (4000), inference (8000) and
+# PostgreSQL (5432) stay on the private Compose network.
+#
+# Setup (infra/README.md has the details). The real env files live OUTSIDE the checkout:
+#   1. make a directory outside the repository holding postgres.env, backend.env and inference.env,
+#      copied from infra/env/*.env.example, with one local password, the same in postgres.env and in
+#      backend.env's DATABASE_URL;
+#   2. copy services/backend/dev-tokens.example.json to services/backend/dev-tokens.json (git-ignored)
+#      and replace the placeholders with SHA-256 token hashes (or set CBDC_DEV_TOKENS_FILE);
+#   3. CBDC_ENV_DIR=<that directory> CBDC_GIT_COMMIT=$(git rev-parse HEAD) \
+#        docker compose -f infra/compose.yaml --profile full up --build
+#   4. optional, explicit: seed the development users (the User rows that creating a transaction needs):
+#        CBDC_ENV_DIR=<that directory> docker compose -f infra/compose.yaml --profile full --profile seed run --rm seed
+#
+# Build paths are relative to this file, so they resolve the same from any directory.
+# No credential is stored here: passwords and DATABASE_URL come from the external env files.
+name: cbdc-router
+
+x-dev-tokens: &dev-tokens
+  # Token hashes (never baked into an image). Fails if missing; never creates a directory.
+  type: bind
+  source: ${CBDC_DEV_TOKENS_FILE:-../services/backend/dev-tokens.json}
+  target: /app/dev-tokens.json
+  read_only: true
+  bind:
+    create_host_path: false
+
+services:
+  postgres:
+    profiles: [full]
+    image: postgres:18.6-bookworm@sha256:f1ea2a1a4fb7b68d4836be1fdcb8a6466a89b072158bf9d97663600538c294c5
+    env_file: ${CBDC_ENV_DIR:?set CBDC_ENV_DIR to the directory holding postgres.env, backend.env and inference.env}/postgres.env
+    volumes:
+      # PostgreSQL 18 images keep PGDATA under /var/lib/postgresql (a /data mount is refused).
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      # -h 127.0.0.1 forces TCP: the entrypoint's temporary init server listens on the socket only,
+      # so a socket check could report ready before the real server is up.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot: applies prisma/migrations, then exits. The backend waits for it to succeed.
+  migrate:
+    profiles: [full]
+    build:
+      context: ../services/backend
+      target: migrate
+    image: cbdc-backend-migrate:local
+    env_file: ${CBDC_ENV_DIR:?set CBDC_ENV_DIR to the directory holding postgres.env, backend.env and inference.env}/backend.env # DATABASE_URL
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Optional, development only: upserts the User rows (id, email, role) from the token file, so that
+  # POST /transactions, /comparisons and explanations work. It is idempotent and never deletes a
+  # user. Not part of `--profile full`; select it explicitly together with `full` (see the header).
+  # It uses the backend's `build` stage because the seed script needs tsx (a dev dependency) and src/.
+  seed:
+    profiles: [seed]
+    build:
+      context: ../services/backend
+      target: build
+    image: cbdc-backend-seed:local
+    env_file: ${CBDC_ENV_DIR:?set CBDC_ENV_DIR to the directory holding postgres.env, backend.env and inference.env}/backend.env # DATABASE_URL
+    command: ["npm", "run", "prisma:seed"]
+    user: node
+    volumes:
+      - *dev-tokens
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  inference:
+    profiles: [full]
+    build:
+      context: .. # the image copies Phase 1 code and data (services/inference/Dockerfile.dockerignore is an allow-list)
+      dockerfile: services/inference/Dockerfile
+      args:
+        CBDC_GIT_COMMIT: ${CBDC_GIT_COMMIT:-} # build-time only; reported by /v1/version
+    image: cbdc-inference:local
+    env_file: ${CBDC_ENV_DIR:?set CBDC_ENV_DIR to the directory holding postgres.env, backend.env and inference.env}/inference.env
+    environment:
+      # env_file's "." (local runs) would replace the image's value; the container's repo is /repo.
+      CBDC_REPO_ROOT: /repo
+    expose: ["8000"]
+    # No checkpoint is mounted: approved_checkpoints.json is empty, so ppo_projected stays disabled.
+
+  backend:
+    profiles: [full]
+    build:
+      context: ../services/backend
+    image: cbdc-backend:local
+    env_file: ${CBDC_ENV_DIR:?set CBDC_ENV_DIR to the directory holding postgres.env, backend.env and inference.env}/backend.env
+    environment:
+      BIND_HOST: 0.0.0.0 # inside the container only; nothing is published
+      INFERENCE_URL: http://inference:8000
+    volumes:
+      - *dev-tokens
+    expose: ["4000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      inference:
+        condition: service_healthy
+
+  web:
+    profiles: [full]
+    build:
+      context: ../services/web
+    image: cbdc-web:local
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: "4000"
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:

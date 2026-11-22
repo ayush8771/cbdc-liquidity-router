@@ -1,0 +1,298 @@
+name: phase2-docker
+
+# Dev D (arch §5.4). Builds and tests the three service images, validates infra/compose.yaml, and
+# guards against committed secret files. It does not start the stack (a later step) and does not
+# duplicate the contract and infrastructure tests of phase2-integration.yml, which already run
+# `pytest infra/scripts/tests`, including test_compose.py.
+#
+# No GitHub secret is used. Disposable passwords and tokens are generated per run in RUNNER_TEMP.
+# Nothing from the pull request (branch name, title, file names) is placed in a shell command:
+# the changed-file list is only matched against fixed patterns, and only booleans leave that job.
+#
+# There is deliberately no workflow-level `paths` filter. The secret-file guard must run on every
+# pull request and push (a `.env` or key added anywhere, including the repo root, must be caught),
+# and a workflow skipped by a path filter would leave a required status check pending forever.
+# The `changes` job does the filtering per job instead; skipped jobs report as skipped.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Decides which jobs a change needs. It reads only git history (contents: read, no API call):
+  # a pull request is diffed against its base commit, a push to main against the commit before it.
+  # Anything it cannot determine safely (missing, unreachable or malformed SHA) runs every job.
+  changes:
+    name: changed areas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      compose: ${{ steps.filter.outputs.compose }}
+      backend: ${{ steps.filter.outputs.backend }}
+      web: ${{ steps.filter.outputs.web }}
+      inference: ${{ steps.filter.outputs.inference }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) base="$BASE_SHA" ;;
+            push) base="$BEFORE_SHA" ;;
+            *) base="" ;;
+          esac
+          all=true
+          files=""
+          # Only a 40-character hex SHA that exists in this checkout is used. A new branch (all zeros),
+          # a force-pushed-away commit or anything malformed falls back to running every job.
+          if [[ "$base" =~ ^[0-9a-f]{40}$ ]] && [ "$base" != "0000000000000000000000000000000000000000" ] \
+             && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            all=false
+            files="$(git diff --name-only "$base"...HEAD)"
+          fi
+          shared='\.github/workflows/phase2-docker\.yml|\.gitattributes'
+          # A here-string, not a pipe: under pipefail an early-exiting `grep -q` could make a pipe report "no match".
+          hit() { [ "$all" = true ] || grep -Eq "^($shared|$1)" <<< "$files"; }
+          echo "compose=$(hit 'infra/' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "backend=$(hit 'services/backend/|contracts/' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "web=$(hit 'services/web/|contracts/|docs/PHASE2_ARCHITECTURE\.md' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "inference=$(hit 'services/inference/|src/|data/|contracts/' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+  # Tracked secret files. Prints paths only, never contents. Example files are allowed.
+  secret-file-guard:
+    name: tracked secret files
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Look for tracked secret files
+        run: |
+          set -euo pipefail
+          fail=0
+          report() { # label, newline-separated paths
+            if [ -n "$2" ]; then
+              fail=1
+              printf '%s\n' "$2" | sed "s|^|::error::$1: |"
+            fi
+          }
+          # ".env", ".env.<x>" and "<name>.env" are real env files unless they end in .example/.sample/.template
+          report "tracked env file" "$(git ls-files | grep -Ei '(^|/)(\.env(\.[^/]+)?|[^/]+\.env)$' | grep -Eiv '\.(example|sample|template)$' || true)"
+          report "tracked development token file" "$(git ls-files | grep -Ei '(^|/)dev-tokens\.json$' || true)"
+          report "tracked key or certificate file" "$(git ls-files | grep -Ei '(\.(pem|key|p12|pfx|jks|keystore)$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$)' || true)"
+          report "private key block in" "$(git grep -lIE -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' -- . ':(exclude).github/workflows/phase2-docker.yml' || true)"
+          if [ "$fail" -ne 0 ]; then
+            echo "Remove these files from the repository and rotate anything they held."
+            exit 1
+          fi
+          echo "No tracked env files, token files or private keys."
+
+  # docker compose config with disposable env files; the stack is not started.
+  compose-config:
+    name: compose configuration
+    needs: changes
+    if: needs.changes.outputs.compose == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Generate disposable env files and token fixtures
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/cbdc-ci-env"
+          mkdir -p "$d"
+          pw="$(openssl rand -hex 16)"
+          t1="$(openssl rand -hex 32)"
+          t2="$(openssl rand -hex 32)"
+          echo "::add-mask::$pw"
+          echo "::add-mask::$t1"
+          echo "::add-mask::$t2"
+          for n in postgres backend inference; do
+            sed "s/CHANGE_ME_LOCAL_ONLY/$pw/g" "infra/env/$n.env.example" > "$d/$n.env"
+          done
+          h1="$(printf '%s' "$t1" | sha256sum | cut -d' ' -f1)"
+          h2="$(printf '%s' "$t2" | sha256sum | cut -d' ' -f1)"
+          printf '{"users":[{"userId":"u-analyst-1","email":"analyst@example.test","role":"analyst","tokenSha256":"%s"},{"userId":"u-viewer-1","email":"viewer@example.test","role":"viewer","tokenSha256":"%s"}]}\n' "$h1" "$h2" > "$d/dev-tokens.json"
+          echo "CBDC_ENV_DIR=$d" >> "$GITHUB_ENV"
+          echo "CBDC_DEV_TOKENS_FILE=$d/dev-tokens.json" >> "$GITHUB_ENV"
+
+      - name: Resolve the full and seed profiles
+        run: |
+          set -euo pipefail
+          docker compose version
+          c="docker compose -f infra/compose.yaml"
+          list() { "$@" | sort | tr '\n' ' '; }
+          full="$(list $c --profile full config --services)"
+          withseed="$(list $c --profile full --profile seed config --services)"
+          none="$($c config --services | wc -l | tr -d ' ')"
+          echo "full:      $full"
+          echo "full+seed: $withseed"
+          echo "no profile: $none services"
+          [ "$full" = "backend inference migrate postgres web " ] || { echo "::error::--profile full must start exactly the five normal services"; exit 1; }
+          [ "$withseed" = "backend inference migrate postgres seed web " ] || { echo "::error::--profile seed must add the seed service"; exit 1; }
+          [ "$none" = "0" ] || { echo "::error::a service starts without any --profile"; exit 1; }
+          # The resolved document holds the generated password, so it goes to a file and is never printed.
+          $c --profile full --profile seed config --format json > "$RUNNER_TEMP/resolved.json"
+          python3 - "$RUNNER_TEMP/resolved.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          s = d["services"]
+          published = {n: v["ports"] for n, v in s.items() if v.get("ports")}
+          assert set(published) == {"web"}, f"published services: {sorted(published)}; only web may publish a port"
+          assert all(p.get("host_ip") == "127.0.0.1" and p.get("target") == 80 for p in published["web"]), "web must bind 127.0.0.1 and map to container port 80"
+          assert s["seed"].get("profiles") == ["seed"], "seed must be in its own profile only"
+          assert s["inference"]["environment"].get("CBDC_REPO_ROOT") == "/repo", "inference must run with CBDC_REPO_ROOT=/repo"
+          assert s["backend"]["environment"].get("BIND_HOST") == "0.0.0.0", "backend must bind 0.0.0.0 inside its container"
+          # Compose 2.38 omits bind.create_host_path from its JSON, so an absent field proves nothing and is not
+          # checked here. create_host_path: false is asserted on the source file (infra/scripts/tests/test_compose.py)
+          # and by the behavioural step below.
+          for n in ("backend", "seed"):
+              tok = [v for v in s[n].get("volumes", []) if str(v.get("target", "")).endswith("dev-tokens.json")]
+              assert len(tok) == 1, f"{n} must have exactly one dev-tokens.json mount"
+              assert tok[0].get("type") == "bind", f"{n}: the token mount must be a bind mount"
+              assert tok[0].get("read_only") is True, f"{n}: the token mount must be read-only"
+          print("resolved configuration: only web is published, on 127.0.0.1:80; backend and seed token mounts are read-only binds")
+          PY
+
+      # Behaviour, not just configuration: with the token file missing, creating backend and seed must not make
+      # that path appear (neither as a directory nor as a file). Containers are only created, never started.
+      # Placeholder images stand in for the real ones so nothing is pulled or built.
+      - name: A missing token file must not be created
+        run: |
+          set -uo pipefail
+          p="cbdc-tokmount-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          missing="$RUNNER_TEMP/cbdc-missing-$GITHUB_RUN_ID/dev-tokens.json"
+          echo "CBDC_TOKMOUNT_PROJECT=$p" >> "$GITHUB_ENV"
+          echo "CBDC_TOKMOUNT_PARENT=$(dirname "$missing")" >> "$GITHUB_ENV"
+          mkdir -p "$(dirname "$missing")"
+          [ ! -e "$missing" ] || { echo "::error::test setup: the path already exists"; exit 1; }
+          # Unique tags: the real cbdc-backend:local and cbdc-backend-seed:local tags are never touched.
+          img_b="cbdc-tokmount-backend:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          img_s="cbdc-tokmount-seed:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo "CBDC_TOKMOUNT_IMG_B=$img_b" >> "$GITHUB_ENV"
+          echo "CBDC_TOKMOUNT_IMG_S=$img_s" >> "$GITHUB_ENV"
+          # The step shell runs with -e: every command that may fail is checked explicitly so that the reason is printed.
+          { echo 'FROM scratch'; echo 'CMD ["x"]'; } | docker build -q -t "$img_b" - > /dev/null \
+            || { echo "::error::test setup: could not build the placeholder image"; exit 1; }
+          docker tag "$img_b" "$img_s" || { echo "::error::test setup: could not tag the placeholder image"; exit 1; }
+          export CBDC_DEV_TOKENS_FILE="$missing"
+          # `create` has no --no-deps, so an override drops depends_on and only backend and seed are created.
+          # It also points image at the placeholders. It does not mention volumes: the token mount is unchanged.
+          { echo "services:"; echo "  backend:"; echo "    image: $img_b"; echo "    depends_on: !reset []"; echo "  seed:"; echo "    image: $img_s"; echo "    depends_on: !reset []"; } > "$RUNNER_TEMP/no-deps.yaml" \
+            || { echo "::error::test setup: could not write the override file"; exit 1; }
+          # One service at a time, so a failure on one cannot hide whether the other was exercised.
+          for svc in backend seed; do
+            # Failure is the expected outcome, so capture the exit code without letting -e end the step.
+            if docker compose -p "$p" -f infra/compose.yaml -f "$RUNNER_TEMP/no-deps.yaml" --profile full --profile seed create --no-build "$svc" > "$RUNNER_TEMP/tokmount.log" 2>&1; then
+              rc=0
+            else
+              rc=$?
+            fi
+            # The log holds mount errors only (no configuration is printed).
+            sed "s/^/compose($svc): /" "$RUNNER_TEMP/tokmount.log" | tail -n 4
+            echo "$svc: docker compose create exit code: $rc"
+            if [ -e "$missing" ]; then
+              kind=file; [ -d "$missing" ] && kind=directory
+              echo "::error::SECURITY: $svc silently created a missing token file as a $kind despite create_host_path: false"
+              exit 1
+            fi
+            # The failure must be the missing bind source, not some unrelated error.
+            if [ "$rc" -eq 0 ] || ! grep -qi 'bind source path does not exist' "$RUNNER_TEMP/tokmount.log"; then
+              echo "::error::$svc: create did not fail with a missing-bind-source error, so the test proves nothing"
+              exit 1
+            fi
+            echo "OK: $svc create failed on the missing bind source and the path was not created"
+          done
+
+      - name: Remove the generated files
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/cbdc-ci-env" "$RUNNER_TEMP/resolved.json" "$RUNNER_TEMP/tokmount.log" "$RUNNER_TEMP/no-deps.yaml"
+          # Exact project scoping only: no prune and no volume removal.
+          if [ -n "${CBDC_TOKMOUNT_PROJECT:-}" ]; then
+            docker ps -a -q --filter "label=com.docker.compose.project=$CBDC_TOKMOUNT_PROJECT" | xargs -r docker rm -f > /dev/null
+            docker network ls -q --filter "label=com.docker.compose.project=$CBDC_TOKMOUNT_PROJECT" | xargs -r docker network rm > /dev/null
+            docker rmi "$CBDC_TOKMOUNT_IMG_B" "$CBDC_TOKMOUNT_IMG_S" > /dev/null 2>&1 || true
+            rm -rf "$CBDC_TOKMOUNT_PARENT"
+          fi
+
+  backend-docker:
+    name: backend images
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Typecheck and unit tests run inside the image build. The tests read contracts/fixtures,
+      # which sit outside the build context, so the contracts folder is a named context.
+      - name: Test target (typecheck and unit tests)
+        run: docker build --progress=plain --target test --build-context contracts=contracts -t cbdc-backend-test:ci services/backend
+
+      - name: Runtime and migrate targets build
+        run: |
+          set -euo pipefail
+          docker build -t cbdc-backend:ci services/backend
+          docker build --target migrate -t cbdc-backend-migrate:ci services/backend
+
+  web-docker:
+    name: web image
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Lint and component tests run inside the image build (two Vitest workers, set in the Dockerfile).
+      # The tests read contracts/fixtures and docs/PHASE2_ARCHITECTURE.md from outside the build context.
+      - name: Test target (lint and component tests)
+        run: docker build --progress=plain --target test --build-context contracts=contracts --build-context docs=docs -t cbdc-web-test:ci services/web
+
+      - name: Runtime (nginx) target build
+        run: docker build -t cbdc-web:ci services/web
+
+  # Build only. The 426-test inference suite is too long for every pull request.
+  inference-docker:
+    name: inference image
+    needs: changes
+    if: needs.changes.outputs.inference == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build the image
+        run: docker build --progress=plain -f services/inference/Dockerfile --build-arg "CBDC_GIT_COMMIT=$GITHUB_SHA" -t cbdc-inference:ci .

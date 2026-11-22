@@ -1,0 +1,26 @@
+# Allow-list for the inference image (arch §4.2). The build context is the
+# repository root, so EVERYTHING is excluded first and only what the image needs
+# is re-included. This keeps out .git, venv/.venv, outputs/ (checkpoints),
+# data/raw/, .cognee/, .env files, dev tokens and every other service.
+*
+
+!src/
+!data/structured/
+!data/processed/
+!data/knowledge/
+# Test-only data: the decision_id and daily-state fingerprint vectors (contract §2.11).
+!contracts/test-vectors/
+!services/inference/
+
+# Never, even inside allowed folders.
+services/inference/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.env
+**/.env.*
+**/*.pt
+**/*.pth
+**/*.ckpt
+**/*.pem
+**/*.key

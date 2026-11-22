@@ -29,8 +29,8 @@ The FastAPI service and engine that wrap the Phase 1 routing code. It's internal
 | `POST /v1/compare` (§2.9) | Done. Every policy runs in **one** engine task on one request-scoped state frame, so `same_state` holds and every result shares a `state_frame_sha256`. A disabled or state-unavailable policy goes into `skipped` instead of failing the request, and each result's `decision_id` is hashed for its own policy, so it equals the `/v1/route` ID. |
 | `POST /v1/explain` (§2.10) | Done. Recomputes the decision deterministically, so its `decision_id` equals `/v1/route`'s. `semantic_context` is **always null in v1**, and `include_semantic_context` is rejected as an unknown field. For `ppo_projected`, `policy_notes` state that the shares come from a learned policy with no causal explanation and list each slot's change from `share_before_projection`; no causal reason is ever invented. |
 | Error envelope details (§4) | Done. `VALIDATION_ERROR` carries `details.errors[]` of `{field, message}`, with `field` **omitted** for a form-level error; other 422 codes carry `details.field`. `405 METHOD_NOT_ALLOWED` carries an `Allow` header. Only the contract's `details` keys are returned, so no internal path, exception text or configuration value can leak. |
-| Dockerfile, `Dockerfile.dockerignore` | Not started |
-| Platform locks `requirements/*.txt` | Dev D generates them from `requirements/*.in` |
+| Dockerfile, `Dockerfile.dockerignore` | Done (Phase 2 Milestone 3). See "Docker image" below |
+| Platform locks `requirements/*.txt` | `linux-x86_64-cpu.txt` done (`infra/scripts/compile_locks.py`); the Windows locks are not generated yet |
 
 ## Layout
 
@@ -103,6 +103,26 @@ Configuration (contract §8; all optional):
 | `CBDC_ENGINE_TASK_TIMEOUT_S` | `10` | |
 | `CBDC_ENGINE_MAX_QUEUE` | `32` | |
 | `CBDC_ENABLE_COGNEE` | `false` | Explanation text only |
+| `CBDC_GIT_COMMIT` | unset | The commit `/v1/version` reports. Used only if it is a 7–40 character hex SHA; otherwise `git rev-parse --short HEAD` in `CBDC_REPO_ROOT`, otherwise `"unknown"`. The Docker build sets it from a build argument |
+
+## Docker image
+
+Build from the **repository root** (the build context). `Dockerfile.dockerignore` is an allow-list: only `src/`, `data/structured/`, `data/processed/`, `data/knowledge/`, `contracts/test-vectors/` (test data for the golden-hash tests) and `services/inference/` (without `.venv`) are sent to the builder. `.git`, `outputs/` (checkpoints), `data/raw/`, `.cognee/`, `.env` files, dev tokens and other services can't enter the image.
+
+```powershell
+# PowerShell (Linux: --build-arg CBDC_GIT_COMMIT=$(git rev-parse HEAD))
+docker build -f services/inference/Dockerfile --build-arg "CBDC_GIT_COMMIT=$(git rev-parse HEAD)" -t cbdc-inference:local .
+docker run --rm cbdc-inference:local python -m pytest -q -p no:cacheprovider   # the whole suite, inside the image
+```
+
+- **Dependencies:** `pip install --require-hashes --no-deps -r requirements/linux-x86_64-cpu.txt`, then `pip check`. torch is `2.13.0+cpu`; no CUDA, triton or Cognee packages.
+- **Runtime:** non-root user `cbdc` (uid 10001); `/repo` is owned by root and read-only to it. `CBDC_REPO_ROOT=/repo`, `CBDC_DEVICE=cpu`, `CBDC_ENABLE_COGNEE=false`. uvicorn listens on `0.0.0.0:8000` **inside the container only**: Compose keeps it on the internal network, and only an optional debug override publishes it, on `127.0.0.1:18000` (contract §8).
+- **Health check:** `GET /v1/health` must return 200. It returns 503 until the engine workers are ready, so the start period is 180 s (`CBDC_ENGINE_STARTUP_TIMEOUT_S`).
+- **PPO gate unchanged:** no checkpoint is copied into the image, `config/approved_checkpoints.json` ships with `"approved": []` and `CBDC_PPO_CHECKPOINT_ID` is unset, so `ppo_projected` returns `409 POLICY_DISABLED`. An approved checkpoint would be mounted read-only at `/repo/outputs/experiments` (arch §4.2).
+- **Commit:** the image has no `.git` and no git binary. The `CBDC_GIT_COMMIT` build argument becomes the environment variable of the same name. If it is omitted, `/v1/version` reports `"unknown"`, and the two `git_commit` tests in `tests/api/` fail.
+- **Size:** about 2.0 GB, nearly all of it torch and the other Python packages.
+
+**Base image: security trade-off.** The image uses `python:3.10.11-slim-bullseye`, pinned by digest, to keep Phase 1's exact interpreter (arch §7.2). There is no `3.10.11-slim-bookworm`: 3.10.11 (April 2023) predates Debian 12. Debian 11 "bullseye" is out of regular security support, and an exact-patch image is never rebuilt. The OS packages and Python 3.10.11 itself therefore carry known, unpatched vulnerabilities. That is acceptable for local development and the Phase 2 demonstration only; the image must not be exposed to untrusted networks. A newer, supported base (for example the latest `3.10.x-slim-bookworm`) changes the interpreter patch version, so it needs approval, plus a re-run of the parity and golden-hash tests. It is tracked as a separate investigation.
 
 ## Tests
 
@@ -168,7 +188,7 @@ Paths are relative to `CBDC_REPO_ROOT`:
 4. **Scenario mode** (parity with Stage 1F), then **explicit mode** (§9.1 rules and every 422 code).
 5. ~~**`/v1/compare` and `/v1/explain`.**~~ Done.
 6. ~~**`ppo_projected`.**~~ Implemented. It is only exercised in tests with a temporary registry, because no checkpoint is approved.
-7. **Dockerfile** and its allow-list `Dockerfile.dockerignore` (arch §4.2). **Still to do** -- the only remaining item in this service, together with Dev D's platform locks.
+7. ~~**Dockerfile** and its allow-list `Dockerfile.dockerignore` (arch §4.2).~~ Done (Phase 2 Milestone 3), with the Linux CPU lock. See "Docker image".
 
 ### Open points to raise with Nisaraga / Dev D (no contract change made)
 

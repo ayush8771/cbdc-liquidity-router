@@ -98,7 +98,7 @@ describe("Bridge monitor (desktop) on the live API: requests and the default dat
   it("shows the default date in the control and says it is the latest eligible one", async () => {
     mockWidth(1280);
     live();
-    await findCard("GBR->PHL");
+    await within(await findCard("GBR->PHL")).findByRole("table"); // the card exists, waiting, before the default date does
     expect(dateInput()).toHaveValue("2025-08-30");
     expect(screen.getByText(/Showing the latest eligible date/)).toBeInTheDocument();
     expect(dateInput()).toHaveAttribute("min", "2011-01-01");
@@ -113,7 +113,7 @@ describe("Bridge monitor (desktop) on the live API: requests and the default dat
     server.use(calendarHandler(calendar), stateHandler({ onRequest: (url, authorization) => seen.push({ kind: "state", url, authorization }) }));
     live();
 
-    await findCard("GBR->PHL");
+    await within(await findCard("GBR->PHL")).findByRole("table"); // the card exists, waiting, before the default date does
     expect(dateInput()).toHaveValue("2025-07-31");
     expect(seen.every((s) => s.url.searchParams.get("date") === "2025-07-31")).toBe(true);
   });

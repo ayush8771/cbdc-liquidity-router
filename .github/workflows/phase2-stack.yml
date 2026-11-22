@@ -1,0 +1,282 @@
+name: phase2-stack
+
+# Dev D (arch §5.4). Builds the whole Compose stack, starts it, seeds disposable development users,
+# runs the API smoke test, the Playwright browser tests (e2e/) and the runtime security checks, and
+# removes only what it created.
+# The individual image builds and tests are in phase2-docker.yml; this workflow does not repeat
+# their test targets.
+#
+# - No GitHub secret is used. A random database password and two random tokens are generated per
+#   run in RUNNER_TEMP, masked in the log, and deleted at the end.
+# - Nothing from the pull request is placed in a shell command. The run id, attempt and commit come
+#   from the default GITHUB_* environment variables.
+# - Images are built with plain `docker build` (not through Compose, which hands builds to Buildx Bake)
+#   under run-specific names, and the stack is started with `up --no-build`. A generated Compose
+#   override points the services at those images; the step after it checks that they match
+#   infra/compose.yaml's build contexts and targets.
+# - Linux only: GitHub's Windows runners cannot run Linux containers.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase2-stack.yml"
+      - ".gitattributes"
+      - "e2e/**"
+      - "infra/**"
+      - "contracts/**"
+      - "services/**"
+      - "src/**"
+      - "data/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2-stack-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  stack:
+    name: full stack (compose, seed, API smoke, runtime security)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Tool versions
+        run: |
+          docker version --format 'docker engine {{.Server.Version}}'
+          docker compose version
+          python3 --version
+
+      - name: Prepare disposable configuration
+        run: |
+          set -euo pipefail
+          w="$RUNNER_TEMP/cbdc-stack"
+          mkdir -p "$w/env"
+          pw="$(openssl rand -hex 16)"
+          ta="$(openssl rand -hex 32)"
+          tv="$(openssl rand -hex 32)"
+          echo "::add-mask::$pw"
+          echo "::add-mask::$ta"
+          echo "::add-mask::$tv"
+          for n in postgres backend inference; do
+            sed "s/CHANGE_ME_LOCAL_ONLY/$pw/g" "infra/env/$n.env.example" > "$w/env/$n.env"
+            chmod 600 "$w/env/$n.env"
+          done
+          # The token-hash file is bind-mounted read-only into the backend and the seed job, which both run as
+          # uid 1000 / gid 1000 (`node`). The runner user that creates the file is a different user, and
+          # mode 600 would be unreadable for uid 1000. Mode 644 reads fine whatever the owner (checked on a
+          # Linux volume as uid 1000: 600 denied, 644 allowed, 640 allowed only if the group is exactly
+          # 1000). A narrower mode needs `sudo chown` or `chgrp` and the runner's uid, which are not
+          # verified here. The file holds only SHA-256 hashes of disposable tokens; the plain tokens
+          # (smoke-tokens.json) and the env files stay mode 600.
+          ha="$(printf '%s' "$ta" | sha256sum | cut -d' ' -f1)"
+          hv="$(printf '%s' "$tv" | sha256sum | cut -d' ' -f1)"
+          printf '{"users":[{"userId":"u-analyst-1","email":"analyst@example.test","role":"analyst","tokenSha256":"%s"},{"userId":"u-viewer-1","email":"viewer@example.test","role":"viewer","tokenSha256":"%s"}]}\n' "$ha" "$hv" > "$w/dev-tokens.json"
+          chmod 644 "$w/dev-tokens.json"
+          printf '{"analyst":{"userId":"u-analyst-1","token":"%s"},"viewer":{"userId":"u-viewer-1","token":"%s"}}\n' "$ta" "$tv" > "$w/smoke-tokens.json"
+          chmod 600 "$w/smoke-tokens.json"
+          {
+            echo "COMPOSE_PROJECT_NAME=cbdc-stack-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            echo "CBDC_STACK_TAG=run${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            echo "CBDC_STACK_DIR=$w"
+            echo "CBDC_ENV_DIR=$w/env"
+            echo "CBDC_DEV_TOKENS_FILE=$w/dev-tokens.json"
+            echo "CBDC_GIT_COMMIT=$GITHUB_SHA"
+            echo "WEB_HOST_PORT=18080"
+          } >> "$GITHUB_ENV"
+
+      # Plain `docker build`, with the same contexts, targets and build argument as infra/compose.yaml.
+      - name: Build the images
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          t="$CBDC_STACK_TAG"
+          docker build -t "cbdc-ci-backend:$t" services/backend
+          docker build --target migrate -t "cbdc-ci-migrate:$t" services/backend
+          docker build --target build -t "cbdc-ci-seed:$t" services/backend
+          docker build -t "cbdc-ci-web:$t" services/web
+          docker build -f services/inference/Dockerfile --build-arg "CBDC_GIT_COMMIT=$GITHUB_SHA" -t "cbdc-ci-inference:$t" .
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep "^cbdc-ci-"
+
+      - name: Point Compose at the built images and check they match compose.yaml
+        run: |
+          set -euo pipefail
+          o="$CBDC_STACK_DIR/images.yaml"
+          {
+            echo "services:"
+            for s in migrate seed inference backend web; do
+              echo "  $s:"
+              echo "    image: cbdc-ci-$s:$CBDC_STACK_TAG"
+            done
+          } > "$o"
+          # The resolved document contains the generated database password: owner-only, and deleted after the check.
+          ( umask 077; docker compose -f infra/compose.yaml -f "$o" --profile full --profile seed config --format json > "$CBDC_STACK_DIR/resolved.json" )
+          trap 'rm -f "$CBDC_STACK_DIR/resolved.json"' EXIT
+          python3 - "$CBDC_STACK_DIR/resolved.json" <<'PY'
+          import json, os, subprocess, sys
+          tag = os.environ["CBDC_STACK_TAG"]
+          services = json.load(open(sys.argv[1]))["services"]
+          # service -> (build context, dockerfile, target) that the docker build commands above use
+          built = {
+              "migrate": ("services/backend", "Dockerfile", "migrate"),
+              "seed": ("services/backend", "Dockerfile", "build"),
+              "backend": ("services/backend", "Dockerfile", None),
+              "web": ("services/web", "Dockerfile", None),
+              "inference": (".", "services/inference/Dockerfile", None),
+          }
+          rel = lambda p: os.path.relpath(p, os.getcwd()).replace(os.sep, "/")
+          problems = []
+          for name, svc in services.items():
+              b = svc.get("build")
+              if not b:
+                  continue  # a pulled image (postgres), pinned by digest
+              got = (rel(b["context"]), b.get("dockerfile", "Dockerfile"), b.get("target"))
+              if name not in built:
+                  problems.append(f"{name}: compose.yaml builds this service but the workflow does not")
+              elif got != built[name]:
+                  problems.append(f"{name}: compose.yaml builds {got}, the workflow built {built[name]}")
+              want = f"cbdc-ci-{name}:{tag}"
+              if svc["image"] != want:
+                  problems.append(f"{name}: image is {svc['image']}, expected {want}")
+              elif subprocess.run(["docker", "image", "inspect", want], capture_output=True).returncode != 0:
+                  problems.append(f"{name}: image {want} was not built")
+          for name in built:
+              if name not in services or not services[name].get("build"):
+                  problems.append(f"{name}: the workflow builds it but compose.yaml does not")
+          for p in problems:
+              print(f"::error::{p}")
+          if problems:
+              sys.exit(1)
+          print("compose.yaml and the built images match:", ", ".join(f"{n} -> {services[n]['image']}" for n in sorted(built)))
+          PY
+
+      - name: Start the full profile
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          c="docker compose -f infra/compose.yaml -f $CBDC_STACK_DIR/images.yaml"
+          $c --profile full up -d --no-build
+          state() { docker inspect -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.State.ExitCode}}' "$($c --profile full ps -a -q "$1")"; }
+          deadline=$((SECONDS + 600))
+          while :; do
+            ready=true
+            for s in postgres inference backend web; do [ "$(state "$s")" = "running|healthy|0" ] || ready=false; done
+            [ "$(state migrate)" = "exited||0" ] || ready=false
+            [ "$ready" = true ] && break
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::the stack did not become healthy within 10 minutes"
+              $c --profile full ps -a
+              exit 1
+            fi
+            sleep 5
+          done
+          $c --profile full ps -a --format 'table {{.Service}}\t{{.State}}\t{{.Health}}\t{{.ExitCode}}'
+
+      - name: Seed the development users, twice
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          c="docker compose -f infra/compose.yaml -f $CBDC_STACK_DIR/images.yaml"
+          users() { $c --profile full exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -c "select count(*) from \"User\""'; }
+          [ "$(users)" = "0" ] || { echo "::error::the database was not empty before seeding"; exit 1; }
+          for i in 1 2; do
+            $c --profile full --profile seed run --rm -T seed | grep -E "Seeded [0-9]+ development users"
+            [ "$(users)" = "2" ] || { echo "::error::expected 2 users after seed run $i"; exit 1; }
+          done
+
+      - name: API smoke tests
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          python3 e2e/api-smoke.py --base-url "http://127.0.0.1:$WEB_HOST_PORT" --tokens-file "$CBDC_STACK_DIR/smoke-tokens.json" 2>&1 | tee "$CBDC_STACK_DIR/smoke.log"
+
+      # Browser tests (Playwright, Chromium) against the stack that is already running and seeded. The
+      # project in e2e/ has its own pinned lockfile; nothing is installed in services/web. Trace,
+      # screenshot and video are off and the output goes into the disposable directory, which the cleanup
+      # step deletes, so no recording or report of the sign-in screen is kept or uploaded.
+      - name: Node for the browser tests
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install Playwright and Chromium
+        timeout-minutes: 10
+        working-directory: e2e
+        run: |
+          set -euo pipefail
+          node --version
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        timeout-minutes: 15
+        working-directory: e2e
+        run: |
+          set -euo pipefail
+          export E2E_BASE_URL="http://127.0.0.1:$WEB_HOST_PORT"
+          export E2E_TOKENS_FILE="$CBDC_STACK_DIR/smoke-tokens.json"
+          export E2E_OUTPUT_DIR="$CBDC_STACK_DIR/playwright-output"
+          # A failure writes error-context.md, a page snapshot that lists field values (it can hold what was
+          # typed in the sign-in field). Delete it as soon as this step ends, pass or fail.
+          trap 'rm -rf "$E2E_OUTPUT_DIR"' EXIT
+          npm test 2>&1 | tee "$CBDC_STACK_DIR/playwright.log"
+
+      # Last, so that its log scan also covers the traffic and output of the browser tests.
+      - name: Runtime security checks
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          python3 e2e/stack-security.py --project "$COMPOSE_PROJECT_NAME" --web-port "$WEB_HOST_PORT" --tokens-file "$CBDC_STACK_DIR/smoke-tokens.json" --env-file "$CBDC_STACK_DIR/env/postgres.env" --scan "$CBDC_STACK_DIR/smoke.log" --scan "$CBDC_STACK_DIR/playwright.log"
+
+      # Generated secrets are masked in the log, so container output is safe to print here.
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          # Who runs this job and what the token-file mode and owner are (metadata only, no contents).
+          id || true
+          ls -ln "${CBDC_STACK_DIR:-.}/dev-tokens.json" 2>&1 || true
+          c="docker compose -f infra/compose.yaml -f $CBDC_STACK_DIR/images.yaml"
+          $c --profile full ps -a || true
+          for s in postgres migrate inference backend web; do
+            echo "::group::logs: $s"
+            $c --profile full logs --no-color --tail 150 "$s" || true
+            echo "::endgroup::"
+          done
+
+      # Removes only this run's project (matched by its exact name), its named volume by exact name, the
+      # image tags this run built, and the files in RUNNER_TEMP. No `down -v`, no prune.
+      - name: Clean up
+        if: always()
+        run: |
+          set -uo pipefail
+          p="${COMPOSE_PROJECT_NAME:-}"
+          if [[ "$p" =~ ^cbdc-stack-[0-9]+-[0-9]+$ ]]; then
+            if [ -f "${CBDC_STACK_DIR:-}/images.yaml" ]; then
+              docker compose -f infra/compose.yaml -f "$CBDC_STACK_DIR/images.yaml" --profile full --profile seed down --remove-orphans || true
+            fi
+            ids="$(docker ps -aq --filter "label=com.docker.compose.project=$p")"
+            [ -z "$ids" ] || docker rm -f $ids
+            nets="$(docker network ls -q --filter "label=com.docker.compose.project=$p")"
+            [ -z "$nets" ] || docker network rm $nets
+            if docker volume inspect "${p}_pgdata" > /dev/null 2>&1; then docker volume rm "${p}_pgdata"; fi
+            for s in backend migrate seed web inference; do docker rmi "cbdc-ci-$s:${CBDC_STACK_TAG:-none}" > /dev/null 2>&1 || true; done
+            echo "Removed project $p."
+          else
+            echo "No stack was created by this run."
+          fi
+          # The generated credentials go in every case, including a failure while they were being written.
+          # Only a path under RUNNER_TEMP is ever deleted.
+          d="${CBDC_STACK_DIR:-$RUNNER_TEMP/cbdc-stack}"
+          case "$d" in
+            *..*) echo "Refusing to delete $d: it contains '..'." ;;
+            "$RUNNER_TEMP"/?*) rm -rf "$d" && echo "Removed $d." ;;
+            *) echo "Refusing to delete $d: it is not under RUNNER_TEMP." ;;
+          esac

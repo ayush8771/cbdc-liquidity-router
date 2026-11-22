@@ -44,7 +44,13 @@ const fixture = fixtureSummary();
 const totalsRegion = () => screen.getByRole("region", { name: "Totals" });
 const recentCard = () => screen.getByRole("region", { name: "Recent transactions" });
 const policyTable = () => screen.getByRole("table", { name: "Metrics by policy" });
-const findTotals = () => screen.findByRole("region", { name: "Totals" });
+// The loading skeleton is also a region named "Totals", so wait until its status is gone.
+const findTotals = () =>
+  waitFor(() => {
+    const region = screen.getByRole("region", { name: "Totals" });
+    expect(within(region).queryByRole("status")).toBeNull();
+    return region;
+  });
 const errorAlerts = () => screen.queryAllByRole("alert");
 
 function tile(label: string) {
@@ -311,13 +317,16 @@ describe("Dashboard (desktop): empty states", () => {
 describe("Dashboard (desktop): loading", () => {
   it("shows a loading state for the summary and, separately, for the recent transactions", async () => {
     mockWidth(1280);
+    // Held until the test releases it, so "the summary arrived first" doesn't depend on timing.
+    let releaseRecent!: () => void;
+    const recentGate = new Promise<void>((resolve) => (releaseRecent = resolve));
     server.use(
       http.get("*/api/v1/dashboard/summary", async () => {
         await delay(80);
         return HttpResponse.json(fixtureSummary());
       }),
       http.get("*/api/v1/transactions", async () => {
-        await delay(120);
+        await recentGate;
         return HttpResponse.json({ items: fixtureRows(), page: 1, pageSize: 5, total: 7 });
       }),
     );
@@ -329,6 +338,7 @@ describe("Dashboard (desktop): loading", () => {
     await findTotals();
     // The summary has arrived while the recent transactions are still loading.
     expect(within(recentCard()).queryByRole("table")).not.toBeInTheDocument();
+    releaseRecent();
     expect(await within(recentCard()).findByRole("table", { name: "Recent transactions" })).toBeInTheDocument();
   });
 });

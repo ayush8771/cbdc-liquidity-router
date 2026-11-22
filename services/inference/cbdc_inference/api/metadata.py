@@ -10,11 +10,13 @@ truth for the fingerprints, so the values `/v1/version` reports are the ones
 from __future__ import annotations
 
 import json
+import os
 import platform
+import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Mapping, Optional
 
 STRUCTURED_FILES = ("data/structured/countries.csv", "data/structured/bridge_network.csv",
                     "data/structured/transaction_requests.csv")
@@ -35,9 +37,24 @@ def artefact_checks(repo_root: Path) -> dict:
             "knowledge_base": "ok" if knowledge else "error"}
 
 
-def git_commit(repo_root: Path) -> str:
-    """Short commit of the checkout. Docker images have no .git (arch §4.2); how the build
-    supplies the commit there is not specified yet, so this reports "unknown"."""
+GIT_COMMIT_ENV = "CBDC_GIT_COMMIT"
+_COMMIT_RE = re.compile(r"[0-9a-f]{7,40}")
+
+
+def git_commit(repo_root: Path, environ: Optional[Mapping[str, str]] = None) -> str:
+    """The commit this service was built from, in order of precedence:
+
+    1. CBDC_GIT_COMMIT, if it is a 7-40 character hex commit (case-insensitive,
+       surrounding whitespace ignored; reported in lower case). Docker images have no
+       .git (arch §4.2), so the build passes the commit in as a build argument.
+       Any other value is ignored.
+    2. `git rev-parse --short HEAD` in repo_root, when git and a checkout are available.
+    3. "unknown".
+    """
+    env = os.environ if environ is None else environ
+    supplied = (env.get(GIT_COMMIT_ENV) or "").strip().lower()
+    if _COMMIT_RE.fullmatch(supplied):
+        return supplied
     try:
         out = subprocess.run(["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
                              capture_output=True, text=True, timeout=5)

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, describe, it } from "node:test";
-import { ConfigError, DEFAULTS, loadConfig, resolveDevTokensFile } from "../../src/config/config.js";
+import { ConfigError, DEFAULTS, isLoopbackHost, loadConfig, resolveDevTokensFile } from "../../src/config/config.js";
 import { makeTempDir, validTokenFile } from "../helpers/devTokens.js";
 
 const DB_PASSWORD = "s3cret-db-password";
@@ -190,6 +190,47 @@ describe("loadConfig: other variables", () => {
         "INFERENCE_TIMEOUT_MS must be a positive whole number of milliseconds",
       ]);
     });
+  }
+});
+
+describe("loadConfig: BIND_HOST", () => {
+  for (const value of [undefined, "", "   "]) {
+    it(`defaults to loopback 127.0.0.1 when BIND_HOST is ${JSON.stringify(value)}`, () => {
+      assert.equal(loadConfig(validEnv({ BIND_HOST: value })).bindHost, "127.0.0.1");
+      assert.equal(DEFAULTS.bindHost, "127.0.0.1");
+    });
+  }
+
+  for (const value of ["0.0.0.0", "127.0.0.1", "::", "::1", "localhost", "172.18.0.5"]) {
+    it(`accepts BIND_HOST=${value}`, () => {
+      assert.equal(loadConfig(validEnv({ BIND_HOST: value })).bindHost, value);
+    });
+  }
+
+  it("trims whitespace", () => {
+    assert.equal(loadConfig(validEnv({ BIND_HOST: " 0.0.0.0 " })).bindHost, "0.0.0.0");
+  });
+
+  for (const value of ["example.com", "0.0.0.0:4000", "http://0.0.0.0", "256.0.0.1", "[::1]", "*"]) {
+    it(`rejects BIND_HOST=${JSON.stringify(value)}`, () => {
+      assert.deepEqual(problemsFor(validEnv({ BIND_HOST: value })), [
+        'BIND_HOST must be an IPv4 or IPv6 address or "localhost"',
+      ]);
+    });
+  }
+
+  it("is reported together with other problems", () => {
+    const problems = problemsFor(validEnv({ BIND_HOST: "nope", INFERENCE_MODE: "fake" }));
+    assert.equal(problems.length, 2);
+  });
+});
+
+describe("isLoopbackHost", () => {
+  for (const host of ["127.0.0.1", "127.1.2.3", "::1", "localhost"]) {
+    it(`treats ${host} as loopback`, () => assert.equal(isLoopbackHost(host), true));
+  }
+  for (const host of ["0.0.0.0", "::", "172.18.0.5", "192.168.1.10"]) {
+    it(`treats ${host} as not loopback`, () => assert.equal(isLoopbackHost(host), false));
   }
 });
 

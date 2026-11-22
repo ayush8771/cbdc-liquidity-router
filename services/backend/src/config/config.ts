@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import path from "node:path";
 import { readDevTokensFile, type DevUser } from "./devTokens.js";
 
@@ -9,6 +10,10 @@ import { readDevTokensFile, type DevUser } from "./devTokens.js";
 export type InferenceMode = "live" | "mock";
 
 export interface Config {
+  // The interface the server listens on. Loopback by default, because development
+  // auth must stay off public interfaces (arch §8.1). Only the container sets
+  // 0.0.0.0, and Compose publishes the port on host loopback only.
+  bindHost: string;
   // Optional until PostgreSQL connectivity is implemented; validated whenever it
   // is set. Prisma's command-line tools read DATABASE_URL on their own.
   databaseUrl: string | undefined;
@@ -25,6 +30,7 @@ export interface Config {
 }
 
 export const DEFAULTS = {
+  bindHost: "127.0.0.1",
   inferenceUrl: "http://inference:8000",
   inferenceMode: "live",
   inferenceTimeoutMs: 15000,
@@ -72,6 +78,11 @@ export function loadConfig(env: NodeJS.ProcessEnv, options: { cwd?: string } = {
     problems.push('AUTH_MODE must be "dev"; no other authentication mode is supported in Phase 2');
   }
 
+  const bindHost = read("BIND_HOST") ?? DEFAULTS.bindHost;
+  if (bindHost !== "localhost" && isIP(bindHost) === 0) {
+    problems.push('BIND_HOST must be an IPv4 or IPv6 address or "localhost"');
+  }
+
   const databaseUrl = read("DATABASE_URL");
   if (databaseUrl !== undefined && !isPostgresUrl(databaseUrl)) {
     problems.push("DATABASE_URL must be a postgresql:// or postgres:// URL with a host");
@@ -99,6 +110,7 @@ export function loadConfig(env: NodeJS.ProcessEnv, options: { cwd?: string } = {
   if (problems.length > 0) throw new ConfigError(problems);
 
   return deepFreeze({
+    bindHost,
     databaseUrl,
     inference: {
       url: inferenceUrl.replace(/\/+$/, ""),
@@ -111,6 +123,11 @@ export function loadConfig(env: NodeJS.ProcessEnv, options: { cwd?: string } = {
       users: tokens.users,
     },
   });
+}
+
+/** True for addresses reachable only from this machine (or this container). */
+export function isLoopbackHost(host: string): boolean {
+  return host === "localhost" || host === "::1" || (isIP(host) === 4 && host.startsWith("127."));
 }
 
 function isPostgresUrl(value: string): boolean {
