@@ -15,7 +15,7 @@ name: phase2-docker
 # The `changes` job does the filtering per job instead; skipped jobs report as skipped.
 on:
   push:
-    branches: [main]
+    branches: [main, feature/phase2-platform]
   pull_request:
 
 permissions:
