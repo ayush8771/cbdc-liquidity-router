@@ -169,11 +169,16 @@ describe("GET /api/v1/health with the inference client", () => {
 
   async function health(
     mode: InferenceMode,
-    options: { timeoutMs?: number; headers?: Record<string, string>; mockHandler?: () => undefined } = {},
+    options: {
+      timeoutMs?: number;
+      healthTimeoutMs?: number;
+      headers?: Record<string, string>;
+      mockHandler?: () => undefined;
+    } = {},
   ): Promise<{ status: number; text: string; body: Record<string, string> }> {
     const client = createInferenceClient(
       { url: fakeUrl, mode, timeoutMs: options.timeoutMs ?? 2000 },
-      { logger: silentLogger, mockHandler: options.mockHandler },
+      { logger: silentLogger, mockHandler: options.mockHandler, healthTimeoutMs: options.healthTimeoutMs },
     );
     const inference = createInferenceHealthProbe(client, silentLogger);
     const server = await startServer(createApp({ logger: silentLogger, database, inference }));
@@ -243,7 +248,17 @@ describe("GET /api/v1/health with the inference client", () => {
     assert.doesNotMatch(res.text, /Traceback|INTERNAL_ERROR|INFERENCE_ERROR/);
   });
 
-  it("uses INFERENCE_TIMEOUT_MS as the health timeout", async () => {
+  it("uses its own health timeout, not the longer INFERENCE_TIMEOUT_MS", async () => {
+    respond = (res) => setTimeout(() => send(res, 200, body(true)), 600);
+    const started = Date.now();
+    const res = await health("live", { timeoutMs: 15000, healthTimeoutMs: 50 });
+    assert.ok(Date.now() - started < 500, "health must not wait for the routing timeout");
+    assert.equal(res.status, 200);
+    assert.equal(res.body.inference, "unavailable");
+    assert.equal(res.body.status, "degraded");
+  });
+
+  it("caps the health timeout at a shorter INFERENCE_TIMEOUT_MS", async () => {
     respond = (res) => setTimeout(() => send(res, 200, body(true)), 600);
     const started = Date.now();
     const res = await health("live", { timeoutMs: 50 });

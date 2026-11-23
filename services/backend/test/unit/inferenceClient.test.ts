@@ -5,6 +5,7 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import express from "express";
 import type { Config } from "../../src/config/config.js";
 import {
+  INFERENCE_HEALTH_TIMEOUT_MS,
   createInferenceClient,
   type InferenceClient,
   type InferenceRequest,
@@ -660,6 +661,69 @@ describe("inference client", () => {
       });
       const closed = liveClient({ url: `http://127.0.0.1:${await closedPort()}` });
       await rejectsWith(closed.health(), { status: 503, code: "INFERENCE_UNAVAILABLE", failure: "unreachable" });
+    });
+
+    describe("its own short timeout (API contract §5)", () => {
+      // Records the timeout of every AbortSignal.timeout() call the client makes.
+      async function recordTimeouts(run: () => Promise<unknown>): Promise<number[]> {
+        const original = AbortSignal.timeout;
+        const seen: number[] = [];
+        AbortSignal.timeout = (ms: number) => {
+          seen.push(ms);
+          return original.call(AbortSignal, ms);
+        };
+        try {
+          await run();
+        } finally {
+          AbortSignal.timeout = original;
+        }
+        return seen;
+      }
+
+      it("is 3 s, shorter than the 15 s routing timeout", () => {
+        assert.equal(INFERENCE_HEALTH_TIMEOUT_MS, 3000);
+      });
+
+      it("uses the health timeout for health(), and INFERENCE_TIMEOUT_MS for routing, get() and post()", async () => {
+        respond = (res, req) => json(res, 200, req.url === "/v1/health" ? healthBody(true) : {});
+        const client = liveClient({ timeoutMs: 15000 });
+        assert.deepEqual(await recordTimeouts(() => client.health()), [INFERENCE_HEALTH_TIMEOUT_MS]);
+        assert.deepEqual(await recordTimeouts(() => client.post("/v1/route", {})), [15000]);
+        assert.deepEqual(await recordTimeouts(() => client.post("/v1/compare", {})), [15000]);
+        assert.deepEqual(await recordTimeouts(() => client.get("/v1/version")), [15000]);
+        // get("/v1/health") is not the health check, so it keeps the routing timeout.
+        assert.deepEqual(await recordTimeouts(() => client.get("/v1/health")), [15000]);
+      });
+
+      it("never exceeds a shorter INFERENCE_TIMEOUT_MS", async () => {
+        respond = (res) => json(res, 200, healthBody(true));
+        assert.deepEqual(await recordTimeouts(() => liveClient({ timeoutMs: 1000 }).health()), [1000]);
+      });
+
+      it("times out health() while a routing call on the same client still succeeds", async () => {
+        respond = (res, req) =>
+          setTimeout(() => json(res, 200, req.url === "/v1/health" ? healthBody(true) : { ok: 1 }), 300);
+        const client = createInferenceClient(
+          { url: fakeUrl, mode: "live", timeoutMs: 2000 },
+          { logger: silentLogger, healthTimeoutMs: 50 },
+        );
+        const started = Date.now();
+        // Same error contract as any other timeout: 503 INFERENCE_UNAVAILABLE, failure "timeout".
+        await rejectsWith(client.health(), { status: 503, code: "INFERENCE_UNAVAILABLE", failure: "timeout" });
+        assert.ok(Date.now() - started < 250, "health() must stop at its own timeout");
+        assert.deepEqual(await client.post("/v1/route", {}), { ok: 1 });
+      });
+
+      it("does not log a health timeout, leaving that to the health probe", async () => {
+        const capture = captureLogger();
+        respond = (res) => setTimeout(() => json(res, 200, healthBody(true)), 300);
+        const client = createInferenceClient(
+          { url: fakeUrl, mode: "live", timeoutMs: 2000 },
+          { logger: capture.logger, healthTimeoutMs: 50 },
+        );
+        await assert.rejects(client.health());
+        assert.deepEqual(capture.lines, []);
+      });
     });
 
     it("does not log, leaving that to the health probe", async () => {
