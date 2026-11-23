@@ -17,6 +17,16 @@ on:
   push:
     branches: [main, feature/phase2-platform]
   pull_request:
+  # Pre-release validation. A manual run only works once this workflow is on the default branch.
+  # "inference" (the default) runs the secret-file guard, the inference image build and the full inference
+  # suite. "all" runs every job, as a manual run did before this input existed.
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Image jobs to run (the secret-file guard always runs)"
+        type: choice
+        options: [inference, all]
+        default: inference
 
 permissions:
   contents: read
@@ -53,8 +63,16 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BEFORE_SHA: ${{ github.event.before }}
+          DISPATCH_SCOPE: ${{ github.event.inputs.scope }}
         run: |
           set -euo pipefail
+          # A manual run limited to the inference image and its full suite. Only fixed outputs are written, and the
+          # input is only compared with a fixed string. Any other scope falls through and runs every job.
+          if [ "$EVENT_NAME" = workflow_dispatch ] && [ "$DISPATCH_SCOPE" = inference ]; then
+            printf 'compose=false\nbackend=false\nweb=false\ninference=true\n' >> "$GITHUB_OUTPUT"
+            cat "$GITHUB_OUTPUT"
+            exit 0
+          fi
           case "$EVENT_NAME" in
             pull_request) base="$BASE_SHA" ;;
             push) base="$BEFORE_SHA" ;;
@@ -282,13 +300,19 @@ jobs:
       - name: Runtime (nginx) target build
         run: docker build -t cbdc-web:ci services/web
 
-  # Build only. The 426-test inference suite is too long for every pull request.
+  # Pull requests only build the image. The full inference suite (426 tests, about 26 minutes in the README's
+  # one local run) is too long for every pull request, so it runs in this same job, on the image just built,
+  # for relevant pushes to main and feature/phase2-platform and for manual runs.
   inference-docker:
     name: inference image
     needs: changes
     if: needs.changes.outputs.inference == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 40 || 75 }}
+    env:
+      # A floor, not an exact count: new tests are fine, and removing tests (or a collection problem that hides
+      # them) fails until someone lowers this number in a reviewed change.
+      INFERENCE_MIN_TESTS: "426"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -296,3 +320,25 @@ jobs:
 
       - name: Build the image
         run: docker build --progress=plain -f services/inference/Dockerfile --build-arg "CBDC_GIT_COMMIT=$GITHUB_SHA" -t cbdc-inference:ci .
+
+      # Runs in the image built above, on the same runner: nothing is rebuilt, saved or uploaded.
+      # `docker run` returns pytest's exit code (and pipefail keeps it through `tee`), so a failure or a
+      # collection error fails the step. Any skip, xfail, deselection or error changes pytest's last line
+      # from "N passed" to something else, and the regex below then fails the step.
+      - name: Full inference suite (pushes and manual runs; skipped on pull requests)
+        if: github.event_name != 'pull_request'
+        timeout-minutes: 60
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/inference-pytest.log"
+          docker run --rm cbdc-inference:ci python -m pytest -q -p no:cacheprovider 2>&1 | tee "$log"
+          last="$(tail -n 1 "$log")"
+          re='^([0-9]+) passed(, [0-9]+ warnings?)? in '
+          if ! [[ "$last" =~ $re ]]; then
+            echo "::error::the last pytest line is not an all-passed summary: $last"
+            exit 1
+          fi
+          if [ "${BASH_REMATCH[1]}" -lt "$INFERENCE_MIN_TESTS" ]; then
+            echo "::error::only ${BASH_REMATCH[1]} tests ran; the floor is $INFERENCE_MIN_TESTS"
+            exit 1
+          fi
