@@ -21,6 +21,7 @@ on:
     paths:
       - ".github/workflows/phase2-stack.yml"
       - ".gitattributes"
+      - ".nvmrc"
       - "e2e/**"
       - "infra/**"
       - "contracts/**"
@@ -31,6 +32,7 @@ on:
     paths:
       - ".github/workflows/phase2-stack.yml"
       - ".gitattributes"
+      - ".nvmrc"
       - "e2e/**"
       - "infra/**"
       - "contracts/**"
