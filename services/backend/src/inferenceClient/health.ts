@@ -5,7 +5,8 @@ import { InferenceError } from "./errors.js";
 // Inference status for GET /api/v1/health (API contract §2.1, §3.9).
 //
 // - Mock mode: "mock", without calling anything, even when a mock handler exists.
-// - Live mode, /v1/health (timeout INFERENCE_TIMEOUT_MS, no retry):
+// - Live mode, /v1/health (timeout INFERENCE_HEALTH_TIMEOUT_MS, 3 s, capped at
+//   INFERENCE_TIMEOUT_MS; no retry):
 //   - 200, ready true, status "ok"        -> "ok"
 //   - 200, ready true, status "degraded"  -> "degraded"
 //   - 503 with ready false, or a NOT_READY error envelope -> "unavailable"
