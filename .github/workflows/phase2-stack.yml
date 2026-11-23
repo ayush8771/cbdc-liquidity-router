@@ -16,6 +16,17 @@ name: phase2-stack
 #   infra/compose.yaml's build contexts and targets.
 # - Linux only: GitHub's Windows runners cannot run Linux containers.
 on:
+  push:
+    branches: [main, feature/phase2-platform]
+    paths:
+      - ".github/workflows/phase2-stack.yml"
+      - ".gitattributes"
+      - "e2e/**"
+      - "infra/**"
+      - "contracts/**"
+      - "services/**"
+      - "src/**"
+      - "data/**"
   pull_request:
     paths:
       - ".github/workflows/phase2-stack.yml"
