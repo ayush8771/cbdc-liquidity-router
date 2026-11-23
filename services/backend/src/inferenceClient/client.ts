@@ -21,6 +21,7 @@ import { mapEngineFieldPath } from "./fieldPaths.js";
 // a JSON object, because no OpenAPI schema exists yet.
 //
 // - Timeout: INFERENCE_TIMEOUT_MS covers the whole call, response body included.
+//   health() instead uses its own short timeout (contract §5), see below.
 // - Headers: only Accept, Content-Type (POST) and X-Request-Id are set. The
 //   client takes no incoming request or header object, so Authorization, a
 //   development token or a cookie can't be forwarded (§5: inference has no auth).
@@ -95,10 +96,20 @@ export interface InferenceClient {
   health(options?: { requestId?: string }): Promise<InferenceHealthResponse>;
 }
 
+/**
+ * The /v1/health timeout (API contract §5: the backend's own short timeout,
+ * not the 15 s routing timeout; 3 s was proposed, like the database probe).
+ * A configured INFERENCE_TIMEOUT_MS below it still applies, so a health check
+ * never waits longer than a routing call would.
+ */
+export const INFERENCE_HEALTH_TIMEOUT_MS = 3000;
+
 export interface InferenceClientOptions {
   logger: Logger;
   /** Mock mode only. */
   mockHandler?: MockHandler;
+  /** Tests only: overrides INFERENCE_HEALTH_TIMEOUT_MS. */
+  healthTimeoutMs?: number;
 }
 
 // A received status and body before interpretation. NOT_JSON marks a body that
@@ -112,8 +123,9 @@ interface Answer {
 
 export function createInferenceClient(config: Config["inference"], options: InferenceClientOptions): InferenceClient {
   const { logger } = options;
+  const healthTimeoutMs = Math.min(config.timeoutMs, options.healthTimeoutMs ?? INFERENCE_HEALTH_TIMEOUT_MS);
 
-  const sendLive = async (request: InferenceRequest): Promise<Answer> => {
+  const sendLive = async (request: InferenceRequest, timeoutMs: number): Promise<Answer> => {
     const url = new URL(config.url + request.path);
     for (const [name, value] of Object.entries(request.query ?? {})) {
       if (value !== undefined) url.searchParams.set(name, String(value));
@@ -125,7 +137,7 @@ export function createInferenceClient(config: Config["inference"], options: Infe
     if (request.requestId) headers.set(REQUEST_ID_HEADER, request.requestId);
     const payload = request.method === "POST" ? JSON.stringify(request.body) : undefined;
 
-    const signal = AbortSignal.timeout(config.timeoutMs);
+    const signal = AbortSignal.timeout(timeoutMs);
     try {
       const response = await fetch(url, { method: request.method, headers, body: payload, signal, redirect: "manual" });
       const text = await response.text();
@@ -153,11 +165,17 @@ export function createInferenceClient(config: Config["inference"], options: Infe
       accepted = OK_ONLY,
       log = true,
       passThrough = [],
-    }: { accepted?: readonly number[]; log?: boolean; passThrough?: readonly OptInPassthroughCode[] } = {},
+      timeoutMs = config.timeoutMs,
+    }: {
+      accepted?: readonly number[];
+      log?: boolean;
+      passThrough?: readonly OptInPassthroughCode[];
+      timeoutMs?: number;
+    } = {},
   ): Promise<{ status: number; body: JsonObject }> => {
     const started = Date.now();
     try {
-      const answer = await (config.mode === "mock" ? sendMock(request) : sendLive(request));
+      const answer = await (config.mode === "mock" ? sendMock(request) : sendLive(request, timeoutMs));
       return interpret(answer, accepted, passThrough);
     } catch (error) {
       if (log && error instanceof InferenceError) {
@@ -196,7 +214,7 @@ export function createInferenceClient(config: Config["inference"], options: Infe
       // The probe logs status changes itself, so failures aren't logged per call.
       const { status, body } = await call(
         { method: "GET", path: "/v1/health", requestId },
-        { accepted: HEALTH_STATUSES, log: false },
+        { accepted: HEALTH_STATUSES, log: false, timeoutMs: healthTimeoutMs },
       );
       return { httpStatus: status as 200 | 503, body };
     },

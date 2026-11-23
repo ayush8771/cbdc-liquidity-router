@@ -211,7 +211,7 @@ History, comparisons, explanations and the dashboard show every user's records t
 
 - **Timeout:** `INFERENCE_TIMEOUT_MS` (default 15000) bounds each whole call, response body included. A timeout is `503 INFERENCE_UNAVAILABLE`.
 - **No retries.** POST is never retried (§5). §5 *permits* one GET retry; it is not used, and nothing requires it.
-- **Health probe:** it uses the same `INFERENCE_TIMEOUT_MS`. See §8 for why that matters.
+- **Health probe:** it uses its own 3 s timeout (`INFERENCE_HEALTH_TIMEOUT_MS` in `client.ts`, contract §5), never longer than `INFERENCE_TIMEOUT_MS`. A health timeout reports inference as `unavailable` (§4.4). It isn't configurable by environment variable.
 
 ### 4.3 Error mapping
 
@@ -486,7 +486,6 @@ Verified against the code at `5414275`. Project-wide items are tracked in [`docs
 - **PostgreSQL at the committed HEAD is not independently verified.** A pre-commit run reported 1543 passed; see §7.3 for what that does and doesn't establish.
 - **Not run against the real inference service.** Every inference path is tested with mock handlers (§4.7).
 - **Mock mode is not usable for inference-backed routes.** Without an injected mock handler they return 503; the other routes and health are unaffected (§4.6). A fixture-backed mock is not implemented; its selection rule (Q20) is deferred, which does not block integration against a running inference service.
-- **Inference health timeout.** The health probe uses the 15 s `INFERENCE_TIMEOUT_MS`, so `/api/v1/health` can take up to 15 s while inference hangs. Contract §5 asks the backend to use its own short timeout for this check (3 s was proposed); that is not implemented yet.
 - **No response-size limit** on inference bodies; only the timeout bounds them. A limit awaits expected sizes from Dev A.
 - **Legacy failed rows** (owner decision Q22, contract §3.4). A failed transaction saved before `20261104120000_failure_code_fee_cost_usd` has no `failureCode`, and `GET :id` returns it with `failure: null`. No code is invented. A newly created failed transaction must store its actual failure code: `saveFailed` refuses anything that isn't one of the §3.2 failure codes.
 - **Contract decisions affecting this service** (contract §10). Q11a (non-UUID `:id` → 404), Q14 (authentication before 405) and Q22 (legacy `failure: null`) were decided by the owner on 18 November 2026. Q20 (mock fixture selection) is deferred and does not block live inference integration.
