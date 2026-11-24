@@ -70,6 +70,65 @@ function guard(value: string | undefined): string | undefined {
 const skip = guard(url);
 const TABLES = ['"AuditLog"', '"Explanation"', '"Allocation"', '"RoutingDecision"', '"Comparison"', '"TransactionRequest"', '"User"'];
 
+/*
+ * Doubles that need all 17 significant digits, taken from a real engine response
+ * (GBR->PHL, 300000, replay 2024-06-14).
+ *
+ * The round-trip tests below depend on them. Prisma's Json serialisation rounds every
+ * double to 16 significant digits, which moves each of these by one unit in the last
+ * place, so a stored record stopped matching the body the API had returned (§3.4, §3.6,
+ * §3.5, and the §6.1 rule that the inference response is stored verbatim). The other
+ * fixtures use round decimals such as 150000.0 and 0.5, which survive that rounding
+ * unchanged, which is why they never caught it.
+ *
+ * Every total stays exact: the two amounts sum to 300000.0 and the two shares to 1.0.
+ */
+const PRECISE = {
+  /** Only here so the two shares still sum to exactly 1.0; it fits in 16 digits. */
+  share0: 0.5440011024475098,
+  share1: 0.45599889755249023,
+  amount0: 163200.33073425293,
+  amount1: 136799.66926574707,
+  costTerm: 1.8827359927571405,
+  latencyTerm: 3.4453462330645177,
+  reward: -1.5626102406404494,
+  baselineCostPct: 0.061200000000000004,
+};
+
+/** The values that carry the test: each is changed by a round trip through 16 digits. */
+const SEVENTEEN_DIGIT_KEYS = ["share1", "amount0", "amount1", "costTerm", "latencyTerm", "reward", "baselineCostPct"] as const;
+
+/** True when a 16-significant-digit round trip would move the value, as Prisma's did. */
+function needsSeventeenDigits(value: number): boolean {
+  return Number(value.toPrecision(16)) !== value;
+}
+
+/**
+ * A /v1/route-shaped body with PRECISE substituted into the allocations and metrics,
+ * keeping the totals consistent with them.
+ */
+function withPreciseNumbers(body: Record<string, unknown>): Record<string, unknown> {
+  const allocations = (body.allocations as Array<Record<string, unknown>>).map((allocation, index) => {
+    if (index > 1) return { ...allocation };
+    const share = index === 0 ? PRECISE.share0 : PRECISE.share1;
+    const amount = index === 0 ? PRECISE.amount0 : PRECISE.amount1;
+    return { ...allocation, share_requested: share, amount_requested_usd: amount, amount_executed_usd: amount };
+  });
+  return {
+    ...body,
+    allocations,
+    totals: { ...(body.totals as Record<string, unknown>), requested_usd: 300000.0, executed_usd: 300000.0 },
+    metrics: {
+      ...(body.metrics as Record<string, unknown>),
+      cost_term: PRECISE.costTerm,
+      latency_term: PRECISE.latencyTerm,
+      reward_env: PRECISE.reward,
+      reward_amount_based: PRECISE.reward,
+      baseline_cost_pct: PRECISE.baselineCostPct,
+    },
+  };
+}
+
 describe("GET /api/v1/transactions (PostgreSQL integration)", { skip }, () => {
   let prisma: PrismaClient;
   let repository: TransactionRepository;
@@ -315,6 +374,45 @@ describe("POST /api/v1/transactions (PostgreSQL integration)", { skip }, () => {
       assert.deepEqual(res.body, posted.body);
       assert.equal(res.body.failure, null);
       assert.deepEqual(await counts(), before); // no audit row on GET
+    });
+
+    // D1: the engine's numbers must survive the round trip through the database.
+    it("returns the engine's numbers unchanged when they need all 17 significant digits (§3.4, §6.1)", async () => {
+      for (const key of SEVENTEEN_DIGIT_KEYS) {
+        assert.ok(needsSeventeenDigits(PRECISE[key]), `${key} must need the 17th digit for this test to mean anything`);
+      }
+      // The totals the fixture states must still be reachable from the shares and amounts.
+      assert.equal(PRECISE.amount0 + PRECISE.amount1, 300000.0);
+      assert.equal(PRECISE.share0 + PRECISE.share1, 1.0);
+      const engine = withPreciseNumbers(engineRouteResponse());
+      const posted = await post({ status: 200, body: engine });
+      assert.equal(posted.status, 201, JSON.stringify(posted.body));
+
+      const got = await getById(posted.body.id);
+      assert.equal(got.status, 200);
+      // Every value, compared strictly: deepStrictEqual uses SameValue on numbers, so a
+      // one-ulp difference fails it. Not a text comparison — jsonb does not preserve key
+      // order, so the stored record serialises its keys in a different order than the 201
+      // body did, with the same values. That ordering is PostgreSQL's and is not a defect.
+      assert.deepEqual(got.body, posted.body);
+
+      // And the exact doubles, named, so a failure says which value moved.
+      const allocations = got.body.decision.allocations as Array<Record<string, number>>;
+      assert.equal(allocations[0]!.amountRequestedUsd, PRECISE.amount0);
+      assert.equal(allocations[0]!.amountExecutedUsd, PRECISE.amount0);
+      assert.equal(allocations[1]!.amountRequestedUsd, PRECISE.amount1);
+      assert.equal(allocations[1]!.shareRequested, PRECISE.share1);
+      assert.equal(got.body.decision.metrics.costTerm, PRECISE.costTerm);
+      assert.equal(got.body.decision.metrics.latencyTerm, PRECISE.latencyTerm);
+      assert.equal(got.body.decision.metrics.rewardAmountBased, PRECISE.reward);
+      assert.equal(got.body.decision.metrics.baselineCostPct, PRECISE.baselineCostPct);
+
+      // The stored jsonb itself, so this cannot pass by both sides being rounded alike.
+      const row = await prisma.routingDecision.findFirstOrThrow({ where: { transactionId: posted.body.id } });
+      const stored = row.engineResponse as { allocations: Array<Record<string, number>>; metrics: Record<string, number> };
+      assert.equal(stored.allocations[0]!.amount_executed_usd, PRECISE.amount0);
+      assert.equal(stored.metrics.reward_amount_based, PRECISE.reward);
+      assert.deepEqual(stored, engine);
     });
 
     it("returns a regulatory rejection as routed, as the POST returned it", async () => {
@@ -630,6 +728,36 @@ describe("POST /api/v1/transactions (PostgreSQL integration)", { skip }, () => {
         await server.close();
       }
     }
+
+    // D1: the first explanation comes from the engine and every later one is read back
+    // from the stored row, so the two must agree to the last digit (§3.5, §6.1).
+    it("returns the same explanation on the first and later requests when a value needs 17 digits", async () => {
+      const base = engineExplainResponse();
+      const feasibility = base.feasibility as Record<string, unknown>;
+      const facts = (feasibility.active_facts as Array<Record<string, unknown>>).map((fact) => ({
+        ...fact,
+        value: PRECISE.amount0,
+      }));
+      const engine = { ...base, feasibility: { ...feasibility, active_facts: facts } };
+
+      const posted = await post({ status: 200, body: engineRouteResponse() });
+      const first = await explain(posted.body.id, { answer: { status: 200, body: engine } });
+      assert.equal(first.status, 200, JSON.stringify(first.body));
+      assert.equal(first.inferenceCalls, 1);
+
+      // No answer at all: a second call must be served from the stored row.
+      const second = await explain(posted.body.id, { answer: undefined });
+      assert.equal(second.status, 200);
+      assert.equal(second.inferenceCalls, 0);
+      // The explain mapper rebuilds the body with its own key order, so here the text does
+      // match; the values are what matter either way.
+      assert.deepEqual(second.body, first.body);
+      assert.equal(second.body.feasibility.activeFacts[0].value, PRECISE.amount0);
+
+      const stored = await prisma.explanation.findFirstOrThrow();
+      const row = stored.engineResponse as { feasibility: { active_facts: Array<{ value: number }> } };
+      assert.equal(row.feasibility.active_facts[0]!.value, PRECISE.amount0);
+    });
 
     it("stores the first explanation with one audit row, and returns it on repeat without inference", async () => {
       const posted = await post({ status: 200, body: engineRouteResponse() });
@@ -1286,6 +1414,37 @@ describe("comparisons (PostgreSQL integration)", { skip }, () => {
     const upper = await call(`/api/v1/comparisons/${String(posted.body.id).toUpperCase()}`);
     assert.equal(upper.status, 200);
     assert.deepEqual(await counts(), before);
+  });
+
+  // D1: the same round trip for a comparison record (§3.6).
+  it("returns a stored comparison with the engine's 17-significant-digit numbers unchanged (§3.6, §6.1)", async () => {
+    const precise: Answers = {
+      "/v1/compare": (request) => ({
+        status: 200,
+        body: engineCompareResponse(
+          (request.body!.policies as EnginePolicy[]).map((policy) => withPreciseNumbers(engineResult(policy))),
+        ),
+      }),
+    };
+    const posted = await post(comparisonBody({ policies: ["waterfall", "cheapestFeasible"] }), { answers: precise });
+    assert.equal(posted.status, 201, JSON.stringify(posted.body));
+
+    const got = await call(`/api/v1/comparisons/${posted.body.id}`, { answers: {} });
+    assert.equal(got.status, 200);
+    // Strictly on values, not on text: jsonb does not preserve key order (see the
+    // transaction round-trip test above).
+    assert.deepEqual(got.body, posted.body);
+
+    for (const result of got.body.results as Array<Record<string, any>>) {
+      assert.equal(result.allocations[0].amountExecutedUsd, PRECISE.amount0);
+      assert.equal(result.allocations[1].shareRequested, PRECISE.share1);
+      assert.equal(result.metrics.rewardAmountBased, PRECISE.reward);
+    }
+
+    const row = await prisma.comparison.findUniqueOrThrow({ where: { id: posted.body.id } });
+    const stored = row.engineResponse as { results: Array<Record<string, any>> };
+    assert.equal(stored.results[0]!.allocations[0].amount_executed_usd, PRECISE.amount0);
+    assert.equal(stored.results[0]!.metrics.reward_amount_based, PRECISE.reward);
   });
 
   it("uses the default list for an omitted policies, by role, and stores the list sent", async () => {

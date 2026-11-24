@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Policy, Prisma, PrismaClient, TransactionStatus } from "@prisma/client";
 import { AUDIT_ACTIONS, AUDIT_ENTITY_TYPES, AUDIT_OUTCOMES, auditLogData } from "../audit/auditLog.js";
 import { prismaErrorCode } from "./errors.js";
+import { exactExplanationResponse } from "./exactEngineResponse.js";
 
 // Explanations for GET /api/v1/transactions/:id/explanation (API contract
 // §3.5, §6). The route depends on the ExplanationStore interface, so tests can
@@ -124,6 +125,12 @@ export function createPrismaExplanationStore(
             }),
             select: { id: true },
           }),
+          // Last in the same transaction: Prisma rounds every double in a Json field to
+          // 16 significant digits, so the engine's numbers are written again from text
+          // (src/db/exactEngineResponse.ts). Without it the first explanation response,
+          // taken from the engine, differs from every later one, which is read back
+          // from this row (§3.5, §6.1).
+          exactExplanationResponse(client, id, input.engineResponse),
         ]);
         return { stored: "created" };
       } catch (error) {

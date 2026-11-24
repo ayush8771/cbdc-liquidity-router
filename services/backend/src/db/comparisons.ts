@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Policy, Prisma, PrismaClient, StateMode } from "@prisma/client";
 import { AUDIT_ACTIONS, AUDIT_ENTITY_TYPES, AUDIT_OUTCOMES, auditLogData } from "../audit/auditLog.js";
+import { exactComparisonResponse } from "./exactEngineResponse.js";
 import type { ComparisonRequest } from "../validation/comparisonRequest.js";
 
 // Comparisons for POST /api/v1/comparisons and GET /api/v1/comparisons/:id
@@ -134,6 +135,11 @@ export function createPrismaComparisonStore(
           }),
           select: { id: true },
         }),
+        // Last in the same transaction: Prisma rounds every double in a Json field to
+        // 16 significant digits, so the engine's numbers are written again from text
+        // (src/db/exactEngineResponse.ts). Without it a stored comparison differs from
+        // the 201 body by about 1 ulp (§3.6, §6.1).
+        exactComparisonResponse(client, ids.id, input.engineResponse),
       ]);
       return saved;
     },

@@ -12,6 +12,10 @@ import { engineCompareResponse, engineResult, engineSkipped } from "../helpers/c
 interface Op {
   model: string;
   args: { data: Record<string, any>; select?: unknown };
+  /** For $executeRaw: the statement with each bound value replaced by "?". */
+  sql?: string;
+  /** For $executeRaw: the bound values, in order. */
+  params?: unknown[];
 }
 
 const NOW = new Date("2026-11-16T09:00:00.123Z");
@@ -33,6 +37,14 @@ function fakeClient({ transactionError, row }: { transactionError?: Error; row?:
       },
     },
     auditLog: { create: (args: Op["args"]): Op => ({ model: "auditLog", args }) },
+    // A tagged template, as Prisma's is. It records the statement and its bound values
+    // so a test can check which row is rewritten and with what (src/db/exactEngineResponse.ts).
+    $executeRaw: (strings: TemplateStringsArray, ...params: unknown[]): Op => ({
+      model: "$executeRaw",
+      args: { data: {} },
+      sql: strings.join("?"),
+      params,
+    }),
     user: {
       async findUnique(args: { where: { id: string } }) {
         reads.push({ model: "user", args });
@@ -74,7 +86,9 @@ describe("createPrismaComparisonStore().save", () => {
     const saved = await createPrismaComparisonStore(client, { newId: ids(), now: () => NOW }).save(input());
     assert.deepEqual(saved, { id: "00000000-0000-4000-8000-000000000001", createdAt: NOW });
     assert.equal(batches.length, 1);
-    assert.equal(batches[0]!.length, 2);
+    // Three operations now: the comparison, the audit row, and the statement that
+    // rewrites engineResponse without Prisma's 16-significant-digit rounding (§3.6, §6.1).
+    assert.equal(batches[0]!.length, 3);
     const [comparison, audit] = batches[0]!;
     assert.equal(comparison!.model, "comparison");
     assert.deepEqual(comparison!.args.data, {
@@ -106,12 +120,19 @@ describe("createPrismaComparisonStore().save", () => {
     });
     assert.equal(AUDIT_ACTIONS.comparisonCreate, "COMPARISON_CREATE");
     assert.equal(AUDIT_ENTITY_TYPES.comparison, "Comparison");
+
+    // The third operation rewrites this comparison's engineResponse from text.
+    const exact = batches[0]![2]!;
+    assert.equal(exact.model, "$executeRaw");
+    assert.equal(exact.sql, 'UPDATE "Comparison" SET "engineResponse" = ?::jsonb WHERE "id" = ?::uuid');
+    assert.deepEqual(exact.params, [JSON.stringify(ENGINE), "00000000-0000-4000-8000-000000000001"]);
+    assert.deepEqual(JSON.parse(exact.params![0] as string), ENGINE);
   });
 
-  it("writes no transaction, decision or allocation: only the two rows", async () => {
+  it("writes no transaction, decision or allocation: only the comparison, its audit row and the exact-json statement", async () => {
     const { client, batches } = fakeClient();
     await createPrismaComparisonStore(client, { newId: ids(), now: () => NOW }).save(input());
-    assert.deepEqual(batches[0]!.map((op) => op.model), ["comparison", "auditLog"]);
+    assert.deepEqual(batches[0]!.map((op) => op.model), ["comparison", "auditLog", "$executeRaw"]);
     assert.ok(!("transactionId" in batches[0]![0]!.args.data));
   });
 

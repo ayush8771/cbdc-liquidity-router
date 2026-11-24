@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FailureCode, Prisma, PrismaClient } from "@prisma/client";
 import { AUDIT_ACTIONS, AUDIT_ENTITY_TYPES, AUDIT_OUTCOMES, auditLogData, type AuditOutcome } from "../audit/auditLog.js";
+import { exactRoutingDecisionResponse } from "./exactEngineResponse.js";
 import type { AllocationColumns, DecisionColumns } from "../mappers/routeResponse.js";
 import type { TransactionRequest } from "../validation/transactionRequest.js";
 
@@ -132,12 +133,20 @@ export function createPrismaTransactionPersistence(
         throw new Error("RoutingDecision.policy differs from the requested policy; nothing was saved");
       }
       const ids = { id: newId(), createdAt: now() };
+      // Built before the decision's id is drawn, so the audit row keeps the id it had
+      // before this statement existed. Construction order doesn't affect execution
+      // order: $transaction runs the array in order.
+      const auditRow = audit(input, AUDIT_OUTCOMES.success, ids);
+      // The decision's id is drawn here, rather than left to the database default, so
+      // the statement that rewrites engineResponse can name the row (see below).
+      const decisionId = newId();
       const [saved] = await client.$transaction([
         client.transactionRequest.create({
           data: {
             ...transactionRequestData(input, ids, "routed", input.corridor),
             decision: {
               create: {
+                id: decisionId,
                 ...input.decision,
                 engineResponse: input.engineResponse as Prisma.InputJsonObject,
                 ...(input.allocations.length > 0 && { allocations: { createMany: { data: input.allocations } } }),
@@ -146,7 +155,12 @@ export function createPrismaTransactionPersistence(
           },
           select,
         }),
-        audit(input, AUDIT_OUTCOMES.success, ids),
+        auditRow,
+        // Last in the same transaction: Prisma rounds every double in a Json field to
+        // 16 significant digits, so the engine's numbers are written again from text
+        // (src/db/exactEngineResponse.ts). Without it a stored decision differs from
+        // the 201 body by about 1 ulp (§3.4, §6.1).
+        exactRoutingDecisionResponse(client, decisionId, input.engineResponse),
       ]);
       return saved;
     },

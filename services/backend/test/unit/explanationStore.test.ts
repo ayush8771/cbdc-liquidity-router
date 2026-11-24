@@ -11,6 +11,10 @@ import { engineExplainResponse } from "../helpers/transactions.js";
 interface Op {
   model: string;
   args: { data: Record<string, any>; select?: unknown };
+  /** For $executeRaw: the statement with each bound value replaced by "?". */
+  sql?: string;
+  /** For $executeRaw: the bound values, in order. */
+  params?: unknown[];
 }
 
 const DECISION = "11111111-1111-4111-8111-111111111111";
@@ -43,6 +47,14 @@ function fakeClient({ transactionError, existing }: { transactionError?: Error; 
       },
     },
     auditLog: { create: (args: Op["args"]): Op => ({ model: "auditLog", args }) },
+    // A tagged template, as Prisma's is. It records the statement and its bound values
+    // so a test can check which row is rewritten and with what (src/db/exactEngineResponse.ts).
+    $executeRaw: (strings: TemplateStringsArray, ...params: unknown[]): Op => ({
+      model: "$executeRaw",
+      args: { data: {} },
+      sql: strings.join("?"),
+      params,
+    }),
     transactionRequest: {
       async findUnique(args: unknown) {
         reads.push(args);
@@ -90,6 +102,16 @@ describe("createPrismaExplanationStore().save", () => {
       entityId: "00000000-0000-4000-8000-000000000001",
       outcome: "SUCCESS",
     });
+
+    // Three operations: the explanation, the audit row, and the statement that rewrites
+    // engineResponse without Prisma's 16-significant-digit rounding. Without it the first
+    // explanation response, taken from the engine, differs from every later one (§3.5, §6.1).
+    assert.equal(batches[0]!.length, 3);
+    const exact = batches[0]![2]!;
+    assert.equal(exact.model, "$executeRaw");
+    assert.equal(exact.sql, 'UPDATE "Explanation" SET "engineResponse" = ?::jsonb WHERE "id" = ?::uuid');
+    assert.deepEqual(exact.params, [JSON.stringify(engineExplainResponse()), "00000000-0000-4000-8000-000000000001"]);
+    assert.deepEqual(JSON.parse(exact.params![0] as string), engineExplainResponse());
   });
 
   it("returns the explanation stored first when the unique routingDecisionId is violated", async () => {

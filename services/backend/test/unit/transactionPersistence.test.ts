@@ -14,6 +14,10 @@ import { engineRegulatoryRejection, engineRouteResponse, requestBody } from "../
 interface Op {
   model: string;
   args: { data: Record<string, any>; select?: unknown };
+  /** For $executeRaw: the statement with each bound value replaced by "?". */
+  sql?: string;
+  /** For $executeRaw: the bound values, in order. */
+  params?: unknown[];
 }
 
 function fakeClient({ transactionError, user = true }: { transactionError?: Error; user?: boolean } = {}) {
@@ -22,6 +26,14 @@ function fakeClient({ transactionError, user = true }: { transactionError?: Erro
   const client = {
     transactionRequest: { create: (args: Op["args"]): Op => ({ model: "transactionRequest", args }) },
     auditLog: { create: (args: Op["args"]): Op => ({ model: "auditLog", args }) },
+    // A tagged template, as Prisma's is. It records the statement and its bound values
+    // so a test can check which row is rewritten and with what (src/db/exactEngineResponse.ts).
+    $executeRaw: (strings: TemplateStringsArray, ...params: unknown[]): Op => ({
+      model: "$executeRaw",
+      args: { data: {} },
+      sql: strings.join("?"),
+      params,
+    }),
     user: {
       async findUnique(args: unknown) {
         lookups.push(args);
@@ -74,7 +86,9 @@ describe("createPrismaTransactionPersistence: saveRouted", () => {
 
     assert.equal(fake.batches.length, 1);
     const [tx, audit] = fake.batches[0]!;
-    assert.equal(fake.batches[0]!.length, 2);
+    // Three operations now: the transaction with its decision, the audit row, and the
+    // statement that rewrites the decision's engineResponse without Prisma's rounding.
+    assert.equal(fake.batches[0]!.length, 3);
     assert.equal(tx!.model, "transactionRequest");
     const { decision, ...row } = tx!.args.data;
     assert.deepEqual(row, {
@@ -93,13 +107,25 @@ describe("createPrismaTransactionPersistence: saveRouted", () => {
       failureCode: null,
       clientReference: null,
     });
-    const { engineResponse, allocations, ...columns } = decision.create;
+    // The decision's id is drawn in the persistence layer, after the audit row's, so the
+    // statement below can name the row it rewrites.
+    const { id: decisionId, engineResponse, allocations, ...columns } = decision.create;
+    assert.equal(decisionId, "00000000-0000-4000-8000-000000000003");
     assert.deepEqual(columns, input.decision);
     assert.equal(columns.feeCostUsd, 5100.0); // metrics.fee_cost_usd
     // The same object the route received: stored as returned.
     assert.equal(engineResponse, input.engineResponse);
     assert.deepEqual(allocations, { createMany: { data: input.allocations } });
     assert.equal(allocations.createMany.data.length, 3);
+
+    // The third operation rewrites that decision's engineResponse from text, so Prisma's
+    // 16-significant-digit rounding of a Json field cannot reach the stored row (§3.4, §6.1).
+    const exact = fake.batches[0]![2]!;
+    assert.equal(exact.model, "$executeRaw");
+    assert.equal(exact.sql, 'UPDATE "RoutingDecision" SET "engineResponse" = ?::jsonb WHERE "id" = ?::uuid');
+    assert.deepEqual(exact.params, [JSON.stringify(input.engineResponse), decisionId]);
+    // The text must read back as the very same engine response.
+    assert.deepEqual(JSON.parse(exact.params![0] as string), input.engineResponse);
 
     assert.equal(audit!.model, "auditLog");
     assert.deepEqual(audit!.args.data, {
