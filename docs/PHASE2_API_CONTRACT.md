@@ -101,7 +101,7 @@ There are two APIs:
 
 - Content type: `application/json; charset=utf-8`. Money values are USD as JSON numbers (floats, as in Phase 1), never strings.
 - Dates are `YYYY-MM-DD`. Timestamps are ISO 8601 UTC.
-- Shares are fractions of the transaction amount in [0, 1].
+- Shares are fractions of the transaction amount in [0, 1]. Their **sum** is not exactly 1: policy actions are float32, so it can differ by about 2 × 10⁻⁷ relative, and `completion_ratio` with it (§2.8, "Float32 tolerance").
 - Every request may send an `X-Request-Id` header. If it is missing, the receiver generates one. It is echoed in the response header and in error bodies, and the backend forwards it to the inference service.
 - **Unknown fields.**
   - **Responses: closed in CI, tolerant at run time** (owner decision). Every OpenAPI response schema, in both APIs, is closed (`additionalProperties: false`), and the fixture and producer tests enforce that in CI, so an undocumented field is caught before it ships. At run time, a consumer ignores unknown response fields and never rejects a response because of one. Producers add only optional fields within a version, and must add them to the OpenAPI file first.
@@ -480,11 +480,21 @@ Field definitions:
   - `completed` uses the Stage 1F amount-based rule (`src/backtesting/evaluation.py`): max(amount − executed, 0) ≤ 1e-4 × amount (`RELATIVE_UNROUTED_TOLERANCE`).
   - `completion_ratio` = executed / amount.
   - `bridges_used` = the number of allocations with `share_requested` > 1e-6. This is Phase 1's `bridges_used()` with `MEANINGFUL_ALLOCATION_THRESHOLD`, both in `src/training/metrics.py`.
+- **Float32 tolerance (clarification; no behaviour changes).** A policy's action is a float32 vector in Phase 1 (`src/training/baselines.py`, and the PPO action), so each `share_requested` is a value rounded to float32 while the engine's own bookkeeping stays float64. The per-share rounding errors need not cancel, so **Σ `share_requested` may differ from 1 by up to about 2 × 10⁻⁷ relative**, in either direction. Consequently:
+  - `executed_usd` may exceed `amount_usd` by that relative amount, and `completion_ratio` may therefore be slightly **above 1** (values such as `1.000000011175871` have been observed under `liquidity_minus30`, `cheapest_venue_outage` and `combined_stress`);
+  - `unrouted_amount_based_usd` is `max(amount − executed, 0)`, so it is unaffected;
+  - `completed` is unaffected: its tolerance (`1e-4 × amount`) is far larger.
+
+  **Consumers must not assume `completion_ratio ≤ 1`, nor that the shares sum to exactly 1.** Compare against 1 with a tolerance of at least 1e-6 relative, and clamp only for display.
+
+  The formula is unchanged: `completion_ratio` is still exactly `executed / amount` (above), computed from the values the engine returns, and the engine clamps nothing. Phase 1 is frozen at `phase1-complete`, so the float32 action is deliberately left as it is; changing it would alter every routing output and invalidate the recorded Stage 1D and 1F results, and would need an `engine_version` bump and the owner's approval. This paragraph documents existing behaviour and is **not** a breaking change: no field, type, range or status code changes, and no stored record is affected.
 - **Allocation invariant (fail closed).** Before returning a result, the engine checks that:
   - `totals.requested_usd` equals the sum of the per-venue requested amounts;
   - no infeasible venue or padding slot received a non-zero weight in the policy's action.
 
   If either check fails, the task returns `500 INTERNAL_ERROR` with no result. A wrong allocation is never returned.
+
+  The invariant bounds neither Σ `share_requested` nor `completion_ratio` at 1: both sides of the equality are computed from the same action, so the float32 tolerance above passes it, as it should.
 - `metrics` (confirmed by Ayush): **always present, with every field non-null**, including on a regulatory rejection.
   - `fee_cost_usd` = Σ `allocations[].amount_executed_usd × fee_pct`. It uses executed amounts only (never requested or clipped amounts), and `fee_pct` exactly as the bridge network defines it: a fraction, so 0.015 means 1.5% (§2.3).
   - `baseline_cost_pct` is the value Phase 1's lagged RPW lookup returns, **unchanged**: no conversion is applied. Its unit is an open Phase 1 finding (F1, §10, `docs/TEAM_REVIEW_RESOLUTION.md` §14). The `0.0612` in the example is illustrative.
