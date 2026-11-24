@@ -45,6 +45,11 @@ const DESKTOP = "(min-width: 1024px)";
  * The comparison form's state: the transaction's values, the chosen policies in
  * the order chosen, the errors and the last result. A submission is sent once
  * and never retried, and a second submit is ignored while one is running.
+ *
+ * It is held in ComparePage, above the 1024px switch, so a window that is
+ * resized across the breakpoint doesn't wipe what the user typed, the policies
+ * they chose or the last result. This is the same placement as
+ * NewTransactionPage's useNewTransactionState.
  */
 function useCompareState() {
   const { api, user } = useAuth();
@@ -118,6 +123,8 @@ function useCompareState() {
   return { user, values, policies, errors, formError, status, result, focusSignal, handleChange, handlePolicies, handleSubmit, handleReset };
 }
 
+type CompareState = ReturnType<typeof useCompareState>;
+
 /** What the last submission produced, under the form. */
 function CompareResultPanel({ status, result }: { status: "idle" | "submitting" | "done"; result: CompareSubmitResult | null }) {
   if (status === "submitting") {
@@ -166,8 +173,7 @@ function CompareResultPanel({ status, result }: { status: "idle" | "submitting" 
 }
 
 /** The comparison form, in place of which the reference data's own loading and errors show until it is ready. */
-function NewComparison({ spec }: { spec: ScreenSpec }) {
-  const state = useCompareState();
+function NewComparison({ spec, state }: { spec: ScreenSpec; state: CompareState }) {
   const { reference, queries } = useLiveReference(true);
   const role = state.user?.role;
 
@@ -306,9 +312,9 @@ function SavedComparison({ spec, id }: { spec: ScreenSpec; id: string }) {
   );
 }
 
-function LiveCompare({ spec }: { spec: ScreenSpec }) {
+function LiveCompare({ spec, state }: { spec: ScreenSpec; state: CompareState }) {
   const { id } = useParams();
-  return id === undefined ? <NewComparison spec={spec} /> : <SavedComparison spec={spec} id={id} />;
+  return id === undefined ? <NewComparison spec={spec} state={state} /> : <SavedComparison spec={spec} id={id} />;
 }
 
 /**
@@ -316,12 +322,16 @@ function LiveCompare({ spec }: { spec: ScreenSpec }) {
  * src/api/dataMode.ts), it is the comparison form and the saved-comparison page
  * (`/compare/:id`). In preview mode (VITE_API_MODE=preview), and below 1024px,
  * it is the existing placeholder screen, unchanged, and makes no request.
+ *
+ * The form's state is kept here, so crossing the breakpoint only changes what is
+ * shown, as on NewTransactionPage.
  */
 export function ComparePage() {
   const isDesktop = useMediaQuery(DESKTOP);
   const live = useDataMode() === "live";
+  const state = useCompareState();
   const spec = SCREENS.find((s) => s.path === "/compare");
   if (!spec) throw new Error("The /compare screen spec is missing from SCREENS.");
 
-  return isDesktop && live ? <LiveCompare spec={spec} /> : <PendingScreen spec={spec} />;
+  return isDesktop && live ? <LiveCompare spec={spec} state={state} /> : <PendingScreen spec={spec} />;
 }
