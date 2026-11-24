@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cbdc-liquidity-router:event-envelope:v1",
+  "$comment": "DRAFT for AD-4 (docs/PHASE3_AD4_EVENT_ENVELOPE.md), not approved. Rules that need a registry, a clock or another event are in AD-4 section 6, including the v1 rule that a derivation has a single source (AD4-Q8).",
+  "title": "Phase 3 observation event envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "usage", "source", "provenance_class", "derived_from", "derivation", "timestamps", "source_sequence", "payload", "payload_sha256", "raw_sha256", "validation", "extraction", "review", "supersedes", "synthetic"],
+  "properties": {
+    "schema_version": {"enum": ["1.0"]},
+    "event_id": {"$ref": "#/$defs/uuid"},
+    "event_type": {"enum": ["fx_rate", "economic_indicator", "announcement", "bank_holiday"]},
+    "usage": {"const": "display_only"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "transport", "source_url", "gate3_decision_ref"],
+      "properties": {
+        "source_id": {"type": "string", "maxLength": 100, "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*$"},
+        "transport": {"enum": ["websocket", "poll", "scheduled", "manual", "synthetic"]},
+        "source_url": {"anyOf": [{"type": "null"}, {"type": "string", "maxLength": 2000, "pattern": "^https://[^\\s/?#@]+(/[^\\s?#]*)?$"}]},
+        "gate3_decision_ref": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/text200"}]}
+      }
+    },
+    "provenance_class": {"enum": ["real", "derived", "synthetic", "assumed"]},
+    "derived_from": {"type": "array", "uniqueItems": true, "maxItems": 50, "items": {"$ref": "#/$defs/uuid"}},
+    "derivation": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/text200"}]},
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_timestamp", "source_timestamp_basis", "retrieved_at", "emitted_at"],
+      "properties": {
+        "source_timestamp": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/timestamp"}]},
+        "source_timestamp_basis": {"enum": ["observed", "published", "none"]},
+        "retrieved_at": {"$ref": "#/$defs/timestamp"},
+        "emitted_at": {"$ref": "#/$defs/timestamp"}
+      },
+      "if": {"properties": {"source_timestamp": {"type": "null"}}},
+      "then": {"properties": {"source_timestamp_basis": {"const": "none"}}},
+      "else": {"properties": {"source_timestamp_basis": {"enum": ["observed", "published"]}}}
+    },
+    "source_sequence": {"anyOf": [{"type": "null"}, {"type": "string", "minLength": 1, "maxLength": 100}]},
+    "payload": {"type": "object"},
+    "payload_sha256": {"$ref": "#/$defs/sha256"},
+    "raw_sha256": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]},
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reasons"],
+      "properties": {
+        "status": {"enum": ["validated", "quarantined"]},
+        "reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["FUTURE_SOURCE_TIMESTAMP", "VALUE_OUT_OF_RANGE", "VALUE_JUMP", "REVIEW_REQUIRED"]}
+        }
+      },
+      "if": {"properties": {"status": {"const": "validated"}}},
+      "then": {"properties": {"reasons": {"maxItems": 0}}},
+      "else": {"properties": {"reasons": {"minItems": 1}}}
+    },
+    "extraction": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tool", "tool_version", "status", "confidence"],
+          "properties": {
+            "tool": {"$ref": "#/$defs/text200"},
+            "tool_version": {"$ref": "#/$defs/text200"},
+            "status": {"enum": ["complete", "partial"]},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      ]
+    },
+    "review": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reviewer_ref", "reviewed_at"],
+          "properties": {
+            "reviewer_ref": {"$ref": "#/$defs/text200"},
+            "reviewed_at": {"$ref": "#/$defs/timestamp"}
+          }
+        }
+      ]
+    },
+    "supersedes": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/uuid"}]},
+    "synthetic": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["generator_version", "seed", "case_id"],
+          "properties": {
+            "generator_version": {"$ref": "#/$defs/text200"},
+            "seed": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+            "case_id": {"$ref": "#/$defs/text200"}
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "Synthetic marking: class, transport, source_id prefix and block all agree, or none is synthetic.",
+      "if": {"properties": {"provenance_class": {"const": "synthetic"}}},
+      "then": {
+        "properties": {
+          "source": {"properties": {"transport": {"const": "synthetic"}, "source_id": {"pattern": "^synthetic\\."}, "source_url": {"type": "null"}, "gate3_decision_ref": {"type": "null"}}},
+          "synthetic": {"type": "object"}
+        }
+      },
+      "else": {
+        "properties": {
+          "source": {"properties": {"transport": {"not": {"const": "synthetic"}}, "source_id": {"not": {"pattern": "^synthetic([._-]|$)"}}}},
+          "synthetic": {"type": "null"}
+        }
+      }
+    },
+    {
+      "$comment": "real and derived need a Gate 3 decision.",
+      "if": {"properties": {"provenance_class": {"enum": ["real", "derived"]}}},
+      "then": {"properties": {"source": {"properties": {"gate3_decision_ref": {"type": "string"}}}}}
+    },
+    {
+      "$comment": "assumed is manual only.",
+      "if": {"properties": {"provenance_class": {"const": "assumed"}}},
+      "then": {"properties": {"source": {"properties": {"transport": {"const": "manual"}, "gate3_decision_ref": {"type": "null"}}}}}
+    },
+    {
+      "$comment": "A derivation names its inputs and method together. derived needs both; real has neither.",
+      "if": {"properties": {"derived_from": {"minItems": 1}}},
+      "then": {"properties": {"derivation": {"type": "string"}, "provenance_class": {"enum": ["derived", "synthetic", "assumed"]}}},
+      "else": {"properties": {"derivation": {"type": "null"}, "provenance_class": {"enum": ["real", "synthetic", "assumed"]}}}
+    },
+    {
+      "$comment": "Announcements and extracted items are validated only after human review.",
+      "if": {"anyOf": [{"properties": {"event_type": {"const": "announcement"}}}, {"properties": {"extraction": {"type": "object"}}}]},
+      "then": {
+        "if": {"properties": {"validation": {"properties": {"status": {"const": "validated"}}}}},
+        "then": {"properties": {"review": {"type": "object"}}}
+      }
+    },
+    {
+      "$comment": "A review approval is a new event that supersedes the reviewed one.",
+      "if": {"properties": {"review": {"type": "object"}}},
+      "then": {"properties": {"supersedes": {"type": "string"}, "validation": {"properties": {"status": {"const": "validated"}}}}}
+    },
+    {
+      "$comment": "Extracted items keep their URL (roadmap 4.A), except synthetic ones.",
+      "if": {"properties": {"extraction": {"type": "object"}, "provenance_class": {"not": {"const": "synthetic"}}}},
+      "then": {"properties": {"source": {"properties": {"source_url": {"type": "string"}}}}}
+    },
+    {"if": {"properties": {"event_type": {"const": "fx_rate"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/fx_rate"}}}},
+    {"if": {"properties": {"event_type": {"const": "economic_indicator"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/economic_indicator"}}}},
+    {"if": {"properties": {"event_type": {"const": "announcement"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/announcement"}}}},
+    {"if": {"properties": {"event_type": {"const": "bank_holiday"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/bank_holiday"}}}}
+  ],
+  "$defs": {
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"},
+    "text200": {"type": "string", "minLength": 1, "maxLength": 200},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "country": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "decimal": {"type": "string", "maxLength": 40, "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+    "positive_decimal": {"type": "string", "maxLength": 40, "pattern": "^(0\\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\\.[0-9]+)?)$"},
+    "fx_rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_currency", "quote_currency", "rate", "rate_type"],
+      "properties": {
+        "base_currency": {"$ref": "#/$defs/currency"},
+        "quote_currency": {"$ref": "#/$defs/currency"},
+        "rate": {"$ref": "#/$defs/positive_decimal", "description": "Units of quote_currency per one unit of base_currency."},
+        "rate_type": {"enum": ["bid", "ask", "mid", "reference"]}
+      }
+    },
+    "economic_indicator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["indicator_code", "country", "period", "value", "unit"],
+      "properties": {
+        "indicator_code": {"$ref": "#/$defs/text200"},
+        "country": {"$ref": "#/$defs/country"},
+        "period": {"$ref": "#/$defs/text200"},
+        "value": {"$ref": "#/$defs/decimal"},
+        "unit": {"$ref": "#/$defs/text200"}
+      }
+    },
+    "announcement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issuer", "title", "summary", "country"],
+      "properties": {
+        "issuer": {"$ref": "#/$defs/text200"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 500},
+        "summary": {"anyOf": [{"type": "null"}, {"type": "string", "minLength": 1, "maxLength": 4000}]},
+        "country": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/country"}]}
+      }
+    },
+    "bank_holiday": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["country", "date", "name"],
+      "properties": {
+        "country": {"$ref": "#/$defs/country"},
+        "date": {"$ref": "#/$defs/date"},
+        "name": {"$ref": "#/$defs/text200"}
+      }
+    }
+  }
+}

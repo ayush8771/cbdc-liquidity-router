@@ -9,8 +9,8 @@
 - the reviewers of AD-2, AD-5 and AD-12 (§3; scope D-23).
 
 The sequence in §4 is a plan, not a decision.
-**Milestone state:** 3.1 has **begun**. Wave 0 (the first decisions) is complete; none of AD-1 to AD-13 is written yet.
-**Scope source:** `docs/PHASE3_SCOPE.md` v1.1, which records the decisions (§2.2, §2.3) and the approved deliverable list (§7.3).
+**Milestone state:** 3.1 has **begun**. Wave 0 (the first decisions) is complete; AD-4 and AD-6 (v0.2) and the AD-1 component view (v0.1) are drafted, **not approved**; the other deliverables are not written yet.
+**Scope source:** `docs/PHASE3_SCOPE.md` v1.3, which records the decisions (§2.2, §2.3) and the approved deliverable list (§7.3).
 **Boundaries:** milestone 3.1 produces documents and schemas only. It writes no application code, changes no Compose file or database, installs no broker, leaves API contract v0.4 and the Phase 1 files unchanged, and uses no provider data before that provider has passed Gate 3 (D-17).
 
 ## 1. Roles
@@ -42,12 +42,12 @@ Leads are approved (D-21). The reviewers of AD-2, AD-5 and AD-12, which were adj
 
 | # | Deliverable | Lead | Reviewers | Needs first | Unblocks |
 |---|---|---|---|---|---|
-| AD-1 | Phase 3 architecture document | Dev D | Dev A, B, C | Component view: F-2, F-3. Final version: all other ADs. | Component view: every code milestone (3.2–3.7) and AD-10. Final version: the integrated architecture. |
+| AD-1 | Phase 3 architecture document (component view **drafted, not approved**: `docs/PHASE3_AD1_COMPONENT_VIEW.md`) | Dev D | Dev A, B, C | Component view: F-2, F-3. Final version: all other ADs. | Component view: every code milestone (3.2–3.7) and AD-10. Final version: the integrated architecture. |
 | AD-2 | Streaming requirements | Dev B | Dev A, Dev D | F-4, F-5 | AD-3; milestone 3.4 |
 | AD-3 | Streaming mechanism decision record | Dev D | Dev B (the PostgreSQL option) | AD-2, F-6 | AD-11; milestone 3.4 |
-| AD-4 | Event envelope and provenance schema | Dev A | Dev B, C, D | — | AD-5, AD-7, AD-9, AD-11, AD-12; milestone 3.3 |
+| AD-4 | Event envelope and provenance schema (**drafted, not approved**: `docs/PHASE3_AD4_EVENT_ENVELOPE.md`) | Dev A | Dev B, C, D | — | AD-5, AD-7, AD-9, AD-11, AD-12; milestone 3.3 |
 | AD-5 | Source adapter contract | Dev A | Dev B, Dev D | F-2, F-4, AD-4 | AD-12; milestone 3.3 |
-| AD-6 | Live-data-to-engine boundary | Dev A | Dev B, Dev C | — (records D-9 and D-15) | AD-9; milestone 3.5 |
+| AD-6 | Live-data-to-engine boundary (**drafted, not approved**: `docs/PHASE3_AD6_ENGINE_BOUNDARY.md`) | Dev A | Dev B, Dev C | — (records D-9 and D-15) | AD-9; milestone 3.5 |
 | AD-7 | Real-time channel contract | Dev B | Dev C, Dev D | F-3, AD-4, AD-10 | Milestone 3.5 |
 | AD-8 | Non-functional budgets | Dev A | Dev B, C, D | F-5, F-6 | AD-9; milestones 3.5, 3.7; exit criterion 9 |
 | AD-9 | Fallback and degradation spec | Dev C | Dev A, Dev B | AD-4, AD-6, AD-8 | Milestone 3.5 |
@@ -67,6 +67,8 @@ Leads are approved (D-21). The reviewers of AD-2, AD-5 and AD-12, which were adj
 | 3.6 | AD-1 component view, AD-12 |
 | 3.7 | AD-1 component view. Depends on 3.2; uses AD-8 and AD-11 |
 
+**D-24 slice** (scope §2.2.2): needs the AD-1 component view, AD-4 and AD-6 only. It is not a milestone and changes no row above.
+
 The final AD-1 is not a precondition of any code milestone. AD-10 also needs the component view.
 
 ## 4. Sequence
@@ -74,7 +76,7 @@ The final AD-1 is not a precondition of any code milestone. AD-10 also needs the
 | Wave | Work | Starts when |
 |---|---|---|
 | **0** | Decisions F-1 to F-6 | **Complete** (24 November 2026) |
-| **1** | AD-1 component view, AD-2, AD-4, AD-6, AD-8, AD-13 gate templates | Now. Their first decisions are made, and AD-4 and AD-6 need none. |
+| **1** | AD-1 component view, AD-2, AD-4, AD-6, AD-8, AD-13 gate templates | Now. Their first decisions are made, and AD-4 and AD-6 need none. **The AD-1 component view, AD-4 and AD-6 are drafted, awaiting review.** |
 | **2** | AD-3, AD-5, AD-9, AD-10 | Their wave-1 inputs are approved |
 | **3** | AD-7, AD-11, AD-12 | Their wave-2 inputs are approved |
 | **4** | AD-1 final, AD-13 test strategy | All other ADs are approved or deferred |
@@ -91,7 +93,7 @@ So milestone 3.2 can start after wave 2, and milestone 3.3 after wave 3.
 ## 5. Working rules
 
 - **One pull request per deliverable.** Each is reviewed by the listed reviewers and approved by the project owner, and the approval is recorded in `docs/PHASE3_SCOPE.md` §2.
-- **CODEOWNERS** currently covers `docs/PHASE2_*.md` only. It is recommended that Dev D extend it to `docs/PHASE3_*.md`, and to the ingestion component's directory once AD-1 sets it. That change is not part of this plan.
+- **CODEOWNERS:** no CODEOWNERS file exists in the repository. `PHASE2_ARCHITECTURE.md` §3.1 only specifies an intended `.github/CODEOWNERS`, with placeholder handles, so ownership is a team agreement and is not enforced. If Dev D creates the file, it is recommended that it also cover `docs/PHASE3_*.md`, and the ingestion component's directory once AD-1 sets it. That change is not part of this plan.
 - **AD-3 evidence:** measurement spikes are disposable and run outside the project's Compose stack; nothing is merged as the mechanism before AD-3 is approved.
 - **No provider data in evidence:** event-rate estimates for AD-2 come from published provider documentation or synthetic load, never from recorded provider samples (D-17).
 - **Provisional targets stay provisional:** F-5's numbers guide AD-2 and AD-9, but only AD-8 makes them final and defines how they are measured.
