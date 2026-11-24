@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cbdc-inference"
+version = "0.1.0"
+description = "Major Phase 2 inference service (Dev A): FastAPI over the Phase 1 CBDC liquidity-routing engine."
+requires-python = "==3.10.*"
+# Dependencies are pinned in requirements/*.in (inputs, Dev A) and the generated
+# platform locks requirements/*.txt (Dev D), not here (arch §7.2).
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["cbdc_inference*"]
+
+# pytest configuration for this service only. Phase 1's `python -m pytest tests/`
+# never collects these tests (they live outside the root tests/ folder, arch §4.1).
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["--import-mode=importlib", "-ra", "--strict-markers"]
+markers = [
+    "phase1: needs the Phase 1 runtime (src/, data/, torch) importable from CBDC_REPO_ROOT",
+]

@@ -1,0 +1,27 @@
+{
+  "description": "Mock viewer identity.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "headers": {
+      "Authorization": "Bearer mock-viewer",
+      "X-Request-Id": "fixture-200_me_viewer"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_me_viewer"
+    },
+    "body": {
+      "userId": "u-viewer-1",
+      "email": "viewer@example.test",
+      "role": "viewer",
+      "authMode": "dev",
+      "permissions": {
+        "experimentalPolicies": false
+      }
+    }
+  }
+}

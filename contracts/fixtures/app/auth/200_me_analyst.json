@@ -1,0 +1,27 @@
+{
+  "description": "Mock analyst identity.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-200_me_analyst"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_me_analyst"
+    },
+    "body": {
+      "userId": "u-analyst-1",
+      "email": "analyst@example.test",
+      "role": "analyst",
+      "authMode": "dev",
+      "permissions": {
+        "experimentalPolicies": true
+      }
+    }
+  }
+}

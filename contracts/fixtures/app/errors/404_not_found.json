@@ -1,0 +1,26 @@
+{
+  "description": "Unknown transaction id.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/transactions/00000000-0000-4000-8000-000000000000",
+    "headers": {
+      "Authorization": "Bearer mock-viewer",
+      "X-Request-Id": "fixture-404_not_found"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "X-Request-Id": "fixture-404_not_found"
+    },
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Unknown resource.",
+        "details": {},
+        "requestId": "fixture-404_not_found"
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# Backend image context (arch §7.3): host binaries and secrets never enter an image.
+node_modules
+dist
+coverage
+.env
+.env.*
+dev-tokens.json
+*.log
+.git
+Dockerfile
+.dockerignore

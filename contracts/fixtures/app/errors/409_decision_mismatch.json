@@ -1,0 +1,26 @@
+{
+  "description": "Engine artefacts changed since the decision was stored.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/transactions/56d0d708-62d6-59aa-aa8d-4df8d9b8d37f/explanation",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-409_decision_mismatch"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "X-Request-Id": "fixture-409_decision_mismatch"
+    },
+    "body": {
+      "error": {
+        "code": "DECISION_MISMATCH",
+        "message": "The recomputed decisionId differs from the stored one; engine artefacts have changed.",
+        "details": {},
+        "requestId": "fixture-409_decision_mismatch"
+      }
+    }
+  }
+}

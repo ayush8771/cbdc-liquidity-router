@@ -1,0 +1,39 @@
+{
+  "description": "ppo_projected requested with no approved checkpoint (§7).",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-409_policy_disabled"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      },
+      "policy": "ppo_projected"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "X-Request-Id": "fixture-409_policy_disabled"
+    },
+    "body": {
+      "error": {
+        "code": "POLICY_DISABLED",
+        "message": "ppo_projected is disabled: no approved checkpoint configured.",
+        "details": {
+          "field": "policy"
+        },
+        "request_id": "fixture-409_policy_disabled"
+      }
+    }
+  }
+}

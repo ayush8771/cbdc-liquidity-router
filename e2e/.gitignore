@@ -1,0 +1,6 @@
+# Playwright output and installs. Never commit token files or reports (a report can hold page content).
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/

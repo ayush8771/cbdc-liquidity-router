@@ -1,0 +1,77 @@
+{
+  "description": "Explanation of a regulatory rejection. Feasibility comes only from StaticMemoryProvider (D6).",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/explain",
+    "headers": {
+      "X-Request-Id": "fixture-200_regulatory_rejection"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 600000.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      },
+      "policy": "waterfall"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_regulatory_rejection"
+    },
+    "body": {
+      "decision_id": "sha256:19a8e086d7080c41d89566f4c4f79683783a78f49c6caac05510280cef9219be",
+      "policy": "waterfall",
+      "summary": "Not routed: $600,000 exceeds the assumed $500,000 single-transfer cap.",
+      "feasibility": {
+        "allowed": false,
+        "reason": "Transaction amount exceeds single transfer policy limit.",
+        "active_facts": [
+          {
+            "fact_id": "global_max_single_transfer_usd",
+            "rule_type": "max_single_transfer_usd",
+            "value": 500000.0,
+            "provenance_tag": "project_assumption",
+            "verified": false,
+            "source": "Frozen project constraint previously hard-coded in src/memory/cognee_layer.py (CogneeMemoryLayer.constraints). Not a real regulation."
+          }
+        ],
+        "provider": "StaticMemoryProvider"
+      },
+      "venue_explanations": [
+        {
+          "bridge_uid": "GBR->PHL#0",
+          "outcome": "unused",
+          "reason_code": "INFEASIBLE_REGULATORY",
+          "text": "Infeasible: the transaction fails the single-transfer cap."
+        },
+        {
+          "bridge_uid": "GBR->PHL#1",
+          "outcome": "unused",
+          "reason_code": "INFEASIBLE_REGULATORY",
+          "text": "Infeasible: the transaction fails the single-transfer cap."
+        },
+        {
+          "bridge_uid": "GBR->PHL#2",
+          "outcome": "unused",
+          "reason_code": "INFEASIBLE_REGULATORY",
+          "text": "Infeasible: the transaction fails the single-transfer cap."
+        }
+      ],
+      "policy_notes": [],
+      "semantic_context": null,
+      "limitations": [
+        "Bridge liquidity and congestion are synthetic simulation values.",
+        "Reward weights are uncalibrated placeholders.",
+        "The only regulatory fact is an assumed $500K cap, not a real regulation.",
+        "Each transaction is independent; routing does not deplete liquidity for later transactions."
+      ]
+    }
+  }
+}

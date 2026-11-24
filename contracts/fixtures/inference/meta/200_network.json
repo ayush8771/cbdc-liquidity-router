@@ -1,0 +1,107 @@
+{
+  "description": "Exact values from data/structured/bridge_network.csv and the knowledge base.",
+  "source": "phase1_derived",
+  "request": {
+    "method": "GET",
+    "path": "/v1/network",
+    "headers": {
+      "X-Request-Id": "fixture-200_network"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_network"
+    },
+    "body": {
+      "corridors": [
+        {
+          "corridor": "USA->IND",
+          "sender_country": "USA",
+          "receiver_country": "IND",
+          "venues": [
+            {
+              "slot": 0,
+              "bridge_uid": "USA->IND#0",
+              "fee_pct": 0.015,
+              "baseline_capacity_usd": 1000000.0,
+              "data_source_tag": "real_static_bridge"
+            },
+            {
+              "slot": 1,
+              "bridge_uid": "USA->IND#1",
+              "fee_pct": 0.0105,
+              "baseline_capacity_usd": 320000.0,
+              "data_source_tag": "synthetic_bridge_expansion"
+            },
+            {
+              "slot": 2,
+              "bridge_uid": "USA->IND#2",
+              "fee_pct": 0.0225,
+              "baseline_capacity_usd": 180000.0,
+              "data_source_tag": "synthetic_bridge_expansion"
+            }
+          ]
+        },
+        {
+          "corridor": "GBR->PHL",
+          "sender_country": "GBR",
+          "receiver_country": "PHL",
+          "venues": [
+            {
+              "slot": 0,
+              "bridge_uid": "GBR->PHL#0",
+              "fee_pct": 0.02,
+              "baseline_capacity_usd": 500000.0,
+              "data_source_tag": "real_static_bridge"
+            },
+            {
+              "slot": 1,
+              "bridge_uid": "GBR->PHL#1",
+              "fee_pct": 0.014,
+              "baseline_capacity_usd": 160000.0,
+              "data_source_tag": "synthetic_bridge_expansion"
+            },
+            {
+              "slot": 2,
+              "bridge_uid": "GBR->PHL#2",
+              "fee_pct": 0.03,
+              "baseline_capacity_usd": 90000.0,
+              "data_source_tag": "synthetic_bridge_expansion"
+            }
+          ]
+        },
+        {
+          "corridor": "ARE->MEX",
+          "sender_country": "ARE",
+          "receiver_country": "MEX",
+          "venues": [
+            {
+              "slot": 0,
+              "bridge_uid": "ARE->MEX#0",
+              "fee_pct": 0.012,
+              "baseline_capacity_usd": 750000.0,
+              "data_source_tag": "synthetic_no_real_anchor"
+            },
+            {
+              "slot": 1,
+              "bridge_uid": "ARE->MEX#1",
+              "fee_pct": 0.0084,
+              "baseline_capacity_usd": 240000.0,
+              "data_source_tag": "synthetic_bridge_expansion"
+            },
+            {
+              "slot": 2,
+              "bridge_uid": "ARE->MEX#2",
+              "fee_pct": 0.018,
+              "baseline_capacity_usd": 135000.0,
+              "data_source_tag": "synthetic_bridge_expansion"
+            }
+          ]
+        }
+      ],
+      "max_single_transfer_usd": 500000.0,
+      "max_single_transfer_provenance": "project_assumption"
+    }
+  }
+}

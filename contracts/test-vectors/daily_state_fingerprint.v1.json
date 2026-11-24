@@ -1,0 +1,61 @@
+{
+  "description": "Daily-state fingerprint golden vector (contract §2.11, scheme 1). A fixed DataFrame; its descriptor and fingerprint must be identical on Windows and Linux with pandas 2.3.3. Dev A's fingerprint function must reproduce them. Verified by infra/scripts/check_contracts.py.",
+  "scheme": 1,
+  "domain_separator": "cbdc-liquidity-router/daily-state-fingerprint/v1",
+  "vectors": [
+    {
+      "name": "fixed_frame_3_rows",
+      "frame": {
+        "columns": [
+          {
+            "name": "date",
+            "dtype": "datetime64[ns]",
+            "values": [
+              "2024-06-13",
+              "2024-06-14",
+              "2024-06-14"
+            ]
+          },
+          {
+            "name": "bridge_id",
+            "dtype": "object",
+            "values": [
+              "GBR->PHL#0",
+              "GBR->PHL#0",
+              "GBR->PHL#10"
+            ]
+          },
+          {
+            "name": "liquidity_usd",
+            "dtype": "float64",
+            "values": [
+              412345.6,
+              150000.0,
+              1e+21
+            ]
+          },
+          {
+            "name": "congestion",
+            "dtype": "float64",
+            "values": [
+              0.31,
+              0.22,
+              0.48
+            ]
+          }
+        ],
+        "index": {
+          "name": null,
+          "dtype": "int64",
+          "values": [
+            0,
+            1,
+            2
+          ]
+        }
+      },
+      "descriptor": "{\"columns\":[{\"dtype\":\"datetime64[ns]\",\"name\":\"date\"},{\"dtype\":\"object\",\"name\":\"bridge_id\"},{\"dtype\":\"float64\",\"name\":\"liquidity_usd\"},{\"dtype\":\"float64\",\"name\":\"congestion\"}],\"hashing\":{\"categorize\":false,\"function\":\"pandas.util.hash_pandas_object\",\"hash_key\":\"0123456789123456\",\"index\":true,\"row_hash_dtype\":\"<u8\"},\"index\":{\"dtypes\":[\"int64\"],\"names\":[null]},\"pandas_version\":\"2.3.3\",\"row_count\":3,\"scheme\":1}",
+      "sha256": "39a1f9675a27cf211814dc12ee15a88519fbaef7db09070c03b649889125c4bd"
+    }
+  ]
+}

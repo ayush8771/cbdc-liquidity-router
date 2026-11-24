@@ -1,0 +1,37 @@
+{
+  "description": "Amount 0: the backend returns INVALID_AMOUNT itself, before calling inference, and saves nothing (§3.2). The code is preserved for zero or negative amounts (owner decision).",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-422_invalid_amount"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 0.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_invalid_amount"
+    },
+    "body": {
+      "error": {
+        "code": "INVALID_AMOUNT",
+        "message": "The amount must be greater than 0 and finite.",
+        "details": {
+          "field": "amountUsd"
+        },
+        "requestId": "fixture-422_invalid_amount"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "description": "Amount must be > 0 and finite.",
+  "source": "illustrative",
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-422_invalid_amount"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": -5.0
+      },
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_invalid_amount"
+    },
+    "body": {
+      "error": {
+        "code": "INVALID_AMOUNT",
+        "message": "amount_usd must be greater than 0 and finite.",
+        "details": {
+          "field": "transaction.amount_usd"
+        },
+        "request_id": "fixture-422_invalid_amount"
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "description": "Explicit state with a risk field: unknown fields inside state are rejected, not ignored (§2.4).",
+  "source": "illustrative",
+  "request_valid": false,
+  "request": {
+    "method": "POST",
+    "path": "/v1/route",
+    "headers": {
+      "X-Request-Id": "fixture-422_validation_error_unknown_state_field"
+    },
+    "body": {
+      "transaction": {
+        "sender_country": "GBR",
+        "receiver_country": "PHL",
+        "amount_usd": 300000.0
+      },
+      "state": {
+        "mode": "explicit",
+        "reference_date": "2024-06-14",
+        "venues": [
+          {
+            "bridge_uid": "GBR->PHL#0",
+            "liquidity_usd": 210000.0,
+            "congestion": 0.35,
+            "history": null,
+            "risk": 0.2
+          },
+          {
+            "bridge_uid": "GBR->PHL#1",
+            "liquidity_usd": 60000.0,
+            "congestion": 0.2,
+            "history": null
+          },
+          {
+            "bridge_uid": "GBR->PHL#2",
+            "liquidity_usd": 90000.0,
+            "congestion": 0.5,
+            "history": null
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "X-Request-Id": "fixture-422_validation_error_unknown_state_field"
+    },
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Request failed validation.",
+        "details": {
+          "errors": [
+            {
+              "field": "state.venues[0].risk",
+              "message": "Unknown field; risk cannot be set in explicit mode."
+            }
+          ]
+        },
+        "request_id": "fixture-422_validation_error_unknown_state_field"
+      }
+    }
+  }
+}

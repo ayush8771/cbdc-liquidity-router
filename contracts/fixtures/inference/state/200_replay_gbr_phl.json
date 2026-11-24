@@ -1,0 +1,68 @@
+{
+  "description": "Bridge monitor: replay state for GBR->PHL.",
+  "source": "illustrative",
+  "request": {
+    "method": "GET",
+    "path": "/v1/state",
+    "query": {
+      "corridor": "GBR->PHL",
+      "mode": "historical_replay",
+      "date": "2024-06-14"
+    },
+    "headers": {
+      "X-Request-Id": "fixture-200_replay_gbr_phl"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "fixture-200_replay_gbr_phl"
+    },
+    "body": {
+      "corridor": "GBR->PHL",
+      "state": {
+        "mode": "historical_replay",
+        "date": "2024-06-14",
+        "split": "test",
+        "scenario_id": null
+      },
+      "corridor_risk": 0.0,
+      "baseline_cost_pct": 0.0612,
+      "venues": [
+        {
+          "slot": 0,
+          "bridge_uid": "GBR->PHL#0",
+          "fee_pct": 0.02,
+          "liquidity_usd": 412345.6,
+          "congestion": 0.31,
+          "data_source_tag": "real_static_bridge",
+          "values_provenance": "synthetic_simulation"
+        },
+        {
+          "slot": 1,
+          "bridge_uid": "GBR->PHL#1",
+          "fee_pct": 0.014,
+          "liquidity_usd": 150000.0,
+          "congestion": 0.22,
+          "data_source_tag": "synthetic_bridge_expansion",
+          "values_provenance": "synthetic_simulation"
+        },
+        {
+          "slot": 2,
+          "bridge_uid": "GBR->PHL#2",
+          "fee_pct": 0.03,
+          "liquidity_usd": 85000.0,
+          "congestion": 0.48,
+          "data_source_tag": "synthetic_bridge_expansion",
+          "values_provenance": "synthetic_simulation"
+        }
+      ],
+      "warnings": [
+        {
+          "code": "RISK_FALLBACK_USED",
+          "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+        }
+      ]
+    }
+  }
+}

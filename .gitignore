@@ -45,3 +45,7 @@ data/raw/.cache/
 
 # Cognee local storage (Stage 1E; databases, data, manifests)
 .cognee/
+
+# Local AI and code-analysis tool files
+.claude/
+graphify-out/

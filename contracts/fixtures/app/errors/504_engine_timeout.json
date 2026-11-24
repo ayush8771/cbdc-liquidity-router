@@ -1,0 +1,41 @@
+{
+  "description": "ENGINE_TIMEOUT passed through (§4 table: 504). Persisted as failed.",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "error",
+    "fixture": "inference/errors/504_engine_timeout.json"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-504_engine_timeout"
+    },
+    "body": {
+      "senderCountry": "GBR",
+      "receiverCountry": "PHL",
+      "amountUsd": 300000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      }
+    }
+  },
+  "response": {
+    "status": 504,
+    "headers": {
+      "X-Request-Id": "fixture-504_engine_timeout"
+    },
+    "body": {
+      "error": {
+        "code": "ENGINE_TIMEOUT",
+        "message": "Engine task timed out.",
+        "details": {
+          "transactionId": "c04b9f2b-7bea-5e19-8353-799bbeee0abc"
+        },
+        "requestId": "fixture-504_engine_timeout"
+      }
+    }
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "description": "ARE->MEX with SYNTHETIC_COST_ANCHOR.",
+  "source": "illustrative",
+  "derived_from": {
+    "kind": "transaction",
+    "fixture": "inference/route/200_waterfall_are_mex_synthetic_anchor.json"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/transactions",
+    "headers": {
+      "Authorization": "Bearer mock-analyst",
+      "X-Request-Id": "fixture-201_are_mex_synthetic_anchor"
+    },
+    "body": {
+      "senderCountry": "ARE",
+      "receiverCountry": "MEX",
+      "amountUsd": 100000.0,
+      "state": {
+        "mode": "historicalReplay",
+        "date": "2024-06-14"
+      },
+      "policy": "waterfall"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "X-Request-Id": "fixture-201_are_mex_synthetic_anchor"
+    },
+    "body": {
+      "id": "b4fed707-3fc7-5fbe-8bcb-018c7907bfe9",
+      "createdAt": "2026-11-02T10:00:00Z",
+      "createdBy": "u-analyst-1",
+      "status": "routed",
+      "transaction": {
+        "senderCountry": "ARE",
+        "receiverCountry": "MEX",
+        "amountUsd": 100000.0,
+        "corridor": "ARE->MEX",
+        "simulationDate": "2024-06-14",
+        "clientReference": null
+      },
+      "failure": null,
+      "decision": {
+        "decisionId": "sha256:f7b04ea1ba90f8fdc250202d903afd781d45387aadebe3ba6fe5c3281a8719c6",
+        "policy": "waterfall",
+        "policyStatus": "default",
+        "feasibility": {
+          "allowed": true,
+          "reason": null,
+          "decisiveFactIds": [],
+          "knowledgeVersion": "2026-11-02.1"
+        },
+        "allocations": [
+          {
+            "slot": 0,
+            "bridgeUid": "ARE->MEX#0",
+            "dataSourceTag": "synthetic_no_real_anchor",
+            "feePct": 0.012,
+            "liquidityUsd": 520000.0,
+            "congestion": 0.27,
+            "risk": 0.0,
+            "shareRequested": 0.0,
+            "amountRequestedUsd": 0.0,
+            "amountExecutedUsd": 0.0,
+            "amountClippedUsd": 0.0,
+            "shareBeforeProjection": null
+          },
+          {
+            "slot": 1,
+            "bridgeUid": "ARE->MEX#1",
+            "dataSourceTag": "synthetic_bridge_expansion",
+            "feePct": 0.0084,
+            "liquidityUsd": 230000.0,
+            "congestion": 0.18,
+            "risk": 0.0,
+            "shareRequested": 1.0,
+            "amountRequestedUsd": 100000.0,
+            "amountExecutedUsd": 100000.0,
+            "amountClippedUsd": 0.0,
+            "shareBeforeProjection": null
+          },
+          {
+            "slot": 2,
+            "bridgeUid": "ARE->MEX#2",
+            "dataSourceTag": "synthetic_bridge_expansion",
+            "feePct": 0.018,
+            "liquidityUsd": 120000.0,
+            "congestion": 0.41,
+            "risk": 0.0,
+            "shareRequested": 0.0,
+            "amountRequestedUsd": 0.0,
+            "amountExecutedUsd": 0.0,
+            "amountClippedUsd": 0.0,
+            "shareBeforeProjection": null
+          }
+        ],
+        "totals": {
+          "amountUsd": 100000.0,
+          "requestedUsd": 100000.0,
+          "executedUsd": 100000.0,
+          "unroutedEnvUsd": 0.0,
+          "unroutedAmountBasedUsd": 0.0,
+          "completionRatio": 1.0,
+          "completed": true,
+          "bridgesUsed": 1
+        },
+        "metrics": {
+          "feeCostUsd": 840.0,
+          "baselineCostPct": 0.0455,
+          "costTerm": 0.0371,
+          "latencyTerm": 0.18,
+          "riskTerm": 0.0,
+          "unroutedTermEnv": 0.0,
+          "unroutedTermAmountBased": 0.0,
+          "rewardEnv": -0.1429,
+          "rewardAmountBased": -0.1429,
+          "rewardWeights": {
+            "lambdaLatency": 1.0,
+            "lambdaRisk": 1.0,
+            "lambdaUnrouted": 1.0,
+            "status": "placeholder"
+          }
+        },
+        "diagnostics": {
+          "regime": "below_cheapest",
+          "combinedLiquidityUsd": 870000.0,
+          "projectionApplied": false
+        },
+        "provenance": {
+          "stateMode": "historicalReplay",
+          "stateDate": "2024-06-14",
+          "split": "test",
+          "scenarioId": null,
+          "valuesProvenance": "synthetic_simulation",
+          "engineVersion": "0.1.0",
+          "gitCommit": "bc9905e",
+          "knowledgeSha256": "b01faa5afc8a5b8940ecdfcc0b63f1fe5c590dce93668dafb04e10fff4650ed2",
+          "dailyStateSha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "stateFrameSha256": "d0f4b6e7f5acb42a43b6fb679cfe06df028ac2266d7d8d901a2832e5ceb170d0",
+          "checkpoint": null,
+          "device": "cpu",
+          "platform": "linux-x86_64"
+        },
+        "warnings": [
+          {
+            "code": "SYNTHETIC_COST_ANCHOR",
+            "message": "ARE->MEX has no real RPW anchor; the cost baseline uses the documented USA->MEX fallback."
+          },
+          {
+            "code": "RISK_FALLBACK_USED",
+            "message": "The corridor risk proxy is unavailable for this date, so the static placeholder 0.0 is used."
+          }
+        ]
+      }
+    }
+  }
+}
