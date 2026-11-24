@@ -15,7 +15,7 @@ name: phase2-docker
 # The `changes` job does the filtering per job instead; skipped jobs report as skipped.
 on:
   push:
-    branches: [main, feature/phase2-platform]
+    branches: [main, feature/phase2-platform, feature/phase3-platform]
   pull_request:
   # Pre-release validation. A manual run only works once this workflow is on the default branch.
   # "inference" (the default) runs the secret-file guard, the inference image build and the full inference
@@ -302,7 +302,7 @@ jobs:
 
   # Pull requests only build the image. The full inference suite (426 tests, about 26 minutes in the README's
   # one local run) is too long for every pull request, so it runs in this same job, on the image just built,
-  # for relevant pushes to main and feature/phase2-platform and for manual runs.
+  # for relevant pushes to main, feature/phase2-platform and feature/phase3-platform, and for manual runs.
   inference-docker:
     name: inference image
     needs: changes

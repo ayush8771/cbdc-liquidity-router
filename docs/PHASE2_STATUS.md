@@ -1,6 +1,7 @@
 # Major Phase 2 — Implementation Status
 
-**As of:** 24 November 2026. Evidence comes from `feature/phase2-platform` at `e5c4a25`, its GitHub Actions runs, and the acceptance and redeploy smoke runs recorded in §8.
+**As of:** 24 November 2026, after the merge into `main`. [PR #14](https://github.com/ayush8771/cbdc-liquidity-router/pull/14) merged `feature/phase2-platform` (head `350137f`) into `main` on 24 November 2026 at 14:00:11 UTC as merge commit `28da68f`, and all 11 check runs on that commit passed (§8.4). Evidence also comes from the branch at `e5c4a25` and the acceptance and redeploy smoke runs recorded in §8.
+**Sign-off:** the project owner recorded **Phase 2 integration sign-off** on 24 November 2026 (`docs/PHASE3_SCOPE.md` D-14). It is **not** production readiness and **not** formal OpenAPI approval: the OpenAPI files stay DRAFT and the open items below stay open.
 **Design and rules:** `docs/PHASE2_ARCHITECTURE.md`, and `docs/PHASE2_API_CONTRACT.md` (**approved v0.4, normative**). Decisions and open questions: contract §10 and `docs/TEAM_REVIEW_RESOLUTION.md` §16.
 **Scope:** this page tracks progress. It defines no rule. Where it and the contract differ, the contract wins.
 
@@ -27,13 +28,13 @@ No item here is "approved" unless the contract or `TEAM_REVIEW_RESOLUTION.md` re
 | M1 | Each module works against mocks | **Done.** Backend unit tests run against mock inference handlers; the web app has its own test suite; the inference service has its own pytest suite |
 | M2 | Backend calls the real inference service; Compose `full` runs on Linux and Windows | **Done.** The backend calls the real `/v1/*` over the private Compose network (`INFERENCE_URL=http://inference:8000`). The `phase2-stack` workflow runs the `full` profile on ubuntu-24.04; the same stack was run on Windows 11 with Docker Desktop (§8) |
 | M3 | End to end: sign in → submit → route → persist → read back → explain | **Done.** Verified in the browser and over HTTP at `76fe95e` (acceptance, §8.1) and again at `e5c4a25` after redeploy (§8.3) |
-| M4 | Phase 2 exit criteria met; docs updated | **In progress.** The stack is integrated, CI is green and the three acceptance defects are closed. Remaining: formal OpenAPI approval, the open items in §7, and this documentation pass |
+| M4 | Phase 2 exit criteria met; docs updated | **Integrated and merged; not marked done.** The stack is in `main` (PR #14, `28da68f`), CI is green there, the three acceptance defects are closed and integration sign-off is recorded (D-14). Remaining: formal OpenAPI approval and the other open items below |
 
 ## Integration (M2/M3)
 
-All four services are in this branch and run together from `infra/compose.yaml` (`--profile full`): `postgres`, `migrate` (one-shot), `inference`, `backend`, `web`. Only `web` is published, on host loopback; backend (4000), inference (8000) and PostgreSQL (5432) stay on the private network. The optional `seed` profile upserts the development `User` rows.
+All services are in `main` and run together from `infra/compose.yaml` (`--profile full`): `postgres`, `migrate` (one-shot), `inference`, `backend`, `web`. Only `web` is published, on host loopback; backend (4000), inference (8000) and PostgreSQL (5432) stay on the private network. The optional `seed` profile upserts the development `User` rows.
 
-- **Inference service** (`services/inference/`, 52 files) is merged into this branch and serves `/v1/*` to the backend. It was previously developed on `feature/ayush-inference-engine` and is no longer separate.
+- **Inference service** (`services/inference/`, 52 files) is merged into `main` and serves `/v1/*` to the backend. It was previously developed on `feature/ayush-inference-engine` and is no longer separate.
 - **Backend** (`services/backend/`, 108 files) calls the real inference service, persists to PostgreSQL through Prisma, and serves the 15 Application API pairs of contract §3.1.
 - **Web app** (`services/web/`, 195 files) is a React application served by nginx, which proxies `/api` to the backend. It exists and is integrated; the earlier note that no `services/web/` existed is obsolete.
 - **Docker** (`services/{backend,inference,web}/Dockerfile`) is delivered for every service, with a configurable bind host for containers (`BIND_HOST`), and `migrate` and `build`/`test` targets in the backend image.
@@ -72,7 +73,7 @@ Details: `services/backend/README.md`.
 
 ### Verified
 
-- **Unit and integration suites in CI**, on every push to this branch. All four workflows are green at `e5c4a25` (§8.4). This supersedes the 16 November local-only record: the previously outstanding "independent run of the committed revision against PostgreSQL" is now done by `phase2-integration` on each commit.
+- **Unit and integration suites in CI**, on pushes to the branches in the workflow triggers and on pull requests. All four workflows are green at `28da68f` (§8.4). This supersedes the 16 November local-only record: the previously outstanding "independent run of the committed revision against PostgreSQL" is now done by `phase2-integration` whenever a push or pull request matches its paths.
 - **Historical local record,** kept for provenance: at `5414275` (16 November 2026, Node 24.7.0, outside the declared `>=20.6.0 <21`), `npm test` reported 1469 passed with no database and 1543 passed with `cbdc_router_test` (74 integration tests), `tsc --noEmit` and the build exited 0, and `prisma validate` was valid. That evidence lived in a session log outside the repository and was not reproducible from it; CI now provides the reproducible record.
 
 ### Not started (Dev B)
@@ -104,14 +105,14 @@ Details: `services/backend/README.md`.
   - the root `.nvmrc`, `.gitattributes` and the Node lockfiles;
   - `e2e/` (API smoke, runtime security checks, Playwright browser suite);
   - the workflows `phase2-integration.yml` (contract + backend), `phase2-docker.yml` (images, compose configuration, tracked-secret guard) and `phase2-stack.yml` (the whole stack).
-- **Verified:** the contract checker and its tests run in `phase2-integration` on every push, green at `e5c4a25`. The 16 November local run under Python 3.11 (rather than the pinned 3.10.11) printed "86 fixtures, 2 OpenAPI documents: OK" with 139 checker tests passing.
+- **Verified:** the contract checker and its tests run in `phase2-integration` on pushes and pull requests that match its paths, green at `28da68f` (86 fixtures, 2 OpenAPI documents: OK; 193 infrastructure tests passed on each OS). The 16 November local run under Python 3.11 (rather than the pinned 3.10.11) printed "86 fixtures, 2 OpenAPI documents: OK" with 139 checker tests passing.
 - **Awaiting decision:** **formal OpenAPI approval** (Dev A, B and C; recorded by Ayush — `TEAM_REVIEW_RESOLUTION.md` §15). Until then the OpenAPI files stay DRAFT and `docs/PHASE2_API_CONTRACT.md` v0.4 is authoritative. This is the one remaining part of M0.
 - **Not started:** `infra/mocks/` (a fixture-backed mock server), which depends on Q20; and the remaining fixture coverage of `TEAM_REVIEW_RESOLUTION.md` §3, item 12.
 - **Known documentation gap:** `infra/env/web.env.example` is not used by Compose (the nginx image takes no `VITE_*` values at run time); it describes `VITE_API_MODE` as `live`/`mock` where the app accepts `live`/`preview`, and lists `VITE_PROXY_TARGET`, which `vite.config.ts` does not read. Recorded in `infra/README.md`.
 
 ## Inference service (Dev A, `services/inference/`)
 
-- **Merged into this branch** and running in the Compose stack, built from `services/inference/Dockerfile` with the repository at `/repo` (`CBDC_REPO_ROOT`). It reports `/v1/version`, including the `CBDC_GIT_COMMIT` build argument, which is the source of `gitCommit` in `GET /api/v1/meta`.
+- **Merged into `main`** and running in the Compose stack, built from `services/inference/Dockerfile` with the repository at `/repo` (`CBDC_REPO_ROOT`). It reports `/v1/version`, including the `CBDC_GIT_COMMIT` build argument, which is the source of `gitCommit` in `GET /api/v1/meta`.
 - It wraps the frozen Phase 1 engine (tag `phase1-complete`) without changing it; `src/`, `tests/`, `data/` and `outputs/` are untouched by Phase 2.
 - Its own pytest suite lives in `services/inference/tests/` and never runs as part of Phase 1's `python -m pytest tests/`.
 - **Awaiting decision:** **checkpoint approval for `ppo_projected`** (arch §11.1) — `approved_checkpoints.json` is empty, **no checkpoint is approved**, and no checkpoint is mounted in Compose, so `ppoProjected` is disabled (§7). Engine pool defaults (arch §11.6) are also undecided.
@@ -122,9 +123,11 @@ Details: `services/backend/README.md`.
 - **Implemented and integrated.** A React application built with Vite and served by nginx, which proxies `/api` to the backend. Screens: sign-in, dashboard, new transaction, history, transaction detail, comparison, network/bridge monitor.
 - Development authentication keeps the token in `sessionStorage` only (`cbdc.devToken`); it is never placed in the URL, a cookie or the rendered page (verified in the browser, §8.1).
 - The data screens start at 1024 px; below that breakpoint the comparison and new-transaction screens show a placeholder. Form state is held above that switch, so crossing the breakpoint no longer discards input (see D2 in §8.2).
-- Its own Vitest suite runs in the web image's `test` target. Last recorded: 1341 tests in 43 files passing, eslint clean, under Node 20.20.2 via `docker build --target test` at `ec64763`.
+- Its own Vitest suite runs in the web image's `test` target. Last recorded: 1341 tests in 43 files passing in the `web image` job at `28da68f`. An earlier run at `ec64763` gave the same counts, eslint clean, under Node 20.20.2 via `docker build --target test`.
 
-## Open items before Phase 2 sign-off
+## Open items (unchanged by the integration sign-off)
+
+Integration sign-off (D-14) was recorded with these items open. It closes none of them.
 
 1. **Formal OpenAPI approval** (Dev A, B and C; Ayush records it) — the last open part of M0.
 2. **Response-size limit** on inference responses (Dev B), pending expected sizes from Dev A.
@@ -135,7 +138,7 @@ Details: `services/backend/README.md`.
 
 ## Known limitations (unchanged)
 
-These are properties of the system as delivered, not defects to fix before merge.
+These are properties of the system as delivered and merged.
 
 - **`ppoProjected` is disabled.** No checkpoint is approved (`approved_checkpoints.json` is empty) and none is mounted. `GET /api/v1/meta` reports `ppoProjected` as `enabled: false`, `status: "experimental"`, `checkpoint: null`. An analyst requesting it gets `409 POLICY_DISABLED`; a viewer gets 403; in a comparison it is `skipped`, not an error. Enabling it needs the owner's checkpoint approval (arch §11.1).
 - **Phase 1's findings stand.** PPO is **not** shown to beat the liquidity-aware waterfall on reward, and the trained policy is **not** liquidity-aware on its own — the inference-time capacity projection is what makes it capacity-aware. `docs/STAGE1D_RESULTS.md` and `docs/STAGE1F_RESULTS.md` are authoritative.
@@ -144,7 +147,7 @@ These are properties of the system as delivered, not defects to fix before merge
 - **Development authentication only.** Bearer tokens from a git-ignored `dev-tokens.json` of SHA-256 hashes, intended for a container published on host loopback. Not a production authentication scheme.
 - **Stage 1E knowledge population is deferred.** Feasibility comes only from the deterministic knowledge base through `StaticMemoryProvider`; Cognee is limited to explanations and audit, and knowledge is never a PPO input.
 - **`INFERENCE_MODE=mock` returns 503** on every inference-backed route until Q20 is decided.
-- **Phase 3 is not started:** no live feeds, no streaming, no production inference.
+- **Phase 3 implementation is not started:** no live feeds, no streaming, no production inference. Only planning documents exist (`docs/PHASE3_SCOPE.md`).
 
 ## Evidence
 
@@ -176,7 +179,16 @@ Full record: `ACCEPTANCE_REPORT.md` in the evidence directory outside the reposi
 
 ### 8.4 CI
 
-All four workflows green at `e5c4a25`:
+All four workflows are green on the merge commit `28da68f` in `main` (push runs, 24 November 2026), and were green at `e5c4a25` before the merge. **11 of 11 check runs** on `28da68f` concluded `success`:
+
+| Workflow | Run | Check runs and results |
+|---|---|---|
+| `tests` | 45409280838 | `pytest`: 183 passed, 10 deselected (they need the git-ignored raw datasets) |
+| `phase2-integration` | 45409280504 | `contract conformance` on ubuntu-24.04 and windows-latest: 86 fixtures, 2 OpenAPI documents OK, 193 infrastructure tests passed on each; `backend PostgreSQL integration`: 1838 passed, 0 failed, 0 skipped |
+| `phase2-docker` | 45409280448 | `changed areas`, `tracked secret files`, `compose configuration`; `backend images`: 1761 passed; `web image`: 43 files, 1341 tests passed; `inference image`: 426 passed, 1 warning |
+| `phase2-stack` | 45409280659 | `full stack`: API smoke 21 passed, 0 failed; Playwright (Chromium) 7 passed; runtime security checks passed |
+
+What each workflow covers:
 
 | Workflow | What it covers |
 |---|---|

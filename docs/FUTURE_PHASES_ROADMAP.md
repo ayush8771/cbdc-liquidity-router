@@ -337,4 +337,4 @@ Do not treat it as a command to implement future features. For an implementation
 4. Confirm the relevant design decisions and acceptance criteria with the developer.
 5. Implement only the explicitly approved scope.
 
-**Major Phase 1 is complete as the Phase 2 baseline (tag `phase1-complete`): Stages 1D, 1E (infrastructure) and 1F are complete, and its open research items remain open. Major Phase 2 is in progress (16 November 2026); its status is in `docs/PHASE2_STATUS.md`.**
+**Major Phase 1 is complete as the Phase 2 baseline (tag `phase1-complete`): Stages 1D, 1E (infrastructure) and 1F are complete, and its open research items remain open. Major Phase 2 is integrated and merged into `main` (PR #14, merge commit `28da68f`, 24 November 2026) with all 11 CI check runs passing, and integration sign-off is recorded. That is not production readiness: the OpenAPI files remain DRAFT and the open items in `docs/PHASE2_STATUS.md` remain open. Major Phase 3 is in planning only (`docs/PHASE3_SCOPE.md`); no Phase 3 application code exists.**

@@ -379,7 +379,7 @@ Its initial capability is **"real-time monitoring with simulation-based routing.
 - **Routing:** routing keeps using the simulation-based state modes above.
 - **Live data stays display-only** until a separate engine change is approved. The engine accepts no date after 2025-09-30.
 
-The scope and decision record is [`docs/PHASE3_SCOPE.md`](docs/PHASE3_SCOPE.md) (v1.0), and the architecture work plan is [`docs/PHASE3_MILESTONE_3_1_PLAN.md`](docs/PHASE3_MILESTONE_3_1_PLAN.md).
+The scope and decision record is [`docs/PHASE3_SCOPE.md`](docs/PHASE3_SCOPE.md) (v1.1), and the architecture work plan is [`docs/PHASE3_MILESTONE_3_1_PLAN.md`](docs/PHASE3_MILESTONE_3_1_PLAN.md).
 
 ### Planning status
 
@@ -406,7 +406,7 @@ None of the 13 architecture deliverables (AD-1 to AD-13) is written yet.
 | 3.6 — Knowledge updates | Quarantine store and human review queue for announcements and holidays | Not started |
 | 3.7 — Production operations | Monitoring, alerting, degradation, deployment, backup, recovery, load testing | Not started |
 
-A code milestone may begin only after the 3.1 deliverables it depends on are approved.
+A code milestone may begin only after the AD-1 component view and the 3.1 deliverables it depends on are approved.
 
 ### Capability-specific gates
 
@@ -591,13 +591,13 @@ These are the commands from [`infra/README.md`](infra/README.md), "Run the test 
 
 | Workflow | Runs on | Check runs |
 |---|---|---|
-| [`tests`](.github/workflows/tests.yml) | Pushes to `main` and `feature/phase2-platform`; every pull request | `pytest`: the Phase 1 suite on Windows, Python 3.10, CPU torch and the locked dependencies |
+| [`tests`](.github/workflows/tests.yml) | Pushes to `main`, `feature/phase2-platform` and `feature/phase3-platform`; every pull request | `pytest`: the Phase 1 suite on Windows, Python 3.10, CPU torch and the locked dependencies |
 | [`phase2-integration`](.github/workflows/phase2-integration.yml) | Pushes and pull requests that touch `contracts/`, `infra/`, `e2e/`, `services/backend/` or `.nvmrc` | `contract conformance` (ubuntu-24.04 and windows-latest); `backend PostgreSQL integration` |
 | [`phase2-docker`](.github/workflows/phase2-docker.yml) | Every push to those branches and every pull request; manual | `changed areas`, `tracked secret files`, `compose configuration`, `backend images`, `web image`, `inference image` |
 | [`phase2-stack`](.github/workflows/phase2-stack.yml) | Pushes and pull requests that touch the stack's paths; manual | `full stack (compose, seed, API smoke, runtime security)`, which includes the Playwright browser tests |
 
 - **No GitHub secrets are used.** Passwords and tokens are generated per run.
-- **Other branches.** Push triggers name only `main` and `feature/phase2-platform`, so other branches are checked through pull requests.
+- **Other branches.** Push triggers name only `main`, `feature/phase2-platform` and `feature/phase3-platform`, so other branches are checked through pull requests.
 
 ## API documentation
 
@@ -695,7 +695,7 @@ The long-term plan is in [`docs/FUTURE_PHASES_ROADMAP.md`](docs/FUTURE_PHASES_RO
 | [`docs/PHASE2_API_CONTRACT.md`](docs/PHASE2_API_CONTRACT.md) | Normative API contract, v0.4 |
 | [`docs/PHASE2_STATUS.md`](docs/PHASE2_STATUS.md) | Phase 2 implementation status and evidence |
 | [`docs/TEAM_REVIEW_RESOLUTION.md`](docs/TEAM_REVIEW_RESOLUTION.md) | Phase 2 review decisions |
-| [`docs/PHASE3_SCOPE.md`](docs/PHASE3_SCOPE.md) | Phase 3 scope and decision record (v1.0) |
+| [`docs/PHASE3_SCOPE.md`](docs/PHASE3_SCOPE.md) | Phase 3 scope and decision record (v1.1) |
 | [`docs/PHASE3_MILESTONE_3_1_PLAN.md`](docs/PHASE3_MILESTONE_3_1_PLAN.md) | Phase 3 milestone 3.1 architecture work plan |
 | [`infra/README.md`](infra/README.md) | Compose setup, verification, test commands, troubleshooting |
 | [`contracts/README.md`](contracts/README.md) | OpenAPI drafts, fixtures, validation |

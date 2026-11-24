@@ -5,7 +5,9 @@
 **Current milestone:** Stage 1D finalized (1 November 2026); Stage 1E complete as an infrastructure milestone (2 November 2026, knowledge population deferred); Stage 1F complete (2 November 2026)\
 **Primary handover target:** Claude (web) + Claude Code working directly in the repository
 
-> **Status update (16 November 2026): Major Phase 2 in progress.** Phase 1 is frozen as the baseline (tag `phase1-complete`) and is not changed by Phase 2. Phase 2 design, contract and progress: `docs/PHASE2_ARCHITECTURE.md`, `docs/PHASE2_API_CONTRACT.md` and `docs/PHASE2_STATUS.md`. This handover still covers Phase 1 only.
+> **Status update (24 November 2026): Major Phase 2 integrated and merged.** PR #14 merged `feature/phase2-platform` into `main` as `28da68f`, with all 11 CI check runs passing, and the project owner recorded integration sign-off. That is not production readiness: the OpenAPI files remain DRAFT and the open items in `docs/PHASE2_STATUS.md` remain open. Major Phase 3 is in planning only: see `docs/PHASE3_SCOPE.md` and `docs/PHASE3_MILESTONE_3_1_PLAN.md`.
+>
+> **Status update (16 November 2026; Phase 2 status superseded by the entry above).** Phase 1 is frozen as the baseline (tag `phase1-complete`) and is not changed by Phase 2. Phase 2 design, contract and progress: `docs/PHASE2_ARCHITECTURE.md`, `docs/PHASE2_API_CONTRACT.md` and `docs/PHASE2_STATUS.md`. This handover still covers Phase 1 only.
 >
 > **Status update (2 November 2026): Stage 1F complete** — see [section 8C](#8c-stage-1f-comprehensive-backtesting--evaluation-2-november-2026) and `docs/STAGE1F_RESULTS.md`.
 >

@@ -9,8 +9,9 @@ JSON/CSV files. If this summary and a folder disagree, the folder wins.
 
 ## 1. Setup (common to all experiments)
 
-- **Network:** 3 corridors (USA→IND, GBR→PHL, ARE→MEX), with 3 venues each (9 in total). The 3 original venues are tagged
-  `real_static_bridge`; the 6 additional venues are tagged `synthetic_bridge_expansion`.
+- **Network:** 3 corridors (USA→IND, GBR→PHL, ARE→MEX), with 3 venues each (9 in total). Of the 3 original venues,
+  USA→IND#0 and GBR→PHL#0 are tagged `real_static_bridge` and ARE→MEX#0 is tagged `synthetic_no_real_anchor`; the 6
+  additional venues are tagged `synthetic_bridge_expansion` (`data/structured/bridge_network.csv`).
 - **Policy:** a PPO actor-critic. It encodes each feasible bridge's 30-day liquidity/congestion window with a shared Stage 1C
   1D CNN, and combines those with 31 raw features (415 dimensions in total). The action head is a masked Dirichlet over feasible slots. Each transaction is
   a one-step episode (`GAMMA = 0`). The deterministic action is the normalized Dirichlet concentration.

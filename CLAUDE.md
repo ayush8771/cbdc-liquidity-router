@@ -123,6 +123,11 @@ The three major phases are:
 2. Major Phase 2 — Full-Stack Web Orchestration.
 3. Major Phase 3 — Real-Time Streaming & Production.
 
+Current phase status (24 November 2026):
+
+- **Phase 2** is integrated and merged into `main` (PR #14, merge commit `28da68f`). All 11 CI check runs passed on that commit, and integration sign-off is recorded. This is not production readiness. The OpenAPI files remain DRAFT (`docs/PHASE2_API_CONTRACT.md` v0.4 is normative), `ppoProjected` stays disabled, and the open items in `docs/PHASE2_STATUS.md` remain open.
+- **Phase 3** is in planning only (`docs/PHASE3_SCOPE.md`, `docs/PHASE3_MILESTONE_3_1_PLAN.md`). No code milestone (3.2–3.7) may begin before the AD-1 component view and that milestone's own required deliverables are approved. No gate has passed.
+
 Important distinctions:
 
 - Stage 1E (Cognee) belongs to Major Phase 1.

@@ -8,15 +8,15 @@ Cross-platform tooling for Phase 2 integration (arch §4, §5.4, §7).
 | `scripts/requirements.txt` | Pinned tooling for the scripts. Install it into `infra/.venv`, never into the Phase 1 `venv/`. |
 | `scripts/compile_locks.py` | Compiles the hashed inference locks from `services/inference/requirements/service.in` with pinned `uv` 0.9.5 (`--check` for lock drift, `--verify-only` to check the committed locks, `--dry-run` to print the commands). Only the Linux CPU lock (`linux-x86_64-cpu.txt`) is defined; see the script's docstring. Tests: `scripts/tests/test_compile_locks.py`. |
 | `env/*.env.example` | Variable templates for inference, backend, web and PostgreSQL (contract §8). The examples hold placeholders only. For Compose, copy them to a directory **outside the checkout** (see "Compose setup"); `test_env_examples.py` fails if a real `env/*.env` exists here. Tests: `scripts/tests/test_env_examples.py`. |
-| `compose.yaml` | The local stack, profile `full`: postgres, a one-shot `migrate`, inference, backend and web. Only web is published, on `127.0.0.1:${WEB_HOST_PORT:-8080}`. An optional `seed` service has its own profile. Validated end to end once, on Windows with Docker Desktop (Docker 29.9.2, Compose 5.6.1, Buildx Bake 0.38.1); see "Compose setup" and "Windows build error". |
+| `compose.yaml` | The local stack, profile `full`: postgres, a one-shot `migrate`, inference, backend and web. Only web is published, on `127.0.0.1:${WEB_HOST_PORT:-8080}`. An optional `seed` service has its own profile. Validated end to end on Windows with Docker Desktop (Docker 29.9.2, Compose 5.6.1, Buildx Bake 0.38.1) and on Ubuntu 24.04 in CI (`phase2-stack`, green at the PR #14 merge commit `28da68f`); see "Compose setup" and "Windows build error". |
 | `postgres/`, `mocks/` | Not yet written (next steps). |
 
 ## Prerequisites
 
-- **Docker with Compose v2.** The repository states no minimum versions beyond Compose v2 with BuildKit (arch §4.2); on Windows it asks for Docker Desktop with the WSL 2 backend, and a checkout **outside OneDrive** (arch §7.4). The only combination validated so far is Docker Engine 29.9.2, Compose 5.6.1 and Buildx 0.38.1 (the Bake version named in the Windows build error below) on Windows 10 with Docker Desktop (WSL 2). Other versions and platforms are untested.
+- **Docker with Compose v2.** The repository states no minimum versions beyond Compose v2 with BuildKit (arch §4.2); on Windows it asks for Docker Desktop with the WSL 2 backend, and a checkout **outside OneDrive** (arch §7.4). The detailed local validation used Docker Engine 29.9.2, Compose 5.6.1 and Buildx 0.38.1 (the Bake version named in the Windows build error below) on Windows 10 with Docker Desktop (WSL 2). The later acceptance and redeploy runs used Windows 11 with Docker Desktop (`docs/PHASE2_STATUS.md` §8). CI runs the `full` profile on Ubuntu 24.04, building the images with plain `docker build` and starting them with `up --no-build`. Other versions and platforms are untested.
 - **Resources.** The validation machine gave Docker 4 CPUs and 5.7 GiB of memory. At rest the stack used about 0.7 GiB (inference) plus under 0.1 GiB for each other service. The images are large (inference about 2 GB, backend 0.7 GB, web 0.3 GB, plus PostgreSQL), so allow several GB of disk. The first build needs network access (PyPI and the PyTorch wheel index, `binaries.prisma.sh` for Prisma engines, `apt`) and takes minutes; the inference image took about 9 minutes cold.
 - **On the host:** `git`, and Node 20 (`.nvmrc`) only for generating token hashes (see "2. Development tokens"). Python 3.10 is needed only for the infrastructure tests.
-- **Shells.** Commands are from the repository root. PowerShell is shown where Windows differs; bash is for Linux/macOS (not validated). The differences are the way variables are set (`$env:NAME = "value"` versus `export NAME=value`), `$HOME\cbdc-env` versus `~/cbdc-env`, and `\` versus `/` in the `infra/.venv` paths.
+- **Shells.** Commands are from the repository root. PowerShell is shown where Windows differs; bash is for Linux/macOS (these exact commands are not validated; CI exercises the stack on Ubuntu 24.04 through its own steps). The differences are the way variables are set (`$env:NAME = "value"` versus `export NAME=value`), `$HOME\cbdc-env` versus `~/cbdc-env`, and `\` versus `/` in the `infra/.venv` paths.
 
 ## Compose setup
 
@@ -116,7 +116,7 @@ Expected: `postgres`, `inference`, `backend` and `web` are `running (healthy)`, 
 | `POST /api/v1/transactions`, body from `transactions/201_ppo_projected_analyst.json`, **viewer** token | 403 `FORBIDDEN_POLICY` |
 | `GET /transactions/abc` (browser route) | 200 HTML (the single-page app) |
 
-These results were observed once, on the validation machine, with a small Python client. The fixtures' own `Authorization: Bearer mock-...` headers are for mock mode; use your own tokens. The PowerShell below was syntax-checked and its body conversion was compared with the fixtures, but it was not run against a live stack when written:
+These results were first observed on the validation machine with a small Python client. `e2e/api-smoke.py` now automates API smoke checks in CI (21 passed, 0 failed at `28da68f`). The fixtures' own `Authorization: Bearer mock-...` headers are for mock mode; use your own tokens. The PowerShell below was syntax-checked and its body conversion was compared with the fixtures, but it was not run against a live stack when written:
 ```powershell
 $env:CBDC_TOKEN = "<your analyst token>"     # never commit it; remove it afterwards
 $h = @{ Authorization = "Bearer $env:CBDC_TOKEN" }
@@ -139,12 +139,12 @@ curl -s -H "Authorization: Bearer $CBDC_TOKEN" http://127.0.0.1:8080/api/v1/auth
 
 Run from the repository root. `docker build` did not hit the Windows Buildx error below in these runs; only Compose builds did.
 
-| Suite | Command | Last validated result |
+| Suite | Command | Last validated result (CI at `28da68f`, 24 November 2026) |
 |---|---|---|
-| Infrastructure | one-time setup (Python 3.10): `py -3.10 -m venv infra/.venv` then `infra/.venv/Scripts/python -m pip install -r infra/scripts/requirements.txt` (Linux: `python3.10`, `infra/.venv/bin/python`). Run: `infra/.venv/Scripts/python -m pytest infra/scripts/tests -q -p no:cacheprovider`. Contract checker: `infra/.venv/Scripts/python infra/scripts/check_contracts.py` | 176 passed in 3.5 to 4.5 minutes across recent runs. `check_contracts.py` was run once: `86 fixtures, 2 OpenAPI documents: OK` |
-| Backend (typecheck and tests, in Docker) | `docker build --target test --build-context contracts=contracts -t cbdc-backend-test:local services/backend` | 1755 passed |
-| Inference (in the built image) | `docker build -f services/inference/Dockerfile --build-arg "CBDC_GIT_COMMIT=$(git rev-parse HEAD)" -t cbdc-inference:local .` then `docker run --rm cbdc-inference:local python -m pytest -q -p no:cacheprovider` | 426 passed in about 26 minutes |
-| Frontend (lint and tests, in Docker) | `docker build --no-cache --progress=plain --target test --build-context contracts=contracts --build-context docs=docs -t cbdc-web-test:local services/web` | 42 files, 1338 passed, in one full run |
+| Infrastructure | one-time setup (Python 3.10): `py -3.10 -m venv infra/.venv` then `infra/.venv/Scripts/python -m pip install -r infra/scripts/requirements.txt` (Linux: `python3.10`, `infra/.venv/bin/python`). Run: `infra/.venv/Scripts/python -m pytest infra/scripts/tests -q -p no:cacheprovider`. Contract checker: `infra/.venv/Scripts/python infra/scripts/check_contracts.py` | 193 passed on ubuntu-24.04 and on windows-latest. `check_contracts.py`: `86 fixtures, 2 OpenAPI documents: OK` on both |
+| Backend (typecheck and tests, in Docker) | `docker build --target test --build-context contracts=contracts -t cbdc-backend-test:local services/backend` | 1761 passed. With PostgreSQL (`phase2-integration`): 1838 passed |
+| Inference (in the built image) | `docker build -f services/inference/Dockerfile --build-arg "CBDC_GIT_COMMIT=$(git rev-parse HEAD)" -t cbdc-inference:local .` then `docker run --rm cbdc-inference:local python -m pytest -q -p no:cacheprovider` | 426 passed, 1 warning, in about 6 minutes in CI (about 26 minutes in an earlier local run) |
+| Frontend (lint and tests, in Docker) | `docker build --no-cache --progress=plain --target test --build-context contracts=contracts --build-context docs=docs -t cbdc-web-test:local services/web` | 43 files, 1341 passed |
 
 - The infrastructure tests fail while any `infra/env/*.env` exists in the checkout, so keep real env files outside it.
 - The backend `test` target runs the unit tests. The PostgreSQL-backed integration suites run only with `CBDC_TEST_DATABASE_URL` (backend README, section 7). They **empty every table**, so use a disposable database whose name ends in `_test`, never the Compose stack's database.
@@ -177,10 +177,10 @@ Run from the repository root. `docker build` did not hit the Windows Buildx erro
 
 ## Known limitations
 
-- Full-stack runtime validation was done once, on one Windows machine. There is no Linux or macOS run, no cold-cache timing on a second machine, and no browser-level check of the web UI.
+- Full-stack runtime validation covers Windows with Docker Desktop (`docs/PHASE2_STATUS.md` §8) and Ubuntu 24.04 in CI, which includes the Playwright (Chromium) browser tests. There is no macOS run, no Linux run of the Compose build itself (CI uses plain `docker build`), and no cold-cache timing on a second machine.
 - On the tested Windows setup, Compose builds need the Buildx workaround above.
 - Seeding is a manual, explicit step. The `mock` profile (Prism) from the architecture is not implemented.
-- The frontend Docker test stability (two workers) rests on one full run.
+- The frontend Docker tests (two workers) passed in the CI `web image` job at `28da68f`; their flake rate has not been measured.
 - PPO is disabled (`approved_checkpoints.json` is empty and no checkpoint is mounted).
 - Existing documentation differences, recorded here and not changed (each belongs to another owner's file):
   - `docs/PHASE2_ARCHITECTURE.md` names the Python base image `slim-bookworm`, but `services/inference/Dockerfile` uses `slim-bullseye` (its comment explains why: no 3.10.11 image exists for bookworm).

@@ -5,7 +5,7 @@ name: phase2-integration
 # folders land.
 on:
   push:
-    branches: [main, feature/phase2-platform]
+    branches: [main, feature/phase2-platform, feature/phase3-platform]
     paths:
       - "contracts/**"
       - "infra/**"
