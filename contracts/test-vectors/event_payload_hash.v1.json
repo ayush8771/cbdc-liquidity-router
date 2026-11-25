@@ -1,0 +1,172 @@
+{
+  "description": "Cross-language test vectors for AD-4 §2's payload_sha256: the SHA-256 of the RFC 8785 (JCS) form of {\"event_type\", \"payload\"}, lowercase hex. AD-1 component view v0.5 §3.7 requires that Python and TypeScript give the same verdict on each of these, so the canonical strings are exact and must be reproduced byte for byte on Windows and on Linux. Generated with rfc8785==0.1.4 and cross-checked against the ingestion component's restricted canonicalizer (P-9). payload_sha256 covers the payload and the event type ONLY: no timestamp, no event_id and no provenance field enters it, so two events of different ages or sources share a hash when their payloads are equal.",
+  "schema_version": "1.0",
+  "hash": {
+    "document": "{\"event_type\": <event_type>, \"payload\": <payload>}",
+    "canonicalization": "RFC 8785 (JCS)",
+    "digest": "SHA-256 of the canonical UTF-8 bytes, lowercase hex"
+  },
+  "generated_with": "rfc8785==0.1.4",
+  "vectors": [
+    {
+      "name": "ad4_section10_usd_inr",
+      "description": "AD-4 §10's example payload. Its SHA-256 is the value printed in that document, so an implementation that cannot reproduce this one does not implement AD-4 §2.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "USD",
+        "quote_currency": "INR",
+        "rate": "1.2345",
+        "rate_type": "mid"
+      },
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"USD\",\"quote_currency\":\"INR\",\"rate\":\"1.2345\",\"rate_type\":\"mid\"}}",
+      "sha256": "22fe8747cb6a035235c3ad84c45c5214d271941c784a5a2e4cc0c8c048798ca4"
+    },
+    {
+      "name": "reordered_keys_same_hash",
+      "description": "The same four members in the opposite order. RFC 8785 sorts object keys, so the canonical string and the hash are identical to ad4_section10_usd_inr: member order must never change a hash.",
+      "event_type": "fx_rate",
+      "payload": {
+        "rate_type": "mid",
+        "rate": "1.2345",
+        "quote_currency": "INR",
+        "base_currency": "USD"
+      },
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"USD\",\"quote_currency\":\"INR\",\"rate\":\"1.2345\",\"rate_type\":\"mid\"}}",
+      "sha256": "22fe8747cb6a035235c3ad84c45c5214d271941c784a5a2e4cc0c8c048798ca4",
+      "same_hash_as": "ad4_section10_usd_inr"
+    },
+    {
+      "name": "trailing_zero_rate_differs",
+      "description": "'1.23450' instead of '1.2345'. AD-4 §4 carries rates as decimal STRINGS, so a trailing zero is a different string and therefore a different hash. This is the intended behaviour: it is what keeps JSON number formatting out of the hash. A consumer must compare rates as decimals, never by hash.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "USD",
+        "quote_currency": "INR",
+        "rate": "1.23450",
+        "rate_type": "mid"
+      },
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"USD\",\"quote_currency\":\"INR\",\"rate\":\"1.23450\",\"rate_type\":\"mid\"}}",
+      "sha256": "1113869ce97c801ce710becf1249a0613edf941da3432cb1ff6f38a3df7a3abd",
+      "differs_from": "ad4_section10_usd_inr"
+    },
+    {
+      "name": "generated_aed_mxn_seed20261125_seq1",
+      "description": "The generator's first AED/MXN observation at seed 20261125. Deliberately unrealistic (AD-1 §3), and independent of the clock: the same seed and sequence always give this payload.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "AED",
+        "quote_currency": "MXN",
+        "rate": "1.103785",
+        "rate_type": "mid"
+      },
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"AED\",\"quote_currency\":\"MXN\",\"rate\":\"1.103785\",\"rate_type\":\"mid\"}}",
+      "sha256": "1b1450caa176876bf277d6eb8511024bd372b7ead94037243ee190fb4f311bf1",
+      "seed": 20261125,
+      "sequence": 1
+    },
+    {
+      "name": "generated_eur_usd_seed20261125_seq1",
+      "description": "The generator's first EUR/USD observation at seed 20261125. Deliberately unrealistic (AD-1 §3), and independent of the clock: the same seed and sequence always give this payload.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "EUR",
+        "quote_currency": "USD",
+        "rate": "2.196123",
+        "rate_type": "mid"
+      },
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"EUR\",\"quote_currency\":\"USD\",\"rate\":\"2.196123\",\"rate_type\":\"mid\"}}",
+      "sha256": "72f608406b8a63cf2fc167877a929cccc57daa097415f2751d3b09e9d56b590f",
+      "seed": 20261125,
+      "sequence": 1
+    },
+    {
+      "name": "generated_gbp_php_seed20261125_seq1",
+      "description": "The generator's first GBP/PHP observation at seed 20261125. Deliberately unrealistic (AD-1 §3), and independent of the clock: the same seed and sequence always give this payload.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "GBP",
+        "quote_currency": "PHP",
+        "rate": "3.295401",
+        "rate_type": "mid"
+      },
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"GBP\",\"quote_currency\":\"PHP\",\"rate\":\"3.295401\",\"rate_type\":\"mid\"}}",
+      "sha256": "08b3abac6b7dd9547de03ed518979a763a9742c7b9e3e8d76fb773770d39b1fb",
+      "seed": 20261125,
+      "sequence": 1
+    },
+    {
+      "name": "generated_usd_inr_seed20261125_seq1",
+      "description": "The generator's first USD/INR observation at seed 20261125. Deliberately unrealistic (AD-1 §3), and independent of the clock: the same seed and sequence always give this payload.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "USD",
+        "quote_currency": "INR",
+        "rate": "1.236601",
+        "rate_type": "mid"
+      },
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"USD\",\"quote_currency\":\"INR\",\"rate\":\"1.236601\",\"rate_type\":\"mid\"}}",
+      "sha256": "dfda13a2e5717f304d77ce40cc2b09851b997a6edbe6a521ef9a2ab75035ec6c",
+      "seed": 20261125,
+      "sequence": 1
+    }
+  ],
+  "must_not_match": [
+    {
+      "name": "altered_rate",
+      "description": "The rate's last digit changed. A hash check must reject it: this is the case that catches a value edited in transit between ingestion and Express.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "USD",
+        "quote_currency": "INR",
+        "rate": "1.2346",
+        "rate_type": "mid"
+      },
+      "must_not_equal_sha256_of": "ad4_section10_usd_inr",
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"USD\",\"quote_currency\":\"INR\",\"rate\":\"1.2346\",\"rate_type\":\"mid\"}}",
+      "sha256": "f9ed2e0f499012a6a4a075aa2f09e19498f69e982b8e3352164c6168161fcf15"
+    },
+    {
+      "name": "altered_rate_type",
+      "description": "rate_type changed from mid to bid, with the same rate.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "USD",
+        "quote_currency": "INR",
+        "rate": "1.2345",
+        "rate_type": "bid"
+      },
+      "must_not_equal_sha256_of": "ad4_section10_usd_inr",
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"USD\",\"quote_currency\":\"INR\",\"rate\":\"1.2345\",\"rate_type\":\"bid\"}}",
+      "sha256": "9a04b24c23fda35fd1ab830bca0ae58172f873433ebc0b7c284637d1fe9c30ea"
+    },
+    {
+      "name": "swapped_currencies",
+      "description": "base and quote exchanged. The rate would mean its reciprocal, so the hash must differ.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "INR",
+        "quote_currency": "USD",
+        "rate": "1.2345",
+        "rate_type": "mid"
+      },
+      "must_not_equal_sha256_of": "ad4_section10_usd_inr",
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"INR\",\"quote_currency\":\"USD\",\"rate\":\"1.2345\",\"rate_type\":\"mid\"}}",
+      "sha256": "9ddb85b9862fd1d21aec0ed080ceba20419078f6f9e6f497c54fe6da1b1c62a7"
+    },
+    {
+      "name": "extra_member",
+      "description": "An added payload member. The fx_rate payload is closed (AD-4 §4), so this is invalid as well as differently hashed.",
+      "event_type": "fx_rate",
+      "payload": {
+        "base_currency": "USD",
+        "quote_currency": "INR",
+        "rate": "1.2345",
+        "rate_type": "mid",
+        "source": "somewhere"
+      },
+      "must_not_equal_sha256_of": "ad4_section10_usd_inr",
+      "canonical": "{\"event_type\":\"fx_rate\",\"payload\":{\"base_currency\":\"USD\",\"quote_currency\":\"INR\",\"rate\":\"1.2345\",\"rate_type\":\"mid\",\"source\":\"somewhere\"}}",
+      "sha256": "807a4442e52fce1ad64b344fae66ddb2c2dbdaddeb903bc0c44c96ec2b8e154c"
+    }
+  ]
+}
