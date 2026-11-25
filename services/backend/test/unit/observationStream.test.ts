@@ -425,6 +425,28 @@ describe("SSE data size limit (§3.2: one data line of JSON <= 64 KiB)", () => {
     assert.ok(encodeFrame("update", "a".repeat(65532) + "😀"));
   });
 
+  it("counts only the JSON payload: SSE framing is excluded (65535, 65536 accepted; 65537 refused)", () => {
+    const framing = Buffer.byteLength("event: update\ndata: \n\n", "utf8"); // 22 bytes
+    for (const [json, ok] of [
+      ["a".repeat(65535), true],
+      ["a".repeat(65536), true],
+      ["é".repeat(32767) + "a", true], // 65535 bytes, multibyte
+      ["é".repeat(32768), true], // 65536 bytes, multibyte
+      ["a".repeat(65537), false],
+      ["é".repeat(32768) + "a", false], // 65537 bytes, multibyte
+    ] as const) {
+      const frame = encodeFrame("update", json);
+      const bytes = Buffer.byteLength(json, "utf8");
+      if (ok) {
+        assert.equal(frame, `event: update\ndata: ${json}\n\n`);
+        // The framed text exceeds 64 KiB at the limit and is still accepted.
+        assert.equal(Buffer.byteLength(frame!, "utf8"), bytes + framing);
+      } else {
+        assert.equal(frame, undefined, `${bytes} bytes refused`);
+      }
+    }
+  });
+
   it("an update of exactly 64 KiB is delivered when the snapshot is small", () => {
     // Snapshot first with no event, then the oversized-capable event arrives.
     const clock = new FakeClock();
@@ -449,12 +471,20 @@ describe("SSE data size limit (§3.2: one data line of JSON <= 64 KiB)", () => {
     const dataOf = (w: string) => w.replace(/^event: update\ndata: /, "").replace(/\n\n$/, "");
     const overhead = Buffer.byteLength(dataOf(sink.writes[1]!), "utf8");
     // Fill with 2-byte characters, then top up with one ASCII byte if odd.
+    // 65535 bytes: delivered.
+    const below = 65535 - overhead;
+    current = make(Math.floor(below / 2));
+    if (below % 2 === 1) current.synthetic.case_id += "x";
+    hub.publishUpdate("USD", "INR");
+    assert.equal(Buffer.byteLength(dataOf(sink.writes[2]!), "utf8"), 65535);
+    sink.writes.splice(2, 1); // keep the indices below unchanged
     const room = 65536 - overhead;
     current = make(Math.floor(room / 2));
     if (room % 2 === 1) current.synthetic.case_id += "x";
     hub.publishUpdate("USD", "INR");
     assert.equal(sink.writes.length, 3, "exact-limit update written");
     assert.equal(Buffer.byteLength(dataOf(sink.writes[2]!), "utf8"), 65536);
+    assert.equal(Buffer.byteLength(sink.writes[2]!, "utf8"), 65536 + 22, "framing not counted");
     assert.equal(sink.destroyed, false);
     current.synthetic.case_id += "x";
     hub.publishUpdate("USD", "INR");
