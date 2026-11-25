@@ -1,7 +1,7 @@
 # AD-1: Component View
 
-**Status:** **DRAFT v0.3**, 25 November 2026. **Not approved.** v0.2 reconciled the D-24 review feedback (§8); v0.3 answers Dev C's five blockers B1 to B5 (§3.3.1 to §3.3.4) and records the owner's D-24-only exception on inference outbound isolation (§5 item 1).
-**Review state:** Dev B **APPROVE** and Dev D **ADOPT + APPROVE** were given on **v0.2**; Dev C returned **REQUEST CHANGES** on v0.2. v0.3 changes only the client-side sections those blockers name, plus §5 item 1, §6 and §8. Nobody has confirmed v0.3, and the owner has not approved any version. No code may start before the owner approves it (D-22).
+**Status:** **DRAFT v0.4**, 25 November 2026. **Not approved.** v0.3 answered Dev C's blockers B1 to B5; v0.4 applies Dev C's and Dev B's follow-up on the same sections: immediate abort (B1), recoverable versus permanent states (B2), SSE wire parsing and `profile` validation (B3), the §5 wording for the additive session method (B4), Dev B's §7 reference correction, and a safeguard against a late 401 from a superseded session.
+**Review state:** Dev B **APPROVE** and Dev D **ADOPT + APPROVE** were given on **v0.3**; Dev C returned **REQUEST CHANGES**, pending review of v0.4. Every approval is version-specific: none covers v0.4, and the owner has approved no version. B5 is **resolved** and v0.4 does not touch it. No code may start before the owner approves it (D-22).
 **Lead:** Dev D. **Reviewers:** Dev A, Dev B, Dev C. **Approver:** project owner.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.3 §2.2.2, §7.3; D-22, D-24; F-2, F-3, F-6.
 **Extends:** `PHASE2_ARCHITECTURE.md` §2. **Relies on:** AD-4 (envelope) and AD-6 (boundary), both drafts.
@@ -148,27 +148,35 @@ With the feature off the route is not registered, so it is 404. An ingestion out
 
 #### 3.3.1 Hidden tabs and resumption [B1]
 
-The client closes the stream whenever the page is not being watched, so a background or restored tab holds no backend slot (§3.5) and no frozen timer is trusted.
+**The stream is aborted the moment the page stops being watched — no grace period** (v0.3's 30 s timer is withdrawn, per Dev C). A hidden, hiding or unmounted panel holds no connection and therefore no backend slot (§3.5), and no frozen timer is ever trusted. Returning to visible always starts a new connection, so every resumption begins with a fresh `snapshot`.
 
 | Event | Client does |
 |---|---|
-| `visibilitychange` to `hidden` | Starts a 30 s timer. Still hidden at its end: aborts the stream, releases the slot, cancels any pending reconnect, and shows "paused". Visible again before it fires: nothing happens and the stream continues. |
-| `visibilitychange` to `visible`, from paused or disconnected | Drops all displayed values, resets backoff and fault counters, and connects at once. Values appear only from the new `snapshot`. |
-| `pageshow` with `persisted: true` (restored from the back/forward cache) | Treated as a fresh start: any stream handle from before the restore is discarded unread, state is dropped, and it connects if visible. |
-| `pagehide`, `freeze`, `beforeunload` | Aborts the stream at once, without waiting for the 30 s timer. |
-| `offline` | Aborts the stream, cancels the pending reconnect, shows "offline"; no retry is attempted while offline. |
-| `online` | If paused by `offline`, or stopped by a network error, resets backoff and connects at once if visible. `online` never restarts a stream stopped by 401, 403, 404 or an unknown major version. |
+| `visibilitychange` to `hidden` | Aborts the stream at once, releases the slot, cancels any pending reconnect and any `Retry-After` wait, and shows "paused" |
+| Panel unmount, sign-out, or the flags turning the panel off (§3.3.4) | Aborts at once and removes every listener. Nothing reconnects. |
+| `pagehide`, `freeze`, `beforeunload` | Aborts at once, as for `hidden` |
+| `visibilitychange` to `visible` | Drops all displayed values, resets backoff and fault counters, and connects at once — **unless** the state is permanent (§3.3.2). Values reappear only from the new `snapshot`. |
+| `pageshow` with `persisted: true` (restored from the back/forward cache) | A fresh start: any stream handle from before the restore is discarded unread, displayed state is dropped, and it connects if visible |
+| `offline` | Aborts, cancels the pending reconnect, shows "offline"; nothing is attempted while offline |
+| `online` | Connects at once if visible and the state is recoverable (§3.3.2). It never restarts a permanent state. |
 
-- **While paused,** displayed ages keep advancing and reach stale and then unavailable at the §3.3.3 boundaries, so a paused tab never shows a frozen number as current. The panel states that it is paused.
-- The 30 s grace exists so that switching tabs briefly does not drop the stream; it is deliberately equal to `unavailable_after_ms`, so nothing survives paused long enough to be shown as fresh.
+- Abort is idempotent: a second abort on an already-aborted stream does nothing, and an abort while connecting discards whatever that attempt returns (§3.3.4).
+- **While paused,** nothing is received, so displayed ages keep advancing and pass stale and then unavailable at the §3.3.3 boundaries. A paused tab can never show a frozen number as current, and the panel says it is paused.
 - The client listens on `document` and `window` only, adds every listener when the panel mounts, and removes every one when it unmounts.
 
 #### 3.3.2 Stopped state and `Retry-After` [B2]
 
-**Stopped** means the client holds no stream and schedules no reconnect. It is entered on 401, 403, 404, any other 4xx that is not 429, an unknown major version, or three protocol faults (§3.3.3). It is left only by: the user pressing **Retry now**, a `visibilitychange` to visible, or `online` after a network error.
+Two kinds of "not streaming", and they behave differently. The panel always names which one it is in.
 
-- **Retry now** is shown in the panel in every stopped state. It resets the backoff, the fault counter and any `Retry-After` wait, then connects once. It is disabled while a connection attempt is in flight, and in preview mode it does not exist (§3.3.4). Pressing it after a 401 does not re-authenticate: the sign-in handling owns that.
-- A stopped state never retries on a timer, and the panel always names what happened.
+| | **Recoverable disconnect** | **Permanent stopped state** |
+|---|---|---|
+| Caused by | A network error, a dropped or normally ended stream, 5xx, 429, a single protocol fault, `offline`, or a `hidden`/unmount abort (§3.3.1) | 401 or any authentication failure; 403, 404 and any other 4xx that is not 429; an unknown major `protocol_version`; three protocol faults without 60 s of valid streaming between them (§3.3.3) |
+| Auto-reconnect | Yes: the backoff below, or the `Retry-After` wait, whichever is longer | **Never, under any trigger.** No timer, no backoff, no `online`, no `visibilitychange` to visible |
+| Left by | Its own timer, `visibilitychange` to visible, `online`, or **Retry now** | **Retry now** only — and a 401 additionally needs the sign-in handling to restore a session first |
+
+- **An authentication or protocol failure never auto-reconnects.** A 401 means the session is gone and retrying would hammer the endpoint with a dead token; an unknown version or repeated protocol faults mean the client cannot read what the server sends, so retrying cannot help. Both wait for a person.
+- A 401 also hands the session over: `openObservationStream` calls the same `expire` handler the API client uses (§3.3.4), subject to the superseded-session rule there.
+- **Retry now** is shown in every state of both kinds. It resets the backoff, the fault counter and any `Retry-After` wait, then connects once. It is disabled while an attempt is in flight, and it does not exist in preview mode (§3.3.4). After a 401 it does not re-authenticate; the sign-in handling owns that.
 
 **`Retry-After` is advisory and bounded.** It is read on 429 and 503 only, from the stream request's own response.
 
@@ -184,7 +192,17 @@ The client waits the larger of this value and its own backoff, never more than 3
 
 #### 3.3.3 Client-side message validation [B3]
 
-The client trusts nothing it is sent. A failure here is a **protocol fault**: the stream is aborted and reconnected, and three faults without 60 s of valid streaming between them stop it (§3.3.2).
+The client trusts nothing it is sent. A failure here is a **protocol fault**: the stream is aborted and reconnected, and three faults without 60 s of valid streaming between them become a permanent stopped state (§3.3.2).
+
+**Wire parsing.** `fetch` delivers bytes, not events, so the client runs its own SSE parser over the body:
+
+- **Across chunks.** A chunk boundary may fall anywhere, including inside a UTF-8 character, a field name or a JSON string. Bytes are decoded with a streaming UTF-8 decoder and appended to one buffer; a message is handled only when a blank line completes it. A partial event left in the buffer when the stream ends is discarded, never parsed.
+- **Line endings.** `\r\n`, `\n` and a lone `\r` all end a line; a blank line in any of those forms ends the event. A trailing `\r` is never left on a field value.
+- **Fields.** Only `event:` and `data:` are used. One optional space after the colon is stripped. Several `data:` lines in one event are joined with `\n` before parsing, and a field name the client does not use (`id:`, `retry:`, anything else) is ignored. No SSE `id:` is sent and `Last-Event-ID` is never set (§3.2), so no replay is implied.
+- **Comments.** A line beginning `:` is a comment: ignored, not a fault, and it does not end or start an event. It never counts as a message, so it does not advance `stream_seq` checks. It does count as traffic for the no-bytes timeout, which is what lets a proxy keep-alive comment hold a quiet connection open.
+- **64 KiB limits.** One event's accumulated `data` is capped at 64 KiB (§3.2) and the whole unterminated buffer at 64 KiB. Exceeding either is a protocol fault: the buffer is dropped and the stream aborted, so a server or proxy that never sends a blank line cannot grow memory without bound.
+
+**`profile` validation.** The `snapshot`'s `profile` is checked before any value is displayed. Each of `expected_interval_ms`, `stale_after_ms` and `clock_tolerance_ms` must be a finite integer above 0; `live_max_age_ms` and `unavailable_after_ms` may be null; and where set they must satisfy AD-4 §7's ordering, `live_max_age_ms` ≤ `stale_after_ms` ≤ `unavailable_after_ms`. A missing, malformed or out-of-order `profile` is a protocol fault, and the client **never** substitutes §3.2's defaults for one: displaying ages against guessed thresholds would mislabel freshness. A later connection's `profile` replaces the previous one wholesale.
 
 **Protocol faults:** a response whose `Content-Type` does not start with `text/event-stream` (an HTML error page or a proxy notice, even with status 200); a `data:` line that is not one JSON object; a missing or wrongly typed `protocol_version`, `type`, `stream_seq`, `server_time` or `source`; a `type` that does not match the SSE event name; a `stream_seq` that is not an integer, not 1 on the first message, or not exactly one more than the last; a first message that is not `snapshot`; a second `snapshot` on one connection; `values` that is not exactly the four §3.4 pairs in order; an `update` whose pair is outside the allowlist.
 
@@ -204,7 +222,16 @@ The client trusts nothing it is sent. A failure here is a **protocol fault**: th
 
 - `openObservationStream(signal: AbortSignal): Promise<Response>` — issues the §3.2 request with the session's bearer token in the `Authorization` header, and calls the same `expire` handler the API client uses when it answers 401.
 
-The token stays inside the auth module: it is not returned, and no component or hook reads it, so the existing rule that the token never reaches a URL, a log or another origin is unchanged. Rejected alternative: exposing `getToken` on the context, which would widen the token's surface to every component for no gain. The observation panel calls `useAuth()` for this one function and never constructs a client.
+The token stays inside the auth module: it is not returned, and no component or hook reads it, so the existing rule that the token never reaches a URL, a log or another origin is unchanged. Rejected alternative: exposing `getToken` on the context, which would widen the token's surface to every component for no gain. The observation panel calls `useAuth()` for this one function and never constructs a client, and `createApiClient` keeps its current signature and behaviour.
+
+**A late response from a superseded session is discarded.** A stream request can answer long after it stopped mattering — after sign-out, after a 401 that already ended the session, or after a new sign-in. `AuthProvider` therefore stamps each attempt with the session identity it was issued for, and:
+
+- a 401 whose attempt belongs to a superseded session is **dropped**: `expire` is not called, so a stale answer can never sign out the session that replaced it;
+- any other late response for a superseded attempt is also dropped unread, and its body is not parsed;
+- sign-out and sign-in abort every in-flight attempt, so the window stays small;
+- only one attempt may be in flight per panel, and an abort (§3.3.1) discards whatever that attempt returns.
+
+This keeps the behaviour the API client already relies on — a 401 ends only the session that made the request — without altering it.
 
 **Both flags are required [B5].** The panel mounts, listeners are added and the stream is opened only when **all** of these hold:
 
@@ -267,7 +294,7 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 |---|---|
 | **Contract validation** | Machine schemas for §3.1 and §3.2 in `contracts/events/`, referring to the AD-4 schema, with valid and invalid fixtures for every message, error and empty state. Both languages must give the same verdict on each event fixture. `check_contracts.py` does not cover `contracts/events/` today; a separate check is added **[P-8]**. |
 | **Cross-language hashes** | `contracts/test-vectors/event_payload_hash.v1.json`: input, exact RFC 8785 string and SHA-256, checked by Python (`rfc8785`) and TypeScript, including AD-4 §10's hash, reordered keys, trailing-zero rates, and altered payloads that must fail. The backend has no RFC 8785 or JSON Schema library. Proposed: a strict `fx_rate` validator and a canonicalizer limited to objects and ASCII strings, with no new dependency **[P-9]**. |
-| **Fault injection** | A controllable fake ingestion server, test-only and absent from runtime images. Events: duplicate, late, tie, ID conflict, future (at and beyond 1 s), malformed, wrong hash, quarantined, non-synthetic, extra pair. Responses: duplicate pair, oversized, empty, slow, 401, 429 with and without `Retry-After`, 5xx, redirect. Source: outage, recovery, restart, clock moved back. Streams: slow and abandoned clients, caps, sign-out, shutdown. Client: hidden tab at and past 30 s, `pageshow` restore, `offline` and `online`, manual retry from each stopped state, every `Retry-After` row of §3.3.2, a `text/html` 200 body, sequence gap and repeat, unknown type, unknown major version, a non-synthetic or quarantined value, and a `freshness` that disagrees. Threshold and timer tests use fake clocks. |
+| **Fault injection** | A controllable fake ingestion server, test-only and absent from runtime images. Events: duplicate, late, tie, ID conflict, future (at and beyond 1 s), malformed, wrong hash, quarantined, non-synthetic, extra pair. Responses: duplicate pair, oversized, empty, slow, 401, 429 with and without `Retry-After`, 5xx, redirect. Source: outage, recovery, restart, clock moved back. Streams: slow and abandoned clients, caps, sign-out, shutdown. Client: hide, unmount and sign-out aborts, `pageshow` restore, `offline` and `online`, manual retry from every recoverable and permanent state, each §3.3.2 trigger that must **not** auto-reconnect, every `Retry-After` row, a `text/html` 200 body, chunk splits mid-character, mid-JSON and mid-field, `\r\n`, `\n` and lone `\r`, comment lines, an event and a buffer past 64 KiB, a missing, malformed and out-of-order `profile`, sequence gap and repeat, unknown type, unknown major version, a non-synthetic or quarantined value, a `freshness` that disagrees, and a 401 arriving for a superseded session. Threshold and timer tests use fake clocks. |
 | **Focused CI** | A separate `phase3-observations` workflow, path-filtered to `services/ingestion/`, the overlay, `contracts/events/`, `contracts/test-vectors/`, `services/backend/` and `services/web/`. Unit, schema and hash checks on both languages; the AD-6 import rules; merged-Compose invariants; then one disposable overlay stack for Nginx, isolation, fault and T-1 tests, plus the existing API smoke test. No repository secrets. `phase2-*` workflows and their checks are not modified **[P-10]**. |
 
 **Not recorded:** which observations were displayed (AD-6 §6.1). This slice stores nothing; that work stays with AD-7 and AD-11.
@@ -293,7 +320,7 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
    - It is **not Gate 4 evidence and no gate has passed** (D-6, D-18). Nothing here is reachable outside the private development environment (D-16).
    - **T-5 is limited to the ingestion side** for this slice: ingestion has no route to inference, PostgreSQL or the internet, and holds no credential. The inference side of T-5 is not run and not claimed, so AD-6 must not be described as fully enforced.
 2. Express is on both networks, so it is the single point that keeps them apart.
-3. `fetch` streaming needs one addition to the web API client, whose current method buffers whole responses and accepts only `/api/v1` paths; the token rule must allow exactly one more path. The web Dockerfile needs one build argument, off by default.
+3. The existing web API client cannot carry the stream: it buffers whole responses and accepts only `/api/v1` paths. **`createApiClient` and `ApiClient` are not changed.** The stream is opened by the additive `openObservationStream` member on `AuthContextValue` (§3.3.4), which is the only new path allowed to send the token and the only place the `/api/rt/v1` path appears. The web Dockerfile needs one build argument, off by default.
 4. Browsers allow about 6 HTTP/1.1 connections per origin, so several dashboard tabs compete with ordinary requests. The cap of 3 per user limits this.
 
 ## 6. Acceptance
@@ -305,7 +332,7 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 5. AD-6 T-1 to T-4, T-6 to T-8 and T-10 pass; T-5 passes for ingestion (no route to inference, PostgreSQL or the internet; the host gateway per §3.6; no credentials). The inference side of T-5 waits on §5 item 1. T-9 does not apply, because no context is recorded.
 6. With the feature off, the Phase 1 and 2 suites, the fixtures and the existing Compose and stack-security checks pass unmodified.
 7. The §3.6 Nginx checks pass through the published port.
-8. §3.3.1 to §3.3.3 hold in the browser: a hidden tab releases its slot after 30 s and shows paused; a restore, `online` and **Retry now** each produce exactly one fresh `snapshot`; every §3.3.3 fault and per-value rejection gives the stated result; no value is ever labelled anything but Simulated, with or without "· stale".
+8. §3.3.1 to §3.3.3 hold in the browser: hiding or unmounting the panel aborts the stream and releases its slot at once, with no grace period; returning to visible, a `pageshow` restore, `online` and **Retry now** each produce exactly one fresh `snapshot`; no trigger reconnects a permanent stopped state; the parser survives chunk splits mid-character and mid-JSON, all three line endings, comment lines and both 64 KiB caps; a malformed or out-of-order `profile` is a fault and no default is substituted; a late 401 from a superseded session does not sign the current one out; no value is ever labelled anything but Simulated, with or without "· stale".
 9. §3.3.4: the panel is absent in preview mode and with the flag unset or any value but `on`, and in both cases no observation request is made; `createApiClient` and its tests are unmodified.
 
 ## 7. Confirmations and approval
@@ -313,9 +340,11 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 A tick means that person confirmed **the stated version**. The owner has approved no version.
 
 - [ ] **Dev A:** P-1 (§3.1); P-3 pairs; P-4 ordering and quarantine; P-9 hash vectors; generator (§3, AD-12). **No verdict recorded.**
-- [x] **Dev B — APPROVE, on v0.2:** P-1 polling; §3.2 errors and authentication; P-4; P-5 lifecycle hook, limits and backpressure; P-9 no-dependency validator. Its conditions stand, and §5 item 1 was referred to the owner. **v0.3's §3.3.4 adds a backend-visible item** (per-tab stream closure changes the slot pattern, §3.3.1), so Dev B should re-read §3.3.1 to §3.3.4; the approval is not extended to them here.
-- [ ] **Dev C — REQUEST CHANGES, on v0.2:** blockers B1 to B5. v0.3 answers them in §3.3.1 (hidden tabs, `visibilitychange`, `pageshow`, `online`), §3.3.2 (stopped-state manual retry, bounded `Retry-After`), §3.3.3 (strict validation, provenance labels, freshness boundaries, sequence and version checks, content type), §3.3.4 B4 (additive `AuthContext` member, `createApiClient` untouched) and §3.3.4 B5 (both flags; preview unchanged). **Still open:** Dev C has not confirmed that these answers close B1 to B5, and the earlier conditional limitations on §3.2, §3.3 and §5 items 3 and 4 remain in force until they do.
-- [x] **Dev D (lead) — ADOPT + APPROVE, on v0.2:** P-6 isolation; P-7 Nginx; P-8 schema location and check (also AD4-Q5); P-10 workflow. Its conditions stand. **Open for v0.3:** §3.7's added client faults and the §5 item 1 wording.
+- [x] **Dev B — APPROVE, on v0.3:** P-1 polling; §3.2 errors and authentication; P-4; P-5 lifecycle hook, limits and backpressure; P-9 no-dependency validator. Its conditions stand. **Raised with v0.3 and applied in v0.4:** the §7 reference correction below, and the superseded-session safeguard now in §3.3.4. The approval is not extended to v0.4's changes.
+- [ ] **Dev C — REQUEST CHANGES, pending review of v0.4:** B1 to B5 were raised on v0.2 and answered in v0.3; the follow-up on B1 to B4 is answered in v0.4 — §3.3.1 (abort at once, no grace, fresh snapshot on visible), §3.3.2 (recoverable versus permanent; no auto-reconnect after an authentication or protocol failure), §3.3.3 (wire parsing across chunks, CRLF, comments, both 64 KiB caps, `profile` validation) and §3.3.4 with §5 item 3 (the additive session method; `createApiClient` untouched). **B5 is resolved.** **Still open:** Dev C has not confirmed that B1 to B4 are now closed, and the conditional limitations on §3.2, §3.3 and §5 item 4 remain in force until they do.
+- [x] **Dev D (lead) — ADOPT + APPROVE, on v0.3:** P-6 isolation; P-7 Nginx; P-8 schema location and check (also AD4-Q5); P-10 workflow. Its conditions stand. **Open for v0.4:** §3.7's client faults, which v0.4 extends.
+
+**Dev B's §7 reference correction, as applied:** this section's Dev B entry said that "§5 item 1 was referred to the owner". The owner has since decided it (§5 item 1), so the sentence was stale and is removed; §5 item 1 is no longer an open Dev B condition, and §6 item 5 remains the place where T-5's ingestion-only limit is stated. **If this is not the reference Dev B meant, the correction is unapplied and Dev B should restate it** — it was relayed, not quoted, and nothing else in this document was changed on account of it.
 - [ ] **Project owner:** §5 item 1 is **decided** (the D-24-only exception) and awaits recording in `docs/PHASE3_SCOPE.md` §2. Approval of AD-1, AD-4 and AD-6 is **not given**.
 
 ## 8. Review reconciliation
@@ -332,10 +361,11 @@ The repository holds no text of the individual reviews. This table follows the f
 | Networks, isolation, overlay, Nginx | §3.6 |
 | Contracts, hash fixtures, faults, CI | §3.7 |
 | Inference outbound-network isolation | §5 item 1: exception granted for D-24 only; B-4 unresolved, for AD-10 |
-| B1 hidden tabs and resumption | §3.3.1 |
-| B2 stopped-state retry and `Retry-After` | §3.3.2 |
-| B3 message validation, labels, freshness, sequence, version, content type | §3.3.3 |
-| B4 additive `AuthContext` access | §3.3.4 |
-| B5 live mode and `VITE_OBSERVATIONS=on` | §3.3.4, §3.6 |
+| B1 hidden tabs and resumption | §3.3.1; v0.4: abort at once, no grace period |
+| B2 stopped-state retry and `Retry-After` | §3.3.2; v0.4: recoverable versus permanent, no auto-reconnect on authentication or protocol failure |
+| B3 message validation, labels, freshness, sequence, version, content type | §3.3.3; v0.4: wire parsing, comments, 64 KiB caps, `profile` validation |
+| B4 additive `AuthContext` access | §3.3.4 and §5 item 3; v0.4: superseded-session 401 safeguard |
+| B5 live mode and `VITE_OBSERVATIONS=on` | §3.3.4, §3.6 — **resolved**, untouched in v0.4 |
+| Dev B's §7 reference correction | §7, with the caveat recorded there |
 
 **AD-4 and AD-6:** as relayed by the project owner, Dev B, C and D approved AD-4, and Dev B and C approved AD-6, in the D-24 review. These are kept as **reviewer feedback**. They are not owner approvals and do not satisfy D-24's preconditions. The AD-4 and AD-6 checkboxes stay open. They do not settle the AD-6 B-4 gap (§5 item 1).
