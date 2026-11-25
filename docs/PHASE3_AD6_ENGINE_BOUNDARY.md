@@ -1,6 +1,6 @@
 # AD-6: Live-Data-to-Engine Boundary
 
-**Status:** **DRAFT v0.2**, 24 November 2026. Not reviewed, not approved. v0.2 applies the owner decisions in §9.1; they settle those points, but do not approve the document.
+**Status:** **DRAFT v0.2**, 24 November 2026. **Not approved by the project owner.** Dev B and C approved it in the D-24 review; this is recorded as reviewer feedback only (AD-1 §8). v0.2 applies the owner decisions in §9.1; they settle those points, but do not approve the document.
 **Lead:** Dev A. **Reviewers:** Dev B, Dev C. **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.2 §1.3, §4.2, §7.3; D-1, D-9, D-15; A-3 to A-8.
 **Feeds:** AD-9; milestone 3.5.

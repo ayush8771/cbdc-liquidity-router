@@ -9,7 +9,7 @@
 - the reviewers of AD-2, AD-5 and AD-12 (§3; scope D-23).
 
 The sequence in §4 is a plan, not a decision.
-**Milestone state:** 3.1 has **begun**. Wave 0 (the first decisions) is complete; AD-4 and AD-6 (v0.2) and the AD-1 component view (v0.1) are drafted, **not approved**; the other deliverables are not written yet.
+**Milestone state:** 3.1 has **begun**. Wave 0 (the first decisions) is complete; AD-4 and AD-6 (v0.2) and the AD-1 component view (v0.2) are drafted, **not approved**; the other deliverables are not written yet.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.3, which records the decisions (§2.2, §2.3) and the approved deliverable list (§7.3).
 **Boundaries:** milestone 3.1 produces documents and schemas only. It writes no application code, changes no Compose file or database, installs no broker, leaves API contract v0.4 and the Phase 1 files unchanged, and uses no provider data before that provider has passed Gate 3 (D-17).
 

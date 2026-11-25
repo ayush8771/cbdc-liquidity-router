@@ -1,6 +1,6 @@
 # AD-4: Event Envelope and Provenance Schema
 
-**Status:** **DRAFT v0.2**, 24 November 2026. Not reviewed, not approved. v0.2 applies the owner decisions in §11.1; they settle those points, but do not approve the document.
+**Status:** **DRAFT v0.2**, 24 November 2026. **Not approved by the project owner.** Dev B, C and D approved it in the D-24 review; this is recorded as reviewer feedback only (AD-1 §8). v0.2 applies the owner decisions in §11.1; they settle those points, but do not approve the document.
 **Lead:** Dev A. **Reviewers:** Dev B, Dev C, Dev D. **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies.
 **Schema:** `contracts/events/event-envelope.v1.schema.json` (JSON Schema 2020-12, DRAFT).
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.2 §3.A, §3.B, §6, §7.3.
