@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { freshnessOf, msUntilNextChange, valueFreshness } from "../../src/features/observations/freshness";
 import { observationsFlagFromEnv } from "../../src/features/observations/flags";
-import { MAX_SSE_BYTES, SseParser, utf8Bytes } from "../../src/features/observations/sseParser";
+import { MAX_BUFFER_BYTES, MAX_PAYLOAD_BYTES, SseParser, utf8Bytes } from "../../src/features/observations/sseParser";
 import type { ObservationValue, Profile } from "../../src/features/observations/types";
 import { daysInMonth, decodeMessage, isAd4Timestamp, parseProfile } from "../../src/features/observations/validate";
 import { freshValues, heartbeat, makeEvent, makeValue, PAIR_LIST, PROFILE, snapshot, update } from "./fixtures";
@@ -75,10 +75,10 @@ describe("SSE parser (AD-1 §3.3.3 wire parsing)", () => {
   });
   it("reports overflow for an oversized event or an unterminated line, and stays stopped", () => {
     const p = new SseParser();
-    expect(p.feed("data: " + "x".repeat(MAX_SSE_BYTES) + "\n\n").overflow).toBe(true);
+    expect(p.feed("data: " + "x".repeat(MAX_PAYLOAD_BYTES + 1) + "\n\n").overflow).toBe(true);
     expect(p.feed("data: 1\n\n")).toEqual({ events: [], overflow: true });
     const q = new SseParser();
-    expect(q.feed("x".repeat(MAX_SSE_BYTES + 1)).overflow).toBe(true);
+    expect(q.feed("x".repeat(MAX_BUFFER_BYTES + 1)).overflow).toBe(true);
   });
 });
 
@@ -217,9 +217,9 @@ describe("SSE parser: the 64 KiB limit counts UTF-8 bytes (F1)", () => {
     ["2-byte é", "é", 30000, 33000],
     ["4-byte emoji", "😀", 15000, 16400],
   ])("accepts %s under 64 KiB and rejects it over, though the string is shorter than 64 Ki units", (_n, ch, under, over) => {
-    expect(utf8Bytes(ch.repeat(under))).toBeLessThanOrEqual(MAX_SSE_BYTES);
-    expect(utf8Bytes(ch.repeat(over))).toBeGreaterThan(MAX_SSE_BYTES);
-    expect(ch.repeat(over).length).toBeLessThan(MAX_SSE_BYTES); // the old unit count would have let it through
+    expect(utf8Bytes(ch.repeat(under))).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
+    expect(utf8Bytes(ch.repeat(over))).toBeGreaterThan(MAX_PAYLOAD_BYTES);
+    expect(ch.repeat(over).length).toBeLessThan(MAX_PAYLOAD_BYTES); // the old unit count would have let it through
     const ok = new SseParser().feed(event(ch.repeat(under)));
     expect(ok.overflow).toBe(false);
     expect(ok.events[0]?.data).toBe(ch.repeat(under));
@@ -250,19 +250,116 @@ describe("SSE parser: the 64 KiB limit counts UTF-8 bytes (F1)", () => {
     expect(overflows(line + line + line + "\n")).toBe(true); // 72 KB, though no line is near the limit
   });
 
-  it("counts an unterminated non-ASCII line against the buffer limit", () => {
-    expect(overflows("data: " + "€".repeat(22000))).toBe(true);
-    expect(overflows("data: " + "€".repeat(20000))).toBe(false);
+  it("counts an unterminated non-ASCII line against the buffer limit, not the payload limit", () => {
+    expect(overflows("data: " + "€".repeat(22000))).toBe(false); // 66 KB open line: over the payload limit, under the buffer
+    expect(overflows("data: " + "€".repeat(43700))).toBe(true); // 131 KB: over the buffer
   });
 
   it("keeps the ASCII behaviour, and CR, LF and CRLF still end lines", () => {
     expect(overflows(event("x".repeat(65520)))).toBe(false);
-    expect(overflows(event("x".repeat(MAX_SSE_BYTES)))).toBe(true);
+    expect(overflows(event("x".repeat(MAX_PAYLOAD_BYTES)))).toBe(false);
+    expect(overflows(event("x".repeat(MAX_PAYLOAD_BYTES + 1)))).toBe(true);
     const events = new SseParser().feed("event: a\r\ndata: é€\r\n\r\nevent: b\rdata: 😀\r\r").events;
     expect(events).toEqual([
       { event: "a", data: "é€" },
       { event: "b", data: "😀" },
     ]);
+  });
+});
+
+describe("SSE parser: payload limit 65,536 bytes and buffer limit 131,072 bytes, independent (L-1)", () => {
+  const event = (value: string) => `data: ${value}\n\n`;
+  const feed = (text: string) => new SseParser().feed(text);
+
+  it("pins the limits", () => {
+    expect([MAX_PAYLOAD_BYTES, MAX_BUFFER_BYTES]).toEqual([65536, 131072]);
+  });
+
+  it("accepts exactly 65,536 payload bytes and rejects 65,537", () => {
+    const ok = feed(event("x".repeat(65536)));
+    expect(ok.overflow).toBe(false);
+    expect(ok.events[0]?.data).toHaveLength(65536);
+    expect(feed(event("x".repeat(65537))).overflow).toBe(true);
+  });
+
+  it.each([
+    ["2-byte é", "é", 32768],
+    ["3-byte €", "€", 21845], // 65,535 bytes, one byte short of the limit
+    ["4-byte emoji", "😀", 16384],
+  ])("counts %s to the exact byte at the boundary", (_n, ch, count) => {
+    const body = ch.repeat(count);
+    const exact = body + "x".repeat(65536 - utf8Bytes(body));
+    expect(utf8Bytes(exact)).toBe(65536);
+    const ok = feed(event(exact));
+    expect(ok.overflow).toBe(false);
+    expect(ok.events[0]?.data).toBe(exact);
+    expect(feed(event(exact + "x")).overflow).toBe(true);
+  });
+
+  it("counts a multi-line payload as the joined bytes: only the real newlines between data lines", () => {
+    const two = `data: ${"a".repeat(32768)}\ndata: ${"b".repeat(32767)}\n\n`; // 32,768 + 1 + 32,767 = 65,536
+    const ok = feed(two);
+    expect(ok.overflow).toBe(false);
+    expect(ok.events[0]?.data).toBe("a".repeat(32768) + "\n" + "b".repeat(32767));
+    expect(utf8Bytes(ok.events[0]?.data ?? "")).toBe(65536);
+    expect(feed(`data: ${"a".repeat(32768)}\ndata: ${"b".repeat(32768)}\n\n`).overflow).toBe(true); // 65,537
+    expect(feed("data: a\ndata: b\ndata: c\n\n").events[0]?.data).toBe("a\nb\nc"); // 5 bytes, not 6
+  });
+
+  it("does not count SSE framing toward the payload: prefixes, event names, comments and other fields", () => {
+    const payload = "x".repeat(65536);
+    for (const text of [
+      `data:${payload}\n\n`, // no optional space
+      `data: ${payload}\n\n`,
+      `event: ${"n".repeat(10000)}\ndata: ${payload}\n\n`,
+      `: ${"c".repeat(50000)}\ndata: ${payload}\n\n`, // a long comment before it
+      `id: 7\nretry: 5\nfoo: bar\n: note\nevent: snapshot\ndata: ${payload}\n\n`,
+      `data: ${payload}\n: ${"c".repeat(50000)}\n\n`, // a long comment between the data line and the blank line
+    ]) {
+      const r = feed(text);
+      expect(r.overflow).toBe(false);
+      expect(r.events[0]?.data).toBe(payload);
+    }
+  });
+
+  it("bounds the incomplete buffer by itself at 131,072 bytes, whatever the payload", () => {
+    expect(feed("x".repeat(131072)).overflow).toBe(false);
+    expect(feed("x".repeat(131073)).overflow).toBe(true);
+    expect(feed(":" + "c".repeat(131071)).overflow).toBe(false); // an unterminated comment: no payload at all
+    expect(feed(":" + "c".repeat(131072)).overflow).toBe(true);
+    expect(feed("event: " + "n".repeat(131073)).overflow).toBe(true);
+  });
+
+  it("adds what is held for the event in progress: a complete 64 KiB payload plus an open line", () => {
+    const held = `data: ${"x".repeat(65536)}\n`; // payload at its limit, event not yet dispatched
+    expect(feed(held + ":" + "y".repeat(65535)).overflow).toBe(false); // 65,536 + 65,536 = 131,072
+    expect(feed(held + ":" + "y".repeat(65536)).overflow).toBe(true); // 131,073: the payload is fine, the buffer is not
+  });
+
+  it("releases each completed event at once, so many valid events in one chunk never overflow", () => {
+    const one = event("x".repeat(60000));
+    const r = feed(one + one + one + "data: 1\n"); // about 180 KB in one chunk, over both limits in total
+    expect(r.overflow).toBe(false);
+    expect(r.events).toHaveLength(3);
+  });
+
+  it("returns the events completed before an oversized one, then reports overflow", () => {
+    const r = feed(event("ok") + event("x".repeat(65537)));
+    expect(r.overflow).toBe(true);
+    expect(r.events).toEqual([{ event: "message", data: "ok" }]);
+  });
+
+  it("keeps an exact-size multibyte payload intact when fed in 1-unit chunks, with a boundary inside a surrogate pair", () => {
+    const exact = "😀".repeat(16383) + "xxxx"; // 65,532 + 4 = 65,536
+    const text = event(exact);
+    const parser = new SseParser();
+    const events = [];
+    for (let i = 0; i < text.length; i += 1) {
+      const r = parser.feed(text[i] as string);
+      expect(r.overflow).toBe(false);
+      events.push(...r.events);
+    }
+    expect(events).toEqual([{ event: "message", data: exact }]);
   });
 });
 

@@ -117,6 +117,12 @@ export function createObservationController(deps: ControllerDeps): ObservationCo
 
   let started = false;
   let generation = 0;
+  /**
+   * The generation of the attempt a visibility resume started. A `pageshow` restore that arrives while that same
+   * attempt is still live must not abort it (one resume, one request). Every abort bumps `generation`, so a pause,
+   * offline, failure, retry or unmount leaves this value stale without any clearing.
+   */
+  let resumeGeneration = -1;
   let abortController: AbortController | null = null;
   let headerTimer: TimerHandle | null = null;
   let silenceTimer: TimerHandle | null = null;
@@ -247,7 +253,7 @@ export function createObservationController(deps: ControllerDeps): ObservationCo
     if (!response.body) return protocolFault("the response has no body");
 
     const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
+    const decoder = new TextDecoder("utf-8", { fatal: true }); // malformed UTF-8 throws instead of becoming U+FFFD
     const parser = new SseParser();
     let lastSeq = 0;
     let connProfile: Profile | null = null;
@@ -265,9 +271,24 @@ export function createObservationController(deps: ControllerDeps): ObservationCo
       for (;;) {
         const { done, value } = await reader.read();
         if (gen !== generation) return;
-        if (done) break;
+        if (done) {
+          // A fatal, streaming decoder holds an incomplete multibyte tail until the final decode, which then throws.
+          // An incomplete SSE event made of valid UTF-8 is not an error here: the normal end below discards it.
+          try {
+            decoder.decode();
+          } catch {
+            return protocolFault("the stream is not valid UTF-8");
+          }
+          break;
+        }
         armSilence();
-        const { events, overflow } = parser.feed(decoder.decode(value, { stream: true }));
+        let text: string;
+        try {
+          text = decoder.decode(value, { stream: true });
+        } catch {
+          return protocolFault("the stream is not valid UTF-8");
+        }
+        const { events, overflow } = parser.feed(text);
         for (const event of events) {
           const decoded = decodeMessage(event.event, event.data, { lastSeq, profile: connProfile });
           if (decoded.kind === "fault") return protocolFault(decoded.reason);
@@ -298,7 +319,7 @@ export function createObservationController(deps: ControllerDeps): ObservationCo
           }
           if (gen !== generation) return;
         }
-        if (overflow) return protocolFault("a message or buffer exceeded 64 KiB");
+        if (overflow) return protocolFault("a data payload exceeded 64 KiB or the parser buffer exceeded 128 KiB");
       }
     } catch {
       if (gen === generation) recoverableFailure();
@@ -343,11 +364,17 @@ export function createObservationController(deps: ControllerDeps): ObservationCo
     }
     resetCounters();
     dropDisplayed();
+    const before = generation;
     requestConnect();
+    if (generation !== before) resumeGeneration = generation; // an attempt was started (connect() aborts first)
   };
 
   const onPageShow = (event: Event) => {
     if (!(event as PageTransitionEvent).persisted) return;
+    if (resumeGeneration === generation && (state.phase === "connecting" || state.phase === "streaming")) {
+      resumeGeneration = -1; // the visibility resume already opened this attempt; keep it
+      return;
+    }
     abortConnection(); // any stream handle from before the restore is discarded unread
     if (state.phase === "stopped") return;
     set({ phase: "idle" });

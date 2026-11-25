@@ -379,6 +379,54 @@ describe("hidden tabs and resumption (§3.3.1)", () => {
     expect(controller.getSnapshot().phase).toBe("connecting");
   });
 
+  it("keeps the attempt a visibility resume started when a persisted pageshow follows it (M-1)", async () => {
+    await streaming();
+    visibility = "hidden";
+    fire(document, "visibilitychange");
+    visibility = "visible";
+    fire(document, "visibilitychange");
+    expect(calls).toHaveLength(2);
+    fire(window, "pageshow", { persisted: true });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.signal.aborted).toBe(false);
+    expect(controller.getSnapshot().phase).toBe("connecting");
+  });
+
+  it("still aborts and reconnects on a persisted pageshow with no visibility resume before it", async () => {
+    await streaming();
+    fire(window, "pageshow", { persisted: true });
+    expect(calls[0]?.signal.aborted).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.signal.aborted).toBe(false);
+    expect(controller.getSnapshot().phase).toBe("connecting");
+  });
+
+  it("ends with one live stream after pagehide, hidden to visible, then a persisted pageshow", async () => {
+    await streaming();
+    fire(window, "pagehide");
+    visibility = "hidden";
+    fire(document, "visibilitychange");
+    visibility = "visible";
+    fire(document, "visibilitychange");
+    fire(window, "pageshow", { persisted: true });
+    expect(calls).toHaveLength(2);
+    expect(calls.filter((c) => !c.signal.aborted)).toHaveLength(1);
+    expect(controller.getSnapshot().phase).toBe("connecting");
+  });
+
+  it("does not let a spent resume suppress a later restore", async () => {
+    await streaming();
+    visibility = "hidden";
+    fire(document, "visibilitychange");
+    visibility = "visible";
+    fire(document, "visibilitychange");
+    fire(window, "pageshow", { persisted: true }); // consumed
+    fire(window, "pageshow", { persisted: true }); // a second, genuine restore
+    expect(calls).toHaveLength(3);
+    expect(calls[1]?.signal.aborted).toBe(true);
+    expect(calls[2]?.signal.aborted).toBe(false);
+  });
+
   it("ignores a pageshow that is not a restore", async () => {
     await streaming();
     fire(window, "pageshow", { persisted: false });
@@ -790,6 +838,166 @@ describe("non-ASCII events delivered as bytes (F1)", () => {
     calls[0]?.respond(s.response);
     const bytes = encode(sse({ ...snapshot(1), pad: "€é😀".repeat(5000) })); // about 45 KB
     for (let i = 0; i < bytes.length; i += 1013) s.pushBytes(bytes.slice(i, i + 1013)); // odd size: splits characters
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({ phase: "streaming" });
+    expect(controller.getSnapshot().values).toHaveLength(4);
+  });
+});
+
+describe("payload limit 65,536 bytes, buffer limit 131,072 bytes, and malformed UTF-8 (L-1)", () => {
+  const encode = (text: string) => new TextEncoder().encode(text);
+  const bytesOf = (o: object) => encode(JSON.stringify(o)).length;
+
+  /** A snapshot whose JSON `data` payload is exactly `target` UTF-8 bytes: `pad` is `unit` repeated, then ASCII to fill. */
+  function snapshotOfBytes(target: number, unit: string) {
+    const empty = bytesOf({ ...snapshot(1), pad: "" });
+    const room = target - empty;
+    const unitLen = encode(unit).length;
+    const pad = unit.repeat(Math.floor(room / unitLen)) + "x".repeat(room % unitLen);
+    const message = { ...snapshot(1), pad };
+    expect(bytesOf(message)).toBe(target);
+    return message;
+  }
+
+  async function open() {
+    make();
+    controller.start();
+    const s = streamResponse();
+    calls[0]?.respond(s.response);
+    return s;
+  }
+
+  it.each([
+    ["ASCII", "x"],
+    ["2-byte é", "é"],
+    ["3-byte €", "€"],
+    ["4-byte emoji", "😀"],
+  ])("accepts a payload of exactly 65,536 bytes (%s pad) fed in 3-byte chunks that split characters", async (_n, unit) => {
+    const s = await open();
+    const bytes = encode(sse(snapshotOfBytes(65536, unit)));
+    for (let i = 0; i < bytes.length; i += 3) s.pushBytes(bytes.slice(i, i + 3));
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({ phase: "streaming" });
+    expect(controller.getSnapshot().values).toHaveLength(4);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["ASCII", "x"],
+    ["3-byte €", "€"],
+    ["4-byte emoji", "😀"],
+  ])("faults on a payload of 65,537 bytes (%s pad) with a controlled protocol fault", async (_n, unit) => {
+    const s = await open();
+    s.pushBytes(encode(sse(snapshotOfBytes(65537, unit))));
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("64 KiB"));
+    expect(calls[0]?.signal.aborted).toBe(true);
+  });
+
+  it("faults when the incomplete parser buffer passes 131,072 bytes even though no payload is near its limit", async () => {
+    const s = await open();
+    s.pushBytes(encode(":" + "c".repeat(131072))); // one unterminated comment line
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("128 KiB"));
+  });
+
+  it("accepts several valid frames in one network chunk, though together they pass both limits", async () => {
+    const s = await open();
+    const pad = "p".repeat(50000);
+    const chunk = sse({ ...snapshot(1), pad }) + sse({ ...update(2, makeValue("USD", "INR", 0, "fresh", "9.9")), pad }) + sse({ ...heartbeat(3), pad });
+    expect(encode(chunk).length).toBeGreaterThan(131072);
+    s.pushBytes(encode(chunk));
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({ phase: "streaming" });
+    expect(controller.getSnapshot().values?.[3]?.rate).toBe("9.9");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("applies the valid frames of a chunk before it faults on an oversized one", async () => {
+    const s = await open();
+    s.pushBytes(encode(sse(snapshot(1)) + sse(update(2, makeValue("USD", "INR", 0, "fresh", "9.9"))) + sse(snapshotOfBytes(65537, "x"))));
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting");
+    expect(controller.getSnapshot().values?.[3]?.rate).toBe("9.9"); // the first two were applied before the fault
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("64 KiB"));
+  });
+
+  it.each([
+    ["a stray 0xFF byte", [0xff]],
+    ["a bad continuation byte", [0xc3, 0x28]],
+    ["an overlong encoding", [0xc0, 0xaf]],
+    ["a lone continuation byte", [0x80]],
+    ["an encoded surrogate", [0xed, 0xa0, 0x80]],
+  ])("rejects %s inside a payload as a protocol fault, not a replacement character", async (_n, bad) => {
+    const s = await open();
+    const head = encode("event: snapshot\ndata: {\"a\":\"");
+    const tail = encode("\"}\n\n");
+    s.pushBytes(Uint8Array.from([...head, ...bad, ...tail]));
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting");
+    expect(controller.getSnapshot().values).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("UTF-8"));
+  });
+
+  it("rejects malformed UTF-8 whose bad byte arrives in a later chunk than its lead byte", async () => {
+    const s = await open();
+    s.pushBytes(Uint8Array.from([...encode("data: x"), 0xe2])); // the lead byte of a 3-byte character
+    s.pushBytes(Uint8Array.from([0x28, 0x0a, 0x0a])); // 0x28 is not a continuation byte
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("UTF-8"));
+  });
+
+  it("raises a UTF-8 protocol fault when the stream ends inside a multibyte character", async () => {
+    const s = await open();
+    s.pushBytes(Uint8Array.from([...encode("data: x"), 0xe2, 0x82])); // the first two bytes of a 3-byte "€"
+    await settle();
+    expect(warn).not.toHaveBeenCalled(); // nothing is wrong until the stream ends
+    s.end();
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("UTF-8"));
+  });
+
+  it("does not call an incomplete SSE event of valid UTF-8 at EOF a UTF-8 fault", async () => {
+    const s = await open();
+    s.pushBytes(encode("event: snapshot\ndata: {\"a\":\"é€😀")); // complete characters, but no closing line
+    s.end();
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting"); // the ordinary end of stream: reconnect
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("accepts a multibyte character split across chunks and completed before EOF", async () => {
+    const s = await open();
+    const bytes = encode(sse({ ...snapshot(1), pad: "€😀" }));
+    const cut = bytes.indexOf(0xf0) + 2; // inside the 4-byte emoji
+    s.pushBytes(bytes.slice(0, cut));
+    s.pushBytes(bytes.slice(cut));
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({ phase: "streaming" });
+    s.end();
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting"); // the ordinary end of stream
+    expect(controller.getSnapshot().values).toHaveLength(4);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("faults on malformed UTF-8 after a valid frame in the same chunk, drops that chunk, and recovers cleanly", async () => {
+    const s = await open();
+    s.pushBytes(Uint8Array.from([...encode(sse(snapshot(1))), 0xff])); // the fatal decoder rejects the whole chunk
+    await settle();
+    expect(controller.getSnapshot().phase).toBe("waiting");
+    expect(controller.getSnapshot().values).toBeNull(); // documented: the valid frame in the bad chunk is not applied
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("UTF-8"));
+    expect(calls[0]?.signal.aborted).toBe(true);
+    await advance(1000); // the first backoff (1 s with random() = 1), then a clean second attempt
+    expect(calls).toHaveLength(2);
+    const next = streamResponse();
+    calls[1]?.respond(next.response);
+    next.push(sse(snapshot(1)));
     await settle();
     expect(controller.getSnapshot()).toMatchObject({ phase: "streaming" });
     expect(controller.getSnapshot().values).toHaveLength(4);
