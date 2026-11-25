@@ -884,6 +884,7 @@ describe("payload limit 65,536 bytes, buffer limit 131,072 bytes, and malformed 
 
   it.each([
     ["ASCII", "x"],
+    ["2-byte é", "é"],
     ["3-byte €", "€"],
     ["4-byte emoji", "😀"],
   ])("faults on a payload of 65,537 bytes (%s pad) with a controlled protocol fault", async (_n, unit) => {
@@ -893,6 +894,56 @@ describe("payload limit 65,536 bytes, buffer limit 131,072 bytes, and malformed 
     expect(controller.getSnapshot().phase).toBe("waiting");
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("64 KiB"));
     expect(calls[0]?.signal.aborted).toBe(true);
+  });
+
+  it.each([
+    ["ASCII", "x"],
+    ["3-byte €", "€"],
+  ])("accepts a payload of 65,535 bytes (%s pad), one under the limit", async (_n, unit) => {
+    const s = await open();
+    s.pushBytes(encode(sse(snapshotOfBytes(65535, unit))));
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({ phase: "streaming" });
+    expect(controller.getSnapshot().values).toHaveLength(4);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  /** An unterminated comment line of exactly `total` UTF-8 bytes: ":" then `unit` repeated, then ASCII to fill. */
+  function openLineOfBytes(total: number, unit: string) {
+    const room = total - 1;
+    const unitLen = encode(unit).length;
+    const line = ":" + unit.repeat(Math.floor(room / unitLen)) + "c".repeat(room % unitLen);
+    expect(encode(line).length).toBe(total);
+    return encode(line);
+  }
+
+  it("accepts exactly 131,072 unterminated bytes without a fault, and the stream still works afterwards", async () => {
+    const s = await open();
+    s.pushBytes(openLineOfBytes(131072, "c"));
+    await settle();
+    expect(warn).not.toHaveBeenCalled();
+    expect(calls[0]?.signal.aborted).toBe(false);
+    s.push("\n" + sse(snapshot(1))); // ends the comment line, then a valid frame
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({ phase: "streaming" });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [131072, false],
+    [131073, true],
+  ])("handles %i unterminated bytes fed in 3-byte chunks that split a multibyte character (fault: %s)", async (total, faults) => {
+    const s = await open();
+    const bytes = openLineOfBytes(total, "€"); // "€" starts at byte 1, so every 3-byte chunk boundary falls inside a character
+    for (let i = 0; i < bytes.length; i += 3) s.pushBytes(bytes.slice(i, i + 3));
+    await settle();
+    if (faults) {
+      expect(controller.getSnapshot().phase).toBe("waiting");
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("128 KiB"));
+    } else {
+      expect(warn).not.toHaveBeenCalled();
+    }
+    expect(calls[0]?.signal.aborted).toBe(faults);
   });
 
   it("faults when the incomplete parser buffer passes 131,072 bytes even though no payload is near its limit", async () => {

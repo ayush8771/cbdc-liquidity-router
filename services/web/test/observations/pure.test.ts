@@ -361,6 +361,73 @@ describe("SSE parser: payload limit 65,536 bytes and buffer limit 131,072 bytes,
     }
     expect(events).toEqual([{ event: "message", data: exact }]);
   });
+
+  /** `unit` repeated, then ASCII "x" to fill, totalling exactly `total` UTF-8 bytes (after an optional ASCII `prefix`). */
+  const ofBytes = (total: number, unit: string, prefix = "") => {
+    const room = total - utf8Bytes(prefix);
+    const text = prefix + unit.repeat(Math.floor(room / utf8Bytes(unit))) + "x".repeat(room % utf8Bytes(unit));
+    expect(utf8Bytes(text)).toBe(total);
+    return text;
+  };
+  /** Feeds `text` in `size`-unit chunks to one parser; true if any chunk reports overflow. */
+  const fragmentedOverflow = (text: string, size: number) => {
+    const parser = new SseParser();
+    for (let i = 0; i < text.length; i += size) if (parser.feed(text.slice(i, i + size)).overflow) return true;
+    return false;
+  };
+  const units = [
+    ["2-byte é", "é"],
+    ["3-byte €", "€"],
+    ["4-byte emoji", "😀"],
+  ] as const;
+
+  it("accepts exactly 65,535 payload bytes, one under the limit", () => {
+    const ok = feed(event("x".repeat(65535)));
+    expect(ok.overflow).toBe(false);
+    expect(ok.events[0]?.data).toHaveLength(65535);
+  });
+
+  it("accepts an unterminated line of exactly 131,071 bytes", () => {
+    expect(feed("x".repeat(131071)).overflow).toBe(false);
+  });
+
+  it.each(units)("bounds an unterminated %s line at exactly 131,072 bytes (accepted) and 131,073 (rejected)", (_n, ch) => {
+    expect(feed(ofBytes(131072, ch, ":")).overflow).toBe(false);
+    expect(feed(ofBytes(131073, ch, ":")).overflow).toBe(true);
+  });
+
+  it.each(units)("bounds an unterminated %s line the same way when fed in 7-unit chunks", (_n, ch) => {
+    const ok = ofBytes(131072, ch, ":");
+    const bad = ofBytes(131073, ch, ":");
+    if (ch === "😀") {
+      // the prefix makes pairs start at odd indexes, so some 7-unit boundary falls between the two halves of a pair
+      expect([...Array(Math.floor(bad.length / 7)).keys()].some((k) => /[\ud800-\udbff]/.test(bad[(k + 1) * 7 - 1] as string))).toBe(true);
+    }
+    expect(fragmentedOverflow(ok, 7)).toBe(false);
+    expect(fragmentedOverflow(bad, 7)).toBe(true);
+  });
+
+  it("adds a held 65,536-byte payload to an open line across feeds: 131,072 accepted, 131,073 rejected", () => {
+    const held = `data: ${"x".repeat(65536)}\n`;
+    for (const [openBytes, overflows] of [
+      [65536, false],
+      [65537, true],
+    ] as const) {
+      const parser = new SseParser();
+      expect(parser.feed(held).overflow).toBe(false);
+      const open = ofBytes(openBytes, "😀", ":");
+      let overflow = false;
+      for (let i = 0; i < open.length && !overflow; i += 1001) overflow = parser.feed(open.slice(i, i + 1001)).overflow; // odd size, splits pairs
+      expect(overflow).toBe(overflows);
+      if (!overflows) expect(parser.feed("\n\n").events).toEqual([{ event: "message", data: "x".repeat(65536) }]); // still intact
+    }
+  });
+
+  it.each(units)("rejects exactly 65,537 payload bytes of %s fed in 7-unit chunks", (_n, ch) => {
+    const text = event(ofBytes(65537, ch));
+    expect(fragmentedOverflow(text, 7)).toBe(true);
+    expect(fragmentedOverflow(event(ofBytes(65536, ch)), 7)).toBe(false); // the matching limit case is accepted
+  });
 });
 
 describe("rate and timestamp validation match the AD-4 schema exactly (F3)", () => {
