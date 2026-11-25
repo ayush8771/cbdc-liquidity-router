@@ -7,6 +7,7 @@ End-to-end checks for the Phase 2 Docker Compose stack (arch §4, §5.4). Dev D.
 | `api-smoke.py` | API smoke test (Python, standard library only), run by `.github/workflows/phase2-stack.yml`. |
 | `stack-security.py` | Runtime security checks on a running Compose project, run by the same workflow. |
 | `tests/app.spec.ts` | Chromium browser tests (Playwright) of the real React app behind nginx. |
+| `p3/observations.spec.ts`, `playwright.p3.config.ts` | Phase 3 (D-24) observation acceptance, run only by `p3_browser_acceptance.py` on stacks it builds. Not part of `npm test`. See `docs/PHASE3_D24_ACCEPTANCE.md`. |
 | `package.json`, `package-lock.json`, `playwright.config.ts` | The Playwright project. Its own `node_modules`; nothing is installed in `services/web`. |
 
 ## Browser tests

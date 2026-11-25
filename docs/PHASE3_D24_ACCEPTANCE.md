@@ -10,16 +10,18 @@ The seven earlier jobs are unchanged. Four are added. All run on `ubuntu-24.04`,
 
 | Job | Covers | Needs | Timeout | Estimated run |
 |---|---|---|---|---|
-| `guards` | AD-6 T-7 protected paths, T-8 wording, and the harnesses' own tests (with the negative controls) | none | 20 min | 3 min |
-| `regression-gate` | AD-6 T-7: the existing `tests` and `phase2-*` workflows passed on the same commit | `guards` | 75 min | waits for them (the Windows Phase 1 job is the longest) |
-| `acceptance-stack` | T-6, T-1, T-2, real SSE, fault recovery, limits, restart and graceful shutdown | `contracts`, `backend-observations`, `web-observations` | 90 min | about 40 min |
-| `acceptance-browser` | Browser: panel on, off and preview | `contracts`, `web-observations` | 90 min | about 30 min |
+| `guards` | AD-6 T-7 protected paths, T-8 wording, and the harnesses' own tests (with the negative controls) | none | 20 min | 0.9 min |
+| `regression-gate` | AD-6 T-7: the existing `tests` and `phase2-*` workflows passed on the same commit | `guards` | 75 min | 3.3 min (waited for the Phase 2 full-stack job, then failed on it) |
+| `acceptance-stack` | T-6, T-1, T-2, real SSE, fault recovery, limits, restart and graceful shutdown | `contracts`, `backend-observations`, `web-observations` | 90 min | 13.1 min |
+| `acceptance-browser` | Browser: panel on, off and preview | `contracts`, `web-observations` | 90 min | 11.2 min |
 
-**Estimates are projections, not CI measurements.** They come from local runs: the browser flavour `on` took 6.7 min including the 300 s soak, the T-6 soak with fault phases took about 7 min, a stack build took several minutes with a cold cache. The first CI run will show the real figures; the timeouts leave room for a cold cache.
+**Runtimes are measured**, from the first CI run of this workflow (PR #24, commit `bd085e6`, GitHub-hosted runners, one run each): the figures in the last column are job durations, including the 300 s soaks and stack builds. They are one sample, not an average, and a cold cache or a busier runner will lengthen them; the timeouts stay at 20, 75 and 90 minutes. An earlier local estimate of about 40 and 30 minutes for the two acceptance jobs was too high.
 
 **No redundant builds or soaks.** `acceptance-stack` builds two stacks (observations with the test-only fake ingestion, and the plain Phase 2 stack, the T-1 baseline) and runs everything on them in this order: T-6 (the 300 s soak and the fault phases, with the T-1 requests before and after), then T-1/T-2, then the probe phases that stop or restart the backend (`auth,quiet,limits,restart,sigterm`). The stream probe's own soak and fault phases are the ones inside T-6, so they are not run twice. The browser job builds one stack per flavour and runs the panel-on tests, including a separate 300 s browser soak, because the browser is a different client.
 
 **What each harness check needs to see.** Each step writes a text log. `infra/scripts/assert_harness_log.py` fails on any `FAIL` or `SKIP` line, any non-zero failed, skipped, did-not-run or flaky count, a log with no passing result, and any named check that is absent (for example the T-6 hash checks, `T-2: zero calls`, `sigterm: the backend exits 0`, and the browser summary `on: passed, off: passed, preview: passed`). pytest steps keep the JUnit no-skip check.
+
+**Where the browser spec lives.** `e2e/p3/observations.spec.ts`, with its own `e2e/playwright.p3.config.ts` (it imports and extends `playwright.config.ts`, so the loopback guard, the one worker and the no-recording settings are inherited). It is deliberately outside `e2e/tests/` and outside the default config's `testDir`: the Phase 2 `npm test` (phase2-stack) discovers exactly its original 7 tests and never collects these 10 (8 for the panel on, 1 off, 1 preview), which need stacks only `p3_browser_acceptance.py` builds. The first CI run showed why: with the spec in `e2e/tests/` the Phase 2 browser step collected it and failed.
 
 **Timeouts, cleanup and evidence.** Every harness command is wrapped in `timeout`. Each job removes only the projects it created (`cbdc-p3s-*` under its own `$RUNNER_TEMP` directory, by `p3_stack.py down`, which refuses any other name), also after a failure or cancellation. It never prunes Docker. Container logs of this job's projects (last 400 lines each) and the text logs are kept for 7 days as an artifact. Playwright's output directory is deleted by the runner and never uploaded, because a failure snapshot can list form values.
 

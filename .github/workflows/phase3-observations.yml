@@ -766,7 +766,7 @@ jobs:
           echo "P3_ROOT=$RUNNER_TEMP/p3-browser-stacks" >> "$GITHUB_ENV"
           echo "P3_LOGS=$RUNNER_TEMP/p3-logs" >> "$GITHUB_ENV"
 
-      # The runner builds one stack per flavour (on, off, preview), runs observations.spec.ts with that flavour's tests, and removes
+      # The runner builds one stack per flavour (on, off, preview), runs e2e/p3/observations.spec.ts (its own config) with that flavour's tests, and removes
       # each stack. The panel-on flavour includes the 300 s browser soak. Playwright's own output directory is deleted by the runner
       # (failure snapshots can hold form values); only this text log is kept.
       - name: Browser acceptance

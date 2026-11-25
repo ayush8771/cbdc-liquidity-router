@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
-import { analystToken, signIn, watchBrowser } from "./helpers";
+import { analystToken, signIn, watchBrowser } from "../tests/helpers";
 
 // AD-1 v0.5 section 6 items 2, 8 and 9 and AD-6 T-2, T-3 and T-10, in a real browser against disposable stacks.
-// Run by e2e/p3_browser_acceptance.py, which builds one stack per build flavour and selects tests by tag:
+// Lives in e2e/p3/ with its own config (playwright.p3.config.ts), so the Phase 2 `npm test` never collects it. Run by e2e/p3_browser_acceptance.py, which builds one stack per build flavour and selects tests by tag:
 //   @on       web built with VITE_OBSERVATIONS=on, with the test-only fake ingestion (E2E_STACK_PROJECT, E2E_STACK_ROOT steer its faults)
 //   @off      web built with VITE_OBSERVATIONS=off (the default build)
 // Nothing here is skipped: a tag that is not selected is simply not run.

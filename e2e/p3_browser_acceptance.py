@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real-browser acceptance of the observation panel (AD-1 v0.5 section 6 items 2, 8, 9; AD-6 T-2, T-3, T-10), Dev D.
 
-Builds one disposable stack per web build flavour with infra/scripts/p3_stack.py, runs e2e/tests/observations.spec.ts against it
+Builds one disposable stack per web build flavour with infra/scripts/p3_stack.py, runs e2e/p3/observations.spec.ts (config e2e/playwright.p3.config.ts) against it
 with the tests of that flavour (selected by tag, never skipped), and always removes the stacks:
 
   on       observations stack, fake ingestion, web built with VITE_OBSERVATIONS=on
@@ -58,7 +58,7 @@ def run_flavour(name: str, root: Path, soak: int, keep: bool, out_dir: Path) -> 
                    E2E_PYTHON=sys.executable, E2E_P3_STACK=str(REPO / "infra" / "scripts" / "p3_stack.py"))
         npx = shutil.which("npx") or "npx"
         print(f"\n===== browser acceptance: {name} (project {state['project']}, port {state['port']})", flush=True)
-        return subprocess.run([npx, "playwright", "test", "observations.spec.ts", "--grep", f"@{name}\\b"], cwd=REPO / "e2e", env=env).returncode
+        return subprocess.run([npx, "playwright", "test", "-c", "playwright.p3.config.ts", "observations.spec.ts", "--grep", f"@{name}\\b"], cwd=REPO / "e2e", env=env).returncode
     finally:
         if not keep:
             p3.cleanup(state, root)

@@ -327,3 +327,16 @@ def test_acceptance_workflow_paths_cover_the_protected_and_text_scopes(wf):
 def test_every_test_file_the_workflow_names_exists():
     for path in re.findall(r"infra/scripts/tests/(test_\w+\.py)", TEXT):
         assert (ROOT / "infra" / "scripts" / "tests" / path).is_file(), path
+
+
+def test_phase3_browser_spec_is_outside_the_phase2_playwright_discovery(wf):
+    """The first CI run failed phase2-stack because e2e/tests/observations.spec.ts was collected by its `npm test`."""
+    base = (ROOT / "e2e" / "playwright.config.ts").read_text(encoding="utf-8")
+    p3 = (ROOT / "e2e" / "playwright.p3.config.ts").read_text(encoding="utf-8")
+    assert 'testDir: "./tests"' in base and 'testDir: "./p3"' in p3 and "./playwright.config" in p3
+    assert not list((ROOT / "e2e" / "tests").glob("observations*")), "the Phase 3 spec must not be in the Phase 2 test folder"
+    assert (ROOT / "e2e" / "p3" / "observations.spec.ts").is_file()
+    runner = (ROOT / "e2e" / "p3_browser_acceptance.py").read_text(encoding="utf-8")
+    assert '"-c", "playwright.p3.config.ts"' in runner and "e2e/p3/observations.spec.ts" in runner
+    assert "observations.spec" not in (ROOT / ".github" / "workflows" / "phase2-stack.yml").read_text(encoding="utf-8"), "Phase 2 workflows are untouched"
+    assert "e2e/p3/observations.spec.ts" in run_text(wf["jobs"]["acceptance-browser"]) + TEXT

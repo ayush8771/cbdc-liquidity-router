@@ -64,8 +64,8 @@ def test_changes_since_sees_commits_working_tree_and_untracked(tmp_path, monkeyp
         sg.changes_since("0" * 40)
 
 
-def test_real_repository_is_clean_against_the_approved_baseline():
-    assert sg.protected_problems(sg.changes_since(sg.BASELINE)) == []
+# The real repository against the baseline is checked by `python e2e/p3_safeguards.py protected` in the `guards` job, which clones the full
+# history; a shallow clone (the Phase 2 contract job runs this folder) has no baseline commit, so no test here depends on it.
 
 
 # --- T-8 -----------------------------------------------------------------------------------------------------------
