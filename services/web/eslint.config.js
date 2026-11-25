@@ -45,6 +45,11 @@ export default tseslint.config(
               ],
               message: "Observation code must not import routing, transaction, compare or API-client code (AD-6 B-8).",
             },
+            {
+              // The whole module, so `import * as auth` and re-exports are rejected too; observationSession is the way in.
+              group: ["**/auth/AuthContext"],
+              message: "Observation code must import useObservationSession from auth/observationSession, not AuthContext: it exposes the API client (AD-6 B-8).",
+            },
           ],
         },
       ],

@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from "react";
 import { useDataMode } from "../../api/dataMode";
-import { useAuth } from "../../auth/AuthContext";
+import { useObservationSession } from "../../auth/observationSession";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card, CardHeader } from "../../components/ui/Card";
@@ -176,7 +176,7 @@ export function ObservationPanel() {
 export function ObservationsSection() {
   const live = useDataMode() === "live";
   const enabled = useObservationsFlag();
-  const { status } = useAuth();
+  const { status } = useObservationSession();
   if (!live || !enabled || status !== "signedIn") return null;
   return <ObservationPanel />;
 }

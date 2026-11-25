@@ -2,6 +2,7 @@ import { act, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../../src/auth/AuthProvider";
 import { useAuth, type AuthContextValue } from "../../src/auth/AuthContext";
+import { useObservationSession } from "../../src/auth/observationSession";
 import { createTokenStore } from "../../src/auth/tokenStore";
 import { TEST_USER } from "../renderRoute";
 
@@ -36,6 +37,25 @@ function harness(token: string | null = "tok-1") {
 const signedIn = async (h: ReturnType<typeof harness>) => waitFor(() => expect(h.ctx().status).toBe("signedIn"));
 
 describe("AuthContext.openObservationStream (AD-1 §3.3.4)", () => {
+  it("useObservationSession exposes only the status and the stream opener, not the API client", async () => {
+    const store = createTokenStore(() => null);
+    store.set("tok");
+    const fetchImpl = (() => Promise.resolve(new Response(JSON.stringify(TEST_USER), { status: 200 }))) as unknown as typeof fetch;
+    let seen: ReturnType<typeof useObservationSession> | undefined;
+    const Probe = () => {
+      seen = useObservationSession();
+      return null;
+    };
+    render(
+      <AuthProvider store={store} fetchImpl={fetchImpl}>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(seen?.status).toBe("signedIn"));
+    expect(Object.keys(seen!).sort()).toEqual(["openObservationStream", "status"]);
+    expect(typeof seen!.openObservationStream).toBe("function");
+  });
+
   it("sends a same-origin GET with the bearer token in a header only, and no replay header", async () => {
     const h = harness();
     await signedIn(h);

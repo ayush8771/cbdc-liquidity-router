@@ -1,5 +1,5 @@
 import { ESLint } from "eslint";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 /*
  * AD-6 B-8 / T-4: observation state is separate from form and request state, "checked by lint". These
@@ -13,6 +13,10 @@ async function problems(filePath: string, code: string): Promise<string[]> {
 }
 
 describe("observation module isolation (lint)", () => {
+  // The first lint loads the config (~2.4 s alone, over 5 s when the whole suite runs in parallel); later ones take ~10 ms.
+  // Warming up here keeps the 30 s allowance on this one hook and the cases on the 5 s default.
+  beforeAll(() => problems("src/features/observations/probe.ts", ""), 30_000);
+
   it.each([
     "../newTransaction/NewTransactionForm",
     "../compare/compareApi",
@@ -26,6 +30,25 @@ describe("observation module isolation (lint)", () => {
     expect(await problems("src/features/observations/probe.ts", `import "${path}";\n`)).toHaveLength(1);
   });
 
+  it.each([
+    `import { useAuth } from "../../auth/AuthContext";\n`,
+    `import { useAuth as session } from "../../auth/AuthContext";\n`,
+    `import * as auth from "../../auth/AuthContext";\n`,
+    `export * from "../../auth/AuthContext";\n`,
+    `export { useAuth } from "../../auth/AuthContext";\n`,
+    `import "../../auth/AuthContext";\n`,
+  ])("rejects AuthContext in observation code, however it is imported: %s", async (code) => {
+    expect(await problems("src/features/observations/probe.ts", code)).toHaveLength(1);
+  });
+
+  it("allows the narrow session hook in observation code", async () => {
+    expect(await problems("src/features/observations/probe.ts", `import { useObservationSession } from "../../auth/observationSession";\n`)).toEqual([]);
+  });
+
+  it("still allows useAuth outside observation code", async () => {
+    expect(await problems("src/pages/ComparePage.tsx", `import { useAuth } from "../auth/AuthContext";\n`)).toEqual([]);
+  });
+
   it("rejects the reverse: other features, API code and pages importing observation code", async () => {
     const code = `import "../observations/flags";\n`;
     expect(await problems("src/features/newTransaction/probe.ts", code)).toHaveLength(1);
@@ -35,7 +58,7 @@ describe("observation module isolation (lint)", () => {
   });
 
   it("allows what the slice needs: the session, the data mode and the shared UI primitives", async () => {
-    const code = `import "../../auth/AuthContext";\nimport "../../api/dataMode";\nimport "../../components/ui/Card";\nimport "./flags";\n`;
+    const code = `import { useObservationSession } from "../../auth/observationSession";\nimport "../../api/dataMode";\nimport "../../components/ui/Card";\nimport "./flags";\n`;
     expect(await problems("src/features/observations/probe.ts", code)).toEqual([]);
   });
 
