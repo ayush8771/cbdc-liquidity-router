@@ -66,8 +66,23 @@ same seed and sequence therefore give the same payload and the same
 "payloads and hashes do not depend on the clock". The clock is **injected** and
 used for timestamps only.
 
-`event_id` is a UUIDv5 of the seed, the sequence and the source timestamp, so a
-redelivery keeps its identity (AD-4 §2).
+`event_id` is a UUIDv5 of the seed, the **pair**, the sequence and the source
+timestamp, so a redelivery keeps its identity (AD-4 §2).
+
+The pair is part of the name because it has to be. Within one run the 500 ms
+stagger alone separates the pairs, but a restart resets every sequence to 1 and
+re-bases the stagger, so a restart offset of 500, 1000 or 1500 ms (mod 2000)
+lined up one run's pair with another's at equal sequences and equal timestamps:
+three of four pairs then shared an `event_id` while carrying different pairs and
+different rates. Under AD-1 §3.4 Express rejects an event whose `event_id`
+matches a current event with different content or another pair, and the offset is
+constant, so those pairs' values would have stalled and aged out for the whole
+run. `tests/test_restart_identity.py` pins this. AD-1 §3's AD-12 row carries the
+corrected derivation, marked as a correction awaiting confirmation.
+
+A restart one whole interval later is a separate, benign case: the pair and the
+source timestamp coincide but the sequence differs, so AD-1 §3.4's tie rule
+drops one post-restart event per pair, counted, and the next is accepted.
 
 A source timestamp more than 1 s after `retrieved_at` makes the envelope
 `quarantined` with reason `FUTURE_SOURCE_TIMESTAMP` (AD-4 §6, AD-1 §3.4). It is

@@ -7,10 +7,10 @@ such on all four of AD-4 §3.2's markers, which the schema cross-checks:
 can emit `real`, `derived` or `assumed`, no field for a URL or a Gate 3
 reference, and no event type other than `fx_rate` (AD-4 §1, §3.2; AD-6 B-1).
 
-`event_id` is a **UUIDv5** of the seed, the sequence and the source timestamp
-(AD-1 §3, AD-12 row), so a redelivery of the same event keeps its identity
-(AD-4 §2) and a replay with the same seed, sequence and injected clock
-reproduces it exactly (AD-1 §6 item 1).
+`event_id` is a **UUIDv5** of the seed, the **pair**, the sequence and the source
+timestamp (AD-1 §3, AD-12 row, as corrected), so a redelivery of the same event
+keeps its identity (AD-4 §2) and a replay with the same seed, sequence and
+injected clock reproduces it exactly (AD-1 §6 item 1).
 """
 from __future__ import annotations
 
@@ -37,16 +37,30 @@ CLOCK_TOLERANCE_MS = 1000
 FUTURE_SOURCE_TIMESTAMP = "FUTURE_SOURCE_TIMESTAMP"
 
 
-def event_id_for(seed: int, sequence: int, source_timestamp: str) -> str:
+def event_id_for(seed: int, pair_key: str, sequence: int, source_timestamp: str) -> str:
     """The UUIDv5 event ID of one generated observation (AD-1 §3, AD-12 row).
 
-    The pair is not part of the name, because AD-1 fixes the three inputs. Two
-    pairs can still never collide on the generator's schedule: a collision would
-    need equal sequences and equal source timestamps, and with a 500 ms stagger
-    and a 2 000 ms interval `500i + 2000(n-1) = 500j + 2000(n-1)` holds only when
-    `i == j` (`generator.scheduled_ms`). `tests/test_generator.py` checks it.
+    The name is `seed|pair|sequence|source_timestamp`. **The pair is part of it,
+    and must be**: without it, two events with different pairs and different rates
+    could share an ID across a process restart, and under AD-1 §3.4 Express
+    rejects an event whose `event_id` matches a current event with different
+    content or another pair, so those pairs' values would stall and age out.
+
+    Within one run the 500 ms stagger alone makes a cross-pair collision
+    impossible, because `500i + 2000(n-1) = 500j + 2000(n-1)` holds only when
+    `i == j`. A restart breaks that argument: it resets every pair's sequence to 1
+    and re-bases the stagger on a new `start_ms`, so a restart offset of 500, 1000
+    or 1500 ms (mod 2000) lines up one run's pair *i* with another's pair *j*, at
+    equal sequences and equal timestamps. The offset is then constant, so the
+    collision persists for the whole run rather than passing.
+
+    Including the pair keeps replay reproducible: the ID still depends on nothing
+    but the seed, the pair, the sequence and the injected clock, so the same seed
+    and sequence reproduce the same ID, which `start_ms` or `instance_id` in the
+    name would have destroyed. Checked by `tests/test_restart_identity.py`.
     """
-    return str(uuid.uuid5(EVENT_ID_NAMESPACE, f"{int(seed)}|{int(sequence)}|{source_timestamp}"))
+    return str(uuid.uuid5(EVENT_ID_NAMESPACE,
+                          f"{int(seed)}|{pair_key}|{int(sequence)}|{source_timestamp}"))
 
 
 def fx_payload(base_currency: str, quote_currency: str, rate: str, rate_type: str = "mid") -> dict:
@@ -83,7 +97,10 @@ def build_fx_event(*, seed: int, sequence: int, payload: dict, retrieved_at_ms: 
     quarantined = source_timestamp_ms > retrieved_at_ms + CLOCK_TOLERANCE_MS
     return {
         "schema_version": SCHEMA_VERSION,
-        "event_id": event_id_for(seed, sequence, source_timestamp),
+        # The pair is read from the payload, so the ID and the payload can never
+        # disagree about which pair the event is for.
+        "event_id": event_id_for(seed, f"{payload['base_currency']}/{payload['quote_currency']}",
+                                 sequence, source_timestamp),
         "event_type": "fx_rate",
         "usage": "display_only",
         "source": {"source_id": SOURCE_ID, "transport": "synthetic",

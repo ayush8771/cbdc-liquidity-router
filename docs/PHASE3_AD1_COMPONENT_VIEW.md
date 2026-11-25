@@ -2,6 +2,7 @@
 
 **Status:** **APPROVED v0.5** (component view), 25 November 2026. Approved by the project owner on 25 November 2026 **for the D-24 slice only** (D-22 for that slice; §2.2.2 and §2.2.3 of `docs/PHASE3_SCOPE.md` v1.4). The text of v0.5 is unchanged by this approval: v0.3 answered Dev C's blockers B1 to B5; v0.4 applied Dev C's and Dev B's follow-up on the same sections: immediate abort (B1), recoverable versus permanent states (B2), SSE wire parsing and `profile` validation (B3), the §5 wording for the additive session method (B4), Dev B's §7 reference correction, and a safeguard against a late 401 from a superseded session. **v0.5** applied Varshini's (Dev C) final feedback: a mandatory positive `unavailable_after_ms` for the slice (§3.2, §3.3.3) and a single-connection rule that stops `pageshow` and `visibilitychange` opening two streams (§3.3.1).
 **Review state:** all reviews are now in **on v0.5**. **Dev B APPROVE**, **Dev C (Varshini) APPROVE** — confirming B1 to B4 closed, B5 already resolved — and **Dev D ADOPT + APPROVE**. **Dev A** gave **technical approval** of the §3.1 ingestion contract, the four FX pairs (§3.4), the ordering and quarantine rules (§3.4) and the shared cross-language hash fixtures (§3.7): P-1, P-3, P-4 and P-9, and the generator. The **project owner approved v0.5 on 25 November 2026 for the D-24 slice**. Approval is version-specific: it covers **v0.5 only**, and any later revision needs fresh review and approval. The owner has **not** confirmed §4's placement of later components, so **no milestone 3.2–3.7 is authorized** (D-22 for those milestones is not satisfied). **No gate has passed.**
+**Outstanding correction:** **C-1** (§3.4.1) corrects the §3 AD-12 row's `event_id` derivation, which as approved allows two events with different pairs and different rates to share an `event_id` across a process restart. **C-1 is not approved**: it needs the project owner's confirmation and Dev B's, and the approval recorded below remains an approval of v0.5 as written. The D-24 implementation follows the corrected derivation, because the approved one is unsafe.
 **Lead:** Dev D. **Reviewers:** Dev A, Dev B, Dev C. **Approver:** project owner.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §2.2.2, §2.2.3, §7.3; D-22, D-24, D-25; F-2, F-3, F-6.
 **Extends:** `PHASE2_ARCHITECTURE.md` §2. **Relies on:** AD-4 v0.2 (envelope) and AD-6 v0.2 (boundary), both approved for the D-24 slice only on 25 November 2026.
@@ -46,7 +47,7 @@ Under D-24, §3 stands in for AD-2, AD-3, AD-5, AD-7 to AD-10 and AD-12 **for th
 | AD-5 | §3.1, §3.4 |
 | AD-7, AD-10 | §3.2, §3.5, §3.6 |
 | AD-8, AD-9 | §3.3. Display p95 ≤ 1 s from `emitted_at`, with both clocks on one host; reconnect p95 ≤ 5 s from the moment the backend is reachable **through Nginx**. Numbers are for the slice, not final budgets. |
-| AD-12 | Seed and sequence fix payloads and hashes. Timestamps come from an injected clock; `event_id` is a UUIDv5 of seed, sequence and timestamp. Rates are deliberately unrealistic. No review queue. Faults: §3.7. |
+| AD-12 | Seed and sequence fix payloads and hashes. Timestamps come from an injected clock; `event_id` is a UUIDv5 of seed, **pair**, sequence and timestamp (**correction C-1**, §3.4.1). Rates are deliberately unrealistic. No review queue. Faults: §3.7. |
 
 ### 3.1 Ingestion contract: `GET /v1/latest` [P-1]
 
@@ -268,6 +269,18 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 - Order depends on `source_timestamp` only. `source_sequence` is opaque (AD-4) and `instance_id` is diagnostic. An ingestion restart needs no reset; a clock moved backwards yields late events, so values age out safely.
 - The current event stays as the ordering watermark after it becomes unavailable, but its number is not sent.
 - **Quarantine:** ingestion marks AD-4 §6 cases (for a future source timestamp, > `retrieved_at` + 1 s) `quarantined` and withholds them; Express independently withholds them. Both keep **only** counters by reason and rate-limited logs with the reason and, if well formed, the `event_id`. No payload is stored and there is no review queue.
+
+#### 3.4.1 Correction C-1: the pair is part of `event_id` (NOT YET CONFIRMED)
+
+**Status: a defect correction to approved v0.5 text, raised by Dev A on 25 November 2026 during D-24 implementation. It is NOT approved.** The owner's approval is version-specific to v0.5, and the §3 AD-12 row named three inputs. The implementation on `feature/phase3-ingestion` follows the corrected derivation, because the approved one is unsafe; it needs the owner's confirmation, and Dev B's, whose acceptance rules (P-4) are the ones affected. Nothing else in this document is changed by C-1, and no other boundary, contract, threshold or ownership moves.
+
+**The defect.** With `event_id` a UUIDv5 of seed, sequence and timestamp only, two events carrying **different pairs and different rates** can share an `event_id` across a process restart. Within one run they cannot: the pair's schedule is `500i + 2000(n-1)`, which is distinct per pair at equal sequences. A restart breaks that argument, because it keeps the seed, resets every pair's sequence to 1 and re-bases the stagger on a new start moment. A restart offset of 500, 1000 or 1500 ms (mod 2000) therefore aligns one run's pair *i* with another's pair *j* at equal sequences and equal source timestamps, and the name has nothing left to tell them apart. Reproduced: at a 500 ms offset, three of the four pairs collided.
+
+**Why it matters.** §3.4 says an event whose `event_id` matches a current event with different content or another pair is a **conflict: rejected, counted; first kept**. The restart offset is then constant, so every later sequence collides too: the affected pairs' values would be rejected for the whole run, pass `stale_after_ms` and then `unavailable_after_ms`, and never recover. It fails silently, in a counter.
+
+**The correction.** The name becomes `seed | pair | sequence | source_timestamp`. The pair is read from the payload, so an ID and its payload cannot disagree. Replay is unaffected, which is why the pair is the right input: the ID still depends on nothing but the seed, the pair, the sequence and the injected clock, so §6 item 1 continues to hold. Putting the start moment or the instance identifier in the name would have fixed the collision and broken replay, so neither was used.
+
+**Not a defect, for the record.** A restart one whole interval later makes a pair's source timestamp coincide with its own earlier observation at a different sequence. The IDs differ, so this is §3.4's last conflict row — "same `source_timestamp`, different `event_id`: first kept; counted". One post-restart event per pair is dropped and the next, 2 s later, is accepted. That is the approved ordering rules working as written, not a stall.
 
 ### 3.5 Backend lifecycle, limits and backpressure [P-5]
 

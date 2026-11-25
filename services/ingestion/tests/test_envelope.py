@@ -54,14 +54,17 @@ def test_the_payload_hash_is_the_ad4_hash():
     assert event["payload_sha256"] == payload_sha256("fx_rate", event["payload"])
 
 
-def test_event_id_is_a_uuid5_of_seed_sequence_and_source_timestamp():
+def test_event_id_is_a_uuid5_of_seed_pair_sequence_and_source_timestamp():
     stamp = format_timestamp(START_MS)
-    assert good()["event_id"] == event_id_for(SEED, 1, stamp)
+    assert good()["event_id"] == event_id_for(SEED, "USD/INR", 1, stamp)
     assert uuid.UUID(good()["event_id"]).version == 5
-    # Each of the three inputs changes the identity.
-    assert event_id_for(SEED, 1, stamp) != event_id_for(SEED, 2, stamp)
-    assert event_id_for(SEED, 1, stamp) != event_id_for(SEED + 1, 1, stamp)
-    assert event_id_for(SEED, 1, stamp) != event_id_for(SEED, 1, format_timestamp(START_MS + 1))
+    # Each of the four inputs changes the identity. The pair is one of them: without
+    # it, a restart could give two pairs one ID (`tests/test_restart_identity.py`).
+    assert event_id_for(SEED, "USD/INR", 1, stamp) != event_id_for(SEED, "USD/INR", 2, stamp)
+    assert event_id_for(SEED, "USD/INR", 1, stamp) != event_id_for(SEED + 1, "USD/INR", 1, stamp)
+    assert event_id_for(SEED, "USD/INR", 1, stamp) != event_id_for(SEED, "EUR/USD", 1, stamp)
+    assert event_id_for(SEED, "USD/INR", 1, stamp) != \
+        event_id_for(SEED, "USD/INR", 1, format_timestamp(START_MS + 1))
 
 
 def test_a_redelivery_keeps_the_event_id():
