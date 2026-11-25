@@ -1,0 +1,22 @@
+# TEST-ONLY override (Dev D; AD-1 v0.5 section 3.7 fault injection). NEVER part of the default stack or of the plain observations
+# overlay: it is passed explicitly, after infra/compose.observations.yaml, by infra/scripts/p3_stack.py when a run asks for faults.
+#
+#   docker compose -f infra/compose.yaml -f infra/compose.observations.yaml -f infra/compose.observations-test.yaml ...
+#
+# It swaps the ingestion PROCESS for the fake in infra/testing/fault_ingestion/ (mounted read-only) and changes nothing else:
+# same image, same user, read-only root, dropped capabilities, limits, internal isolated network and service name, so Express
+# still polls http://ingestion:8300. It publishes no port, and the control interface listens on the container's loopback
+# only (see infra/testing/fault_ingestion/server.py): a test steers it with `docker compose exec`.
+services:
+  ingestion:
+    command: ["python", "/fault/server.py"]
+    environment:
+      PYTHONPATH: /app
+      CBDC_FAULT_SCENARIO: normal
+    volumes:
+      - type: bind
+        source: ./testing/fault_ingestion
+        target: /fault
+        read_only: true
+        bind:
+          create_host_path: false
