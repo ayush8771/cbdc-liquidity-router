@@ -1,0 +1,72 @@
+name: phase3-acceptance-gate
+
+# The one check to REQUIRE for Phase 3 acceptance on feature/phase3-platform (docs/PHASE3_D24_ACCEPTANCE.md section 6). It reports `phase3-acceptance`.
+#
+# phase3-observations.yml is path-filtered, so for an unrelated pull request it creates no check, and a required check that is never reported
+# blocks the merge forever. This workflow has NO path filter, so it always reports:
+#   - nothing acceptance-relevant changed: it passes at once ("NOT REQUIRED");
+#   - something relevant changed, or anything is uncertain: the phase3-observations run of the same commit must have succeeded, and its four
+#     acceptance jobs must each have ended `success` (not skipped, not missing). A run that never starts fails.
+#
+# The decision logic is infra/scripts/phase3_acceptance_gate.py, taken from the pull request's BASE commit, and the path list is the base commit's
+# phase3-observations.yml, so a pull request cannot shrink the filter or edit the logic to excuse itself. The one exception is the bootstrap: when the
+# base has no copy yet, the head's copy is used and a warning says so. This workflow file itself runs from the pull request head (GitHub's rule for
+# pull_request); the residual risk and what covers it are in the document.
+#
+# No secret and no pull-request text in a command: the only token is the run's own GITHUB_TOKEN with `actions: read`.
+on:
+  pull_request:
+    branches: [feature/phase3-platform]
+  push:
+    branches: [feature/phase3-platform]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: phase3-acceptance-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  phase3-acceptance:
+    name: phase3-acceptance
+    runs-on: ubuntu-24.04
+    # The longest needs-chain of phase3-observations.yml is contracts 15 + backend-observations 20 + acceptance-stack 90 = 125 minutes
+    # (a test recomputes it). The script waits at most 125 minutes; 10 more cover checkout and setup. A normal run takes about 15.
+    timeout-minutes: 135
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+
+      - name: Install PyYAML
+        run: python -m pip install PyYAML==6.0.2
+
+      - name: Decide whether acceptance is required, and if so verify it
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          script=infra/scripts/phase3_acceptance_gate.py
+          base="$(python -c "import json, os; e = json.load(open(os.environ['GITHUB_EVENT_PATH'])); print(((e.get('pull_request') or {}).get('base') or {}).get('sha') or e.get('before') or '')")"
+          # Trusted logic: the base commit's copy. Only when the base has none (the commit that introduces the gate) is the head's copy used.
+          if [ -n "$base" ] && git cat-file -e "$base:$script" 2>/dev/null; then
+            git show "$base:$script" > "$RUNNER_TEMP/phase3_acceptance_gate.py"
+            echo "using the gate from base commit ${base:0:7}"
+          else
+            cp "$script" "$RUNNER_TEMP/phase3_acceptance_gate.py"
+            echo "::warning::the base commit has no $script; using the head's copy (bootstrap only)"
+          fi
+          python "$RUNNER_TEMP/phase3_acceptance_gate.py" --repo "$GITHUB_REPOSITORY" --event-name "$GITHUB_EVENT_NAME" \
+            --event-path "$GITHUB_EVENT_PATH" --sha "$GITHUB_SHA" --timeout 7500 --poll 30 --grace 900

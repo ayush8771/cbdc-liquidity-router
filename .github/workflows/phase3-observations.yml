@@ -76,6 +76,11 @@ on:
       - "docs/PROJECT_HANDOVER.md"
       - "docs/PHASE3_MILESTONE_3_1_PLAN.md"
       - "docs/PHASE3_D24_ACCEPTANCE.md"
+      - "*.py"
+      - "requirements.txt"
+      - "requirements-lock.txt"
+      - ".github/workflows/phase3-acceptance-gate.yml"
+      - "infra/scripts/phase3_acceptance_gate.py"
   pull_request:
     paths:
       - ".github/workflows/phase3-observations.yml"
@@ -104,6 +109,11 @@ on:
       - "docs/PROJECT_HANDOVER.md"
       - "docs/PHASE3_MILESTONE_3_1_PLAN.md"
       - "docs/PHASE3_D24_ACCEPTANCE.md"
+      - "*.py"
+      - "requirements.txt"
+      - "requirements-lock.txt"
+      - ".github/workflows/phase3-acceptance-gate.yml"
+      - "infra/scripts/phase3_acceptance_gate.py"
   workflow_dispatch:
 
 permissions:
@@ -592,6 +602,7 @@ jobs:
           python -m pytest -q -p no:cacheprovider --junitxml="$RUNNER_TEMP/p3-guards.xml" \
             infra/scripts/tests/test_p3_safeguards.py \
             infra/scripts/tests/test_assert_harness_log.py \
+            infra/scripts/tests/test_phase3_acceptance_gate.py \
             infra/scripts/tests/test_p3_noninterference.py \
             infra/scripts/tests/test_p3_stream_probe.py \
             infra/scripts/tests/test_p3_stack.py \
