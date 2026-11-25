@@ -29,10 +29,10 @@ def run_text(job):
 def test_jobs_and_runner(wf):
     assert wf["name"] == "phase3-observations"
     assert set(wf["jobs"]) == {"contracts", "ingestion-unit", "compose-invariants", "backend-observations", "web-observations",
-                                "nginx-sse", "runtime"}
+                                "nginx-sse", "runtime", "guards", "regression-gate", "acceptance-stack", "acceptance-browser"}
     for name, job in wf["jobs"].items():
         assert job["runs-on"] == "ubuntu-24.04", name
-        assert job["timeout-minutes"] <= 20, name
+        assert job["timeout-minutes"] <= (90 if name.startswith(("acceptance", "regression")) else 20), name
     assert set(wf["jobs"]["runtime"]["needs"]) == {"contracts", "ingestion-unit", "compose-invariants"}
 
 
@@ -235,3 +235,108 @@ def test_existing_mandatory_phase3_checks_are_still_wired(wf):
     assert "check_event_contracts.py" in run_text(jobs["contracts"]) and "ingestion" in run_text(jobs["ingestion-unit"])
     assert "probe_ingestion_isolation.py" in run_text(jobs["runtime"])
     assert set(jobs["runtime"]["needs"]) == {"contracts", "ingestion-unit", "compose-invariants"}
+
+
+# --- D-24 final acceptance jobs (Stage 7) ---------------------------------------------------------------------------------
+
+def test_acceptance_jobs_depend_on_the_cheap_checks_and_are_bounded(wf):
+    jobs = wf["jobs"]
+    assert set(jobs["acceptance-stack"]["needs"]) == {"contracts", "backend-observations", "web-observations"}
+    assert set(jobs["acceptance-browser"]["needs"]) == {"contracts", "web-observations"}
+    assert jobs["regression-gate"]["needs"] == ["guards"]
+    for name in ("acceptance-stack", "acceptance-browser"):
+        for s in steps(jobs[name]):
+            if "timeout " in s.get("run", "") and "tee" in s["run"]:
+                assert re.search(r"timeout \d{3,4} python", s["run"]), (name, s["name"])  # every harness run is bounded
+    assert "continue-on-error" not in TEXT
+
+
+def test_t6_uses_the_approved_300_second_soak_and_the_stack_harnesses(wf):
+    text = run_text(wf["jobs"]["acceptance-stack"])
+    assert "p3_safeguards.py soak" in text and "--soak-seconds 300" in text
+    assert "p3_noninterference.py --project" in text and "--absent-project" in text and "--burst-seconds 60" in text
+    assert "p3_stream_probe.py --project" in text and "--only auth,quiet,limits,restart,sigterm" in text, "soak and faults run inside the T-6 step, not twice"
+    assert text.index("p3_safeguards.py soak") < text.index("p3_noninterference.py") < text.index("p3_stream_probe.py"), "the restart and shutdown phases are last"
+    assert "up --root" in text and "--fault --load-users 7" in text and "--no-observations" in text
+    assert text.count("p3_stack.py up") == 2, "two stacks in all: observations and plain"
+
+
+def test_acceptance_logs_are_checked_for_failures_skips_and_missing_checks(wf):
+    for name in ("acceptance-stack", "acceptance-browser"):
+        job = wf["jobs"][name]
+        step = next(s for s in steps(job) if "assert_harness_log.py" in s.get("run", ""))
+        assert "always()" in step["if"], name
+        assert step["run"].count("--require") >= 3, name
+    stack = run_text(wf["jobs"]["acceptance-stack"])
+    # The probe is split in two runs (T-6 soak and faults, then the rest). Frame coverage of every message type and freshness
+    # state is only computed when a run includes soak and faults, so the log must prove that run did it.
+    assert "PASS frames cover every message type and freshness state" in stack
+    t6 = next(s for s in steps(wf["jobs"]["acceptance-stack"]) if "p3_safeguards.py soak" in s.get("run", ""))
+    assert "--soak-seconds 300" in t6["run"]
+    for needed in ("T-6: the host Phase 1 artefact", "T-6: the same hashes inside the inference container", "T-6 after the soak", "T-2: zero calls",
+                   "sigterm: the backend exits 0", "faults: recovery"):
+        assert needed in stack, needed
+    assert "on: passed, off: passed, preview: passed" in run_text(wf["jobs"]["acceptance-browser"]), "all three flavours are required"
+
+
+def test_acceptance_cleanup_is_scoped_always_runs_and_keeps_diagnostics(wf):
+    for name in ("acceptance-stack", "acceptance-browser"):
+        job = wf["jobs"][name]
+        cleanup = next(s for s in steps(job) if s.get("name") == "Remove what this run created")
+        assert "always()" in cleanup["if"], name
+        assert "p3_stack.py down" in cleanup["run"] and "cbdc-p3s-*" in cleanup["run"] and "$P3_ROOT" in cleanup["run"], name
+        assert not re.search(r"docker (system|volume|image|container) prune|docker rm -f \$\(docker ps", cleanup["run"]), "no unscoped docker cleanup"
+        upload = next(s for s in steps(job) if str(s.get("uses", "")).startswith("actions/upload-artifact@"))
+        assert "always()" in upload["if"] and upload["with"]["retention-days"] <= 7, name
+        assert any("Container logs" in s.get("name", "") for s in steps(job)), name
+
+
+def test_t7_and_t8_guards_run_with_full_history_and_the_gate_reads_the_existing_workflows(wf):
+    guards = wf["jobs"]["guards"]
+    assert steps(guards)[0]["with"]["fetch-depth"] == 0, "the baseline commit must be present"
+    text = run_text(guards)
+    assert "p3_safeguards.py protected" in text and "p3_safeguards.py text" in text and "assert_junit_no_skips.py" in text
+    gate = wf["jobs"]["regression-gate"]
+    assert gate["permissions"] == {"contents": "read", "actions": "read"}
+    gtext = run_text(gate)
+    assert "--grace 900" in gtext and "--timeout 4200" in gtext and 4200 < gate["timeout-minutes"] * 60, "the wait is bounded inside the job timeout"
+    assert "wait_for_workflows.py" in gtext and "GITHUB_EVENT_PATH" in gtext and "github.event.pull_request" not in TEXT
+    assert wf["permissions"] == {"contents": "read"}, "write access is never granted"
+
+
+def test_the_script_defaults_match_the_workflow_wiring():
+    import sys
+    sys.path.insert(0, str(ROOT / "infra" / "scripts"))
+    sys.path.insert(0, str(ROOT / "e2e"))
+    import p3_safeguards as sg
+    import wait_for_workflows as wfw
+    assert sg.BASELINE == "28da68f" and len(sg.STATUS_DOCS) == 10 and sg.UI_DIR == "services/web/src"
+    assert set(wfw.REQUIRED) == {"tests", "phase2-docker"} and set(wfw.OPTIONAL) == {"phase2-integration", "phase2-stack"}
+    for name in wfw.REQUIRED + wfw.OPTIONAL:
+        assert any(re.search(rf"^name: {name}$", f.read_text(encoding="utf-8"), re.M) for f in (ROOT / ".github" / "workflows").glob("*.yml")), name
+
+
+def test_acceptance_workflow_paths_cover_the_protected_and_text_scopes(wf):
+    for event in ("push", "pull_request"):
+        paths = wf[True][event]["paths"]
+        for needed in ("e2e/**", "src/**", "data/**", "tests/**", "contracts/fixtures/**", "services/inference/**", "README.md", "docs/PHASE2_STATUS.md",
+                       "docs/PHASE3_D24_ACCEPTANCE.md"):
+            assert needed in paths, (event, needed)
+
+
+def test_every_test_file_the_workflow_names_exists():
+    for path in re.findall(r"infra/scripts/tests/(test_\w+\.py)", TEXT):
+        assert (ROOT / "infra" / "scripts" / "tests" / path).is_file(), path
+
+
+def test_phase3_browser_spec_is_outside_the_phase2_playwright_discovery(wf):
+    """The first CI run failed phase2-stack because e2e/tests/observations.spec.ts was collected by its `npm test`."""
+    base = (ROOT / "e2e" / "playwright.config.ts").read_text(encoding="utf-8")
+    p3 = (ROOT / "e2e" / "playwright.p3.config.ts").read_text(encoding="utf-8")
+    assert 'testDir: "./tests"' in base and 'testDir: "./p3"' in p3 and "./playwright.config" in p3
+    assert not list((ROOT / "e2e" / "tests").glob("observations*")), "the Phase 3 spec must not be in the Phase 2 test folder"
+    assert (ROOT / "e2e" / "p3" / "observations.spec.ts").is_file()
+    runner = (ROOT / "e2e" / "p3_browser_acceptance.py").read_text(encoding="utf-8")
+    assert '"-c", "playwright.p3.config.ts"' in runner and "e2e/p3/observations.spec.ts" in runner
+    assert "observations.spec" not in (ROOT / ".github" / "workflows" / "phase2-stack.yml").read_text(encoding="utf-8"), "Phase 2 workflows are untouched"
+    assert "e2e/p3/observations.spec.ts" in run_text(wf["jobs"]["acceptance-browser"]) + TEXT

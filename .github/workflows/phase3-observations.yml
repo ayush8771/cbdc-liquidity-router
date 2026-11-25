@@ -27,12 +27,15 @@ name: phase3-observations
 # Every pytest step writes a JUnit report that infra/scripts/assert_junit_no_skips.py checks: a mandatory test that
 # is skipped, errored or never ran fails the job.
 #
-# NOT here yet, and deliberately not represented as a job, so nothing reports green for work that does not exist:
-#   the same Nginx checks against Dev B's real stream, the client-side 401/429/reconnect/stale-state checks, the
-#   fault-injection fake ingestion server (Dev B), AD-6 T-1/T-2/T-3/T-6 to T-8/T-10 against a running stack, the browser
-#   tests (Dev C), and the TypeScript tests that run the shared contracts/events fixtures (Dev B and Dev C follow-ups, not yet
-#   landed; they are added to the backend-observations and web-observations jobs when they do). The inference side of
-#   T-5 is excepted for D-24 (D-25) and is neither run nor claimed.
+# D-24 final acceptance (Stage 7), added after the jobs above, which are unchanged:
+#   guards              AD-6 T-7 protected paths against the Phase 2 baseline, T-8 wording guard, and the harnesses' own tests.
+#   regression-gate     AD-6 T-7: waits for and requires the EXISTING tests.yml and phase2-* workflows on the same commit
+#                       (the Phase 1 and 2 suites are not run a second time).
+#   acceptance-stack    ONE observations stack and ONE plain stack: T-6 (300 s soak, artefact hashes, routing non-interference),
+#                       T-1 and T-2, and the real-stream probe (auth, quiet, limits, faults, restart, graceful shutdown).
+#   acceptance-browser  Playwright, real stacks: panel on (with a 300 s browser soak), off and preview.
+# docs/PHASE3_D24_ACCEPTANCE.md records the scope, the T-8 file list, the human review that remains, and what is NOT covered
+# (for example a live 503 SHUTTING_DOWN, the inference side of T-5, and any live source).
 #
 # Dependencies on other branches: the checks need Dev A's ingestion component (PR #15: services/ingestion/,
 # contracts/events/ingestion-latest.v1.schema.json, contracts/test-vectors/event_payload_hash.v1.json) and Dev C's
@@ -57,6 +60,22 @@ on:
       - "infra/testing/**"
       - "contracts/events/**"
       - "contracts/test-vectors/**"
+      - "e2e/**"
+      - "src/**"
+      - "data/**"
+      - "outputs/**"
+      - "tests/**"
+      - "services/inference/**"
+      - "contracts/fixtures/**"
+      - "contracts/openapi/**"
+      - "README.md"
+      - "CLAUDE.md"
+      - "infra/README.md"
+      - "contracts/README.md"
+      - "docs/PHASE2_STATUS.md"
+      - "docs/PROJECT_HANDOVER.md"
+      - "docs/PHASE3_MILESTONE_3_1_PLAN.md"
+      - "docs/PHASE3_D24_ACCEPTANCE.md"
   pull_request:
     paths:
       - ".github/workflows/phase3-observations.yml"
@@ -69,6 +88,22 @@ on:
       - "infra/testing/**"
       - "contracts/events/**"
       - "contracts/test-vectors/**"
+      - "e2e/**"
+      - "src/**"
+      - "data/**"
+      - "outputs/**"
+      - "tests/**"
+      - "services/inference/**"
+      - "contracts/fixtures/**"
+      - "contracts/openapi/**"
+      - "README.md"
+      - "CLAUDE.md"
+      - "infra/README.md"
+      - "contracts/README.md"
+      - "docs/PHASE2_STATUS.md"
+      - "docs/PROJECT_HANDOVER.md"
+      - "docs/PHASE3_MILESTONE_3_1_PLAN.md"
+      - "docs/PHASE3_D24_ACCEPTANCE.md"
   workflow_dispatch:
 
 permissions:
@@ -512,3 +547,259 @@ jobs:
           docker rm -f "${P3_PROJECT}-sigterm-control" > /dev/null 2>&1 || true
           docker network rm "${P3_PROJECT}_sentinel" > /dev/null 2>&1 || true
           if [ -f "$RUNNER_TEMP/p3-listener.pid" ]; then kill "$(cat "$RUNNER_TEMP/p3-listener.pid")" > /dev/null 2>&1 || true; fi
+
+  # ===================================================================================================================
+  # D-24 final acceptance (Stage 7). Dev D's harnesses (e2e/p3_*.py, infra/scripts/p3_stack.py) on real disposable stacks.
+  # Each stack is its own Compose project (cbdc-p3s-<8 hex>) with its own images, volume and network under
+  # $RUNNER_TEMP, removed by project name at the end of the job, also on failure or cancellation. Nothing here touches the
+  # default stack, phase2-*.yml or any production file. docs/PHASE3_D24_ACCEPTANCE.md lists what is and is not covered.
+  # ===================================================================================================================
+
+  guards:
+    name: AD-6 T-7 protected paths, T-8 wording, and the harnesses' own tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # fetch-depth 0: T-7 compares with the approved Phase 2 baseline commit (28da68f), which a shallow clone does not hold.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          cache: pip
+          cache-dependency-path: infra/scripts/requirements.txt
+
+      - name: Install tooling
+        run: |
+          python -m pip install -r infra/scripts/requirements.txt
+          python -m pip check
+
+      # Modifying, deleting or renaming a Phase 1/2 protected file, or adding an unauthorized one, fails. The authorized
+      # additions are named in e2e/p3_safeguards.py (AUTHORIZED_ADDITIONS).
+      - name: AD-6 T-7, protected paths against the Phase 2 baseline
+        run: python e2e/p3_safeguards.py protected
+
+      # Scope: services/web/src and the 10 documents named in e2e/p3_safeguards.py (STATUS_DOCS); a listed file that is
+      # missing fails. The wording still needs a human review (docs/PHASE3_D24_ACCEPTANCE.md).
+      - name: AD-6 T-8, forbidden phrases in the UI and the status documents
+        run: python e2e/p3_safeguards.py text
+
+      - name: Harness tests, with controls that must fail
+        run: |
+          python -m pytest -q -p no:cacheprovider --junitxml="$RUNNER_TEMP/p3-guards.xml" \
+            infra/scripts/tests/test_p3_safeguards.py \
+            infra/scripts/tests/test_assert_harness_log.py \
+            infra/scripts/tests/test_p3_noninterference.py \
+            infra/scripts/tests/test_p3_stream_probe.py \
+            infra/scripts/tests/test_p3_stack.py \
+            infra/scripts/tests/test_fault_ingestion.py
+
+      - name: No skipped test
+        run: python infra/scripts/assert_junit_no_skips.py "$RUNNER_TEMP/p3-guards.xml"
+
+  regression-gate:
+    name: AD-6 T-7 Phase 1 and 2 suites passed on this commit (existing workflows)
+    needs: [guards]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    # The suites are not run twice. tests.yml (Phase 1, every pull request and push) and phase2-docker.yml (every push and pull
+    # request) are REQUIRED; phase2-integration.yml and phase2-stack.yml are path-filtered, so they are required to pass if they ran
+    # and the log says which did not. Together with the protected-path guard, "unmodified" and "pass" are both shown.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+
+      # A pull_request run is on the merge commit, but the other workflows' runs are recorded against the pull request head.
+      # Read it from the event file, never from an expression inside the command.
+      - name: Wait for the existing Phase 1 and 2 workflows
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="$(python -c "import json, os; e = json.load(open(os.environ['GITHUB_EVENT_PATH'])); print(((e.get('pull_request') or {}).get('head') or {}).get('sha') or os.environ['GITHUB_SHA'])")"
+          echo "commit $sha"
+          python infra/scripts/wait_for_workflows.py --repo "$GITHUB_REPOSITORY" --sha "$sha" --timeout 4200 --poll 30 --grace 900
+
+  acceptance-stack:
+    name: AD-6 T-1, T-2, T-6 and real SSE, limits, faults and shutdown (real stacks)
+    needs: [contracts, backend-observations, web-observations]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          cache: pip
+          cache-dependency-path: infra/scripts/requirements.txt
+
+      - name: Install tooling and name this job's directories
+        run: |
+          set -euo pipefail
+          python -m pip install -r infra/scripts/requirements.txt
+          python -m pip check
+          docker compose version
+          engine="$(docker version --format '{{.Server.Version}}')"
+          [ "$(printf '%s\n28.0.0\n' "$engine" | sort -V | head -n1)" = "28.0.0" ] \
+            || { echo "::error::Docker Engine $engine is older than 28.0.0, which the overlay's isolated gateway mode needs"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/p3-stacks" "$RUNNER_TEMP/p3-logs"
+          echo "P3_ROOT=$RUNNER_TEMP/p3-stacks" >> "$GITHUB_ENV"
+          echo "P3_LOGS=$RUNNER_TEMP/p3-logs" >> "$GITHUB_ENV"
+
+      # One stack with the test-only fake ingestion and 7 extra viewers (for the global stream limit), and one plain Phase 2 stack
+      # (the "observations absent" baseline of T-1). Their disposable passwords and tokens live under P3_ROOT, outside the checkout.
+      - name: Start the observations stack
+        id: up_obs
+        run: |
+          python infra/scripts/p3_stack.py up --root "$P3_ROOT" --fault --load-users 7 2>&1 | tee "$P3_LOGS/up-observations.log"
+          echo "P3_OBS=$(grep -m1 '^project ' "$P3_LOGS/up-observations.log" | awk '{print $2}')" >> "$GITHUB_ENV"
+
+      - name: Start the plain Phase 2 stack
+        id: up_plain
+        run: |
+          python infra/scripts/p3_stack.py up --root "$P3_ROOT" --no-observations 2>&1 | tee "$P3_LOGS/up-plain.log"
+          echo "P3_PLAIN=$(grep -m1 '^project ' "$P3_LOGS/up-plain.log" | awk '{print $2}')" >> "$GITHUB_ENV"
+
+      # T-6, approved by the project owner (Ayush; relayed through the Stage 7 instruction): a 300 s event soak with artefact and knowledge hashes before and after (host and inside the
+      # inference container) and the T-1 requests before and after (same decision_id and engine responses). The soak and the
+      # fault phases are the real-stream soak and fault recovery (stale, unavailable, outage, recovery, malformed, 302, 429...).
+      - name: AD-6 T-6, 300 s soak with artefact hashes and routing non-interference
+        if: ${{ always() && steps.up_obs.outcome == 'success' }}
+        run: timeout 1800 python e2e/p3_safeguards.py soak --project "$P3_OBS" --root "$P3_ROOT" --soak-seconds 300 2>&1 | tee "$P3_LOGS/t6.log"
+
+      - name: AD-6 T-1 and T-2, non-interference on real stacks
+        if: ${{ always() && steps.up_obs.outcome == 'success' && steps.up_plain.outcome == 'success' }}
+        run: timeout 2400 python e2e/p3_noninterference.py --project "$P3_OBS" --absent-project "$P3_PLAIN" --root "$P3_ROOT" --burst-seconds 60 2>&1 | tee "$P3_LOGS/t1-t2.log"
+
+      # soak and faults ran in the T-6 step on the same stack. These are the phases that stop or restart the backend, so they are last.
+      - name: Real SSE, limits, restart and graceful shutdown
+        if: ${{ always() && steps.up_obs.outcome == 'success' }}
+        run: timeout 1800 python e2e/p3_stream_probe.py --project "$P3_OBS" --root "$P3_ROOT" --only auth,quiet,limits,restart,sigterm --quiet-seconds 75 2>&1 | tee "$P3_LOGS/stream-probe.log"
+
+      # Text results, not JUnit: any FAIL or SKIP line, any non-zero failed, skipped or did-not-run count, or a log with no
+      # passing result fails the job, and each named check must be present, so a phase that silently did not run is caught.
+      - name: No failure, skip or missing check
+        if: ${{ always() }}
+        run: |
+          python infra/scripts/assert_harness_log.py "$P3_LOGS/t6.log" "$P3_LOGS/t1-t2.log" "$P3_LOGS/stream-probe.log" \
+            --require '^PASS T-6: the host Phase 1 artefact and knowledge hashes are identical' \
+            --require '^PASS T-6: the same hashes inside the inference container are identical' \
+            --require '^PASS T-1 T-6 after the soak: the decision_id is identical' \
+            --require '^PASS faults: recovery from html_200' \
+            --require '^PASS T-1 http:503: the decision_id is identical' \
+            --require '^PASS T-1 control: a different request' \
+            --require '^PASS T-2: zero calls to /v1/route, /v1/compare and /v1/explain' \
+            --require '^PASS sigterm: the backend exits 0' \
+            --require '^PASS all [0-9]+ frames from [0-9]+ connections pass the shared checker' \
+            --require '^PASS frames cover every message type and freshness state'
+
+      - name: Container logs (on failure)
+        if: ${{ failure() || cancelled() }}
+        run: |
+          for p in "${P3_OBS:-}" "${P3_PLAIN:-}"; do
+            [ -n "$p" ] || continue
+            for c in $(docker ps -a --filter "label=com.docker.compose.project=$p" --format '{{.Names}}'); do
+              docker logs --tail 400 "$c" > "$P3_LOGS/container-$c.log" 2>&1 || true
+            done
+          done
+
+      - name: Keep the logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-stack-logs
+          path: ${{ runner.temp }}/p3-logs
+          retention-days: 7
+          if-no-files-found: warn
+
+      # Only projects this job created: each directory under P3_ROOT is one, and `down` refuses any other name.
+      - name: Remove what this run created
+        if: ${{ always() }}
+        run: |
+          for d in "$P3_ROOT"/cbdc-p3s-*; do
+            [ -d "$d" ] || continue
+            python infra/scripts/p3_stack.py down --root "$P3_ROOT" --project "$(basename "$d")" || true
+          done
+
+  acceptance-browser:
+    name: Browser acceptance, panel on, off and preview (real stacks)
+    needs: [contracts, web-observations]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          cache: pip
+          cache-dependency-path: infra/scripts/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install tooling and Chromium
+        run: |
+          set -euo pipefail
+          python -m pip install -r infra/scripts/requirements.txt
+          (cd e2e && npm ci && npx playwright install --with-deps chromium)
+          mkdir -p "$RUNNER_TEMP/p3-browser-stacks" "$RUNNER_TEMP/p3-logs"
+          echo "P3_ROOT=$RUNNER_TEMP/p3-browser-stacks" >> "$GITHUB_ENV"
+          echo "P3_LOGS=$RUNNER_TEMP/p3-logs" >> "$GITHUB_ENV"
+
+      # The runner builds one stack per flavour (on, off, preview), runs e2e/p3/observations.spec.ts (its own config) with that flavour's tests, and removes
+      # each stack. The panel-on flavour includes the 300 s browser soak. Playwright's own output directory is deleted by the runner
+      # (failure snapshots can hold form values); only this text log is kept.
+      - name: Browser acceptance
+        run: timeout 4200 python e2e/p3_browser_acceptance.py --root "$P3_ROOT" --soak-seconds 300 2>&1 | tee "$P3_LOGS/browser.log"
+
+      - name: No failure, skip or missing flavour
+        if: ${{ always() }}
+        run: |
+          python infra/scripts/assert_harness_log.py "$P3_LOGS/browser.log" \
+            --require '^on: passed, off: passed, preview: passed$' \
+            --require 'five minutes of streaming' \
+            --require 'T-3: events change no form field'
+
+      - name: Container logs (on failure)
+        if: ${{ failure() || cancelled() }}
+        run: |
+          for c in $(docker ps -a --filter "name=cbdc-p3s-" --format '{{.Names}}'); do
+            docker logs --tail 300 "$c" > "$P3_LOGS/container-$c.log" 2>&1 || true
+          done
+
+      - name: Keep the logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-browser-logs
+          path: ${{ runner.temp }}/p3-logs
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Remove what this run created
+        if: ${{ always() }}
+        run: |
+          for d in "$P3_ROOT"/cbdc-p3s-*; do
+            [ -d "$d" ] || continue
+            python infra/scripts/p3_stack.py down --root "$P3_ROOT" --project "$(basename "$d")" || true
+          done
