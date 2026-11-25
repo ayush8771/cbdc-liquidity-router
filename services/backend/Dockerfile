@@ -40,11 +40,13 @@ FROM build AS test
 COPY scripts ./scripts
 COPY test ./test
 COPY dev-tokens.example.json ./
-# Some tests read ../../../../contracts/fixtures and ../../../../contracts/test-vectors
-# (outside this build context), so only this target takes the repository's contracts/
-# folder as a named context. Neither folder reaches the runtime or migrate images.
+# Some tests read ../../../../contracts/fixtures, ../../../../contracts/test-vectors and
+# ../../../../contracts/events (the P-8 shared event fixtures; outside this build context),
+# so only this target takes the repository's contracts/ folder as a named context. None
+# of these folders reaches the runtime or migrate images.
 COPY --from=contracts fixtures /contracts/fixtures
 COPY --from=contracts test-vectors /contracts/test-vectors
+COPY --from=contracts events /contracts/events
 RUN npm run typecheck && npm test
 
 # ---- prod-deps: production dependencies only (prisma is one; postinstall regenerates the client) ----
