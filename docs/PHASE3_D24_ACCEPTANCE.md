@@ -74,7 +74,7 @@ A listed document that is missing, or an empty UI folder, **fails** the check; i
 - **Baseline:** commit `28da68f`, the merge of PR #14 (Phase 2 integrated, all CI checks passed). It must be an ancestor of the commit under test, so the job clones the full history.
 - **Protected paths:** `src/`, `data/`, `outputs/`, `tests/`, `contracts/fixtures/`, `contracts/test-vectors/`, `contracts/openapi/`, `services/inference/`, the backend `routes`, `mappers` and `inferenceClient` folders, the root Phase 1 `.py` scripts and the requirements files. A modification, deletion or rename there fails. An addition fails unless it is in `AUTHORIZED_ADDITIONS`, which holds one file: `contracts/test-vectors/event_payload_hash.v1.json` (AD-4 §10).
 - **Suites:** the Phase 1 and Phase 2 suites are **not run again**. `regression-gate` waits for the existing workflows on the pull request head commit through the REST API. `tests` (Phase 1, Windows) and `phase2-docker` are required. `phase2-integration` and `phase2-stack` are path-filtered: if they ran they must have passed, and the log states which did not run, so nothing is claimed for them.
-- **Branch protection** should require `guards`, `regression-gate`, `acceptance-stack` and `acceptance-browser`. That is a repository setting and is not made by this change.
+- **Branch protection** requires the single gate check `phase3-acceptance` (§6), not these four jobs one by one: `phase3-observations.yml` is path-filtered, so an unrelated pull request never creates them, and a required check that is never reported blocks the merge for ever.
 
 ## 5. Evidence limitations (what is not shown)
 
@@ -90,3 +90,46 @@ A listed document that is missing, or an empty UI folder, **fails** the check; i
 10. **Runtime estimates in §1 are unmeasured in CI.**
 11. **T-6 hashes cover** the trees named in §2. They do not cover a Docker image digest, a model checkpoint outside `outputs/`, or the PostgreSQL contents (rows are checked by T-1 and T-2).
 12. **The regression gate can only wait for what GitHub reports.** If an existing workflow is renamed, the gate's required list (`infra/scripts/wait_for_workflows.py`) must change with it; a test checks that the names exist.
+
+## 6. The required gate: `phase3-acceptance`
+
+`phase3-observations.yml` is path-filtered, and GitHub creates no check for a workflow that a pull request's files do not trigger. A required check of that kind would stay "Expected" and block every unrelated pull request. The gate is a separate workflow, `.github/workflows/phase3-acceptance-gate.yml`, with **no path filter**, so it always reports one check, `phase3-acceptance`, on pull requests into `feature/phase3-platform` (and on pushes to it).
+
+**What it does** (`infra/scripts/phase3_acceptance_gate.py`):
+- **Not required:** no changed file matches the trusted path list. The check passes at once and says so. An unrelated pull request is never blocked.
+- **Required:** a changed file matches, or anything is uncertain. The `phase3-observations` run of the **same commit** must have concluded `success`, and each of the four acceptance jobs (`guards`, `regression-gate`, `acceptance-stack`, `acceptance-browser`, by exact display name) must have ended `success`. A skipped, failed, cancelled, timed-out or missing job fails the gate. There is no tiering: all four are always required.
+- **Same commit:** only runs named `phase3-observations` whose head SHA equals the pull request head count. The newest run of that commit decides, so an older success never hides a newer run that is still going or has failed, and a run of another commit is ignored.
+- **Fail closed:** an unreadable or malformed path list, an unsupported pattern, a failed `git diff`, a missing or all-zero base commit, a manual run, or a run that never starts (15 minutes of grace) all make acceptance required or fail the gate. Waiting is bounded (below).
+- **Budget:** the longest `needs` chain of `phase3-observations.yml` is `contracts` 15 + `backend-observations` 20 + `acceptance-stack` 90 = 125 minutes. The gate waits at most 125 minutes and its job timeout is 135. A normal run takes about 15 minutes. A test recomputes the chain from the workflow, so a longer job budget cannot silently outgrow the gate. A failed acceptance job ends the wait at once.
+- **Trusted base:** the workflow extracts the script from the pull request's **base** commit and runs that copy. The path list is the base commit's `phase3-observations.yml`. The head's list can only add: if it lost any pattern the base has, acceptance is required (filter tampering), and a change to the gate's own files (`phase3-observations.yml`, the gate workflow, the gate script, its test) always requires acceptance. Only when the base has no copy of the script (the pull request that introduces the gate) does it fall back to the head's copy, with a warning.
+
+**Triggers fixed in the same change.** T-7 protects the root Phase 1 `*.py` scripts and the requirements files, which had no trigger in `phase3-observations.yml`. `*.py` (root only), `requirements.txt`, `requirements-lock.txt` and the gate's own files are now in its path list, and a test checks that every protected path from `e2e/p3_safeguards.py` is covered.
+
+### Branch-protection settings (repository admin; not made by the pull request)
+
+For `feature/phase3-platform` (a branch protection rule, or an equivalent ruleset):
+
+| Setting | Value |
+|---|---|
+| Require a pull request before merging | on, at least 1 approval |
+| Dismiss stale approvals when new commits are pushed | on |
+| Require status checks to pass before merging | on |
+| Required checks (exact names) | `phase3-acceptance`; `pytest` (the Phase 1 job of `tests.yml`); `tracked secret files` and `changed areas` (always reported by `phase2-docker.yml`) |
+| Require branches to be up to date before merging | on |
+| Block force pushes | on |
+| Allow deletions | off |
+| Do not allow bypassing the above settings (applies to administrators) | on |
+
+- **Do not require** `phase2-integration`, `phase2-stack` or any individual `phase3-observations` job: they are path-filtered at the workflow level and would block unrelated pull requests. (The `phase2-docker` image jobs are skipped by a job-level condition, which GitHub treats as passing, but they are not needed here.)
+- **Select the check by its name,** `phase3-acceptance`, and confirm in the settings dialog that the source is the GitHub Actions app. The check appears in the list only after the workflow has run once on the branch, so the first run must precede the rule.
+- **`main`:** add `main` to the gate workflow's `branches` and apply the same rule when Phase 3 is merged there. Nothing about `main` changes now.
+
+### Residual risks
+
+1. **The gate workflow file runs from the pull request head.** GitHub runs a `pull_request` workflow as it is in the head. A pull request can edit `phase3-acceptance-gate.yml` (for example to skip the script) and its own gate run will use that edit. The base copy of the script and path list protects the logic, not the file. What covers it is the required human approval of the pull request, and the fact that the edit is visible in the diff and is itself an acceptance-relevant change. **No `CODEOWNERS` or other governance change is made here.** Whoever approves must read changes under `.github/workflows/` as security-relevant.
+2. **A repository administrator can change the settings or edit the rule.** "Do not allow bypassing" removes the bypass for pushes and merges, not the ability to edit the rule itself.
+3. **The gate trusts GitHub's API for the run and its jobs.** A `phase3-observations` job that passes without testing anything (for example an `acceptance-stack` that returns success early) is a defect in that job, not in the gate. Its log checks (`assert_harness_log.py`) are what guard against this.
+4. **Bootstrap.** The pull request that introduces the gate has no base copy of the script, so the gate runs the head's copy (with a warning). It still treats its own files as acceptance-relevant, so it requires and verifies the `phase3-observations` run of that commit; but the logic that decided is the pull request's own, so that one result is not independently trusted and the pull request is also checked by review and by the other jobs. The gate is not yet a required check when it merges. Checked locally with the gate step's own shell code: with no script at the base the head's copy is used and acceptance is required; with the script at the base, the base copy runs, an unrelated change is "not required", and a head that rewrites the script is not executed.
+5. **Path matching is GitHub's own glob subset.** `*` stays within a path segment and `**` crosses segments; negated patterns (`!`) are rejected and make acceptance required. A file that matches nothing in the list cannot trigger acceptance, so a new protected path must be added to the list (and a test fails when a protected prefix is not covered).
+6. **Pushes to the platform branch are checked too, but a branch protection rule does not apply to a check that arrives after a push.** The pull request check is the control.
+7. **A re-run of a failed run replaces its conclusion.** The newest run of the commit decides, so a re-run that succeeds turns the gate green on the next gate run; the gate itself must be re-run after the acceptance jobs are re-run.
