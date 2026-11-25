@@ -1,0 +1,11 @@
+{
+  "description": "INVALID_REQUEST with status 400.",
+  "valid": true,
+  "status": 400,
+  "instance": {
+    "error": {
+      "code": "INVALID_REQUEST",
+      "message": "Request refused."
+    }
+  }
+}

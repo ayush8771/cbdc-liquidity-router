@@ -1,0 +1,11 @@
+{
+  "description": "INTERNAL_ERROR with status 500.",
+  "valid": true,
+  "status": 500,
+  "instance": {
+    "error": {
+      "code": "INTERNAL_ERROR",
+      "message": "Request refused."
+    }
+  }
+}

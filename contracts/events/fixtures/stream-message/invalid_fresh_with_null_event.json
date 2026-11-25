@@ -1,0 +1,22 @@
+{
+  "description": "A fresh value needs an event.",
+  "valid": false,
+  "reason": "A fresh value needs an event.",
+  "instance": {
+    "protocol_version": "1.0",
+    "type": "update",
+    "stream_seq": 2,
+    "server_time": "2026-11-24T10:00:00.900Z",
+    "source": {
+      "source_id": "synthetic.fx",
+      "status": "ok"
+    },
+    "value": {
+      "base_currency": "EUR",
+      "quote_currency": "USD",
+      "event": null,
+      "age_ms": null,
+      "freshness": "fresh"
+    }
+  }
+}

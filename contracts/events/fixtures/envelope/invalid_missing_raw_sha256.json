@@ -1,0 +1,46 @@
+{
+  "description": "A required field is absent.",
+  "valid": false,
+  "reason": "A required field is absent.",
+  "instance": {
+    "schema_version": "1.0",
+    "event_id": "e9acdb73-7710-5cb5-b9e8-a7e4debd8cc5",
+    "event_type": "fx_rate",
+    "usage": "display_only",
+    "source": {
+      "source_id": "synthetic.fx",
+      "transport": "synthetic",
+      "source_url": null,
+      "gate3_decision_ref": null
+    },
+    "provenance_class": "synthetic",
+    "derived_from": [],
+    "derivation": null,
+    "timestamps": {
+      "source_timestamp": "2026-11-24T10:00:00.000Z",
+      "source_timestamp_basis": "observed",
+      "retrieved_at": "2026-11-24T10:00:00.050Z",
+      "emitted_at": "2026-11-24T10:00:00.060Z"
+    },
+    "source_sequence": "10",
+    "payload": {
+      "base_currency": "USD",
+      "quote_currency": "INR",
+      "rate": "1.2345",
+      "rate_type": "mid"
+    },
+    "payload_sha256": "22fe8747cb6a035235c3ad84c45c5214d271941c784a5a2e4cc0c8c048798ca4",
+    "validation": {
+      "status": "validated",
+      "reasons": []
+    },
+    "extraction": null,
+    "review": null,
+    "supersedes": null,
+    "synthetic": {
+      "generator_version": "0.0.0-fixture",
+      "seed": 1,
+      "case_id": "normal"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "description": "NOT_READY with status 503.",
+  "valid": true,
+  "status": 503,
+  "instance": {
+    "error": {
+      "code": "NOT_READY",
+      "message": "Request refused."
+    }
+  }
+}

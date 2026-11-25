@@ -1,0 +1,55 @@
+{
+  "description": "source_id must be synthetic.fx.",
+  "valid": false,
+  "reason": "source_id must be synthetic.fx.",
+  "instance": {
+    "protocol_version": "1.0",
+    "instance_id": "6f1f6c0e-2f0a-4b6e-8a53-0d6a2d1f3a11",
+    "source_id": "synthetic.other",
+    "generated_at": "2026-11-24T10:00:00.700Z",
+    "events": [
+      {
+        "schema_version": "1.0",
+        "event_id": "c1faa55a-4b3c-5f05-a62e-7b0ccdc2b547",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": "2026-11-24T10:00:00.000Z",
+          "source_timestamp_basis": "observed",
+          "retrieved_at": "2026-11-24T10:00:00.050Z",
+          "emitted_at": "2026-11-24T10:00:00.060Z"
+        },
+        "source_sequence": "20",
+        "payload": {
+          "base_currency": "AED",
+          "quote_currency": "MXN",
+          "rate": "3.4567",
+          "rate_type": "mid"
+        },
+        "payload_sha256": "ce3922182f5da7131d02d783aaba8aa65b16bc6700e9d6fecab4a859911f1118",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      }
+    ]
+  }
+}

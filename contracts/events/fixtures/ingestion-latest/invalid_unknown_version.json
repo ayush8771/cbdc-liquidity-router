@@ -1,0 +1,12 @@
+{
+  "description": "protocol_version 2.0.",
+  "valid": false,
+  "reason": "protocol_version 2.0.",
+  "instance": {
+    "protocol_version": "2.0",
+    "instance_id": "6f1f6c0e-2f0a-4b6e-8a53-0d6a2d1f3a11",
+    "source_id": "synthetic.fx",
+    "generated_at": "2026-11-24T10:00:00.700Z",
+    "events": []
+  }
+}

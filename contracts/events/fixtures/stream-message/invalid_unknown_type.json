@@ -1,0 +1,15 @@
+{
+  "description": "Producer schemas are closed: a client ignores an unknown type, a producer never sends one.",
+  "valid": false,
+  "reason": "Producer schemas are closed: a client ignores an unknown type, a producer never sends one.",
+  "instance": {
+    "protocol_version": "1.0",
+    "type": "digest",
+    "stream_seq": 5,
+    "server_time": "2026-11-24T10:00:00.900Z",
+    "source": {
+      "source_id": "synthetic.fx",
+      "status": "ok"
+    }
+  }
+}

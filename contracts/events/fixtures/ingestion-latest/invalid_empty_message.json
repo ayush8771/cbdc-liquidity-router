@@ -1,0 +1,12 @@
+{
+  "description": "Empty message.",
+  "valid": false,
+  "status": 404,
+  "reason": "message",
+  "instance": {
+    "error": {
+      "code": "NOT_FOUND",
+      "message": ""
+    }
+  }
+}

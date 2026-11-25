@@ -1,0 +1,15 @@
+{
+  "description": "server_time needs exactly three fractional digits.",
+  "valid": false,
+  "reason": "server_time",
+  "instance": {
+    "protocol_version": "1.0",
+    "type": "heartbeat",
+    "stream_seq": 4,
+    "server_time": "2026-11-24T10:00:00Z",
+    "source": {
+      "source_id": "synthetic.fx",
+      "status": "outage"
+    }
+  }
+}

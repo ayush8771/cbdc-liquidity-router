@@ -1,0 +1,11 @@
+{
+  "description": "NOT_FOUND with status 404.",
+  "valid": true,
+  "status": 404,
+  "instance": {
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "Request refused."
+    }
+  }
+}

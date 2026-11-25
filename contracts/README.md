@@ -111,3 +111,17 @@ CI runs it in `.github/workflows/phase2-integration.yml`.
 | C16 | One Phase 1 exception for two date errors | **Resolved (Ayush):** no contract change; implementation note for Dev A. |
 
 New questions raised in the v0.4 reviews are tracked in `docs/PHASE2_API_CONTRACT.md` §10.
+
+## Phase 3 event contracts (`contracts/events/`)
+
+Owner: Dev D (AD4-Q5). Checked by `python infra/scripts/check_event_contracts.py`, separate from `check_contracts.py`. Approved for the D-24 slice only (AD-1 v0.5, AD-4 v0.2).
+
+| Path | What |
+|---|---|
+| `event-envelope.v1.schema.json` | AD-4 envelope (unchanged here) |
+| `ingestion-latest.v1.schema.json` | AD-1 §3.1 (Dev A): `GET /v1/latest` 200 body and error body |
+| `stream-message.v1.schema.json` | AD-1 §3.2: `snapshot`, `update`, `heartbeat` |
+| `../test-vectors/event_payload_hash.v1.json` | P-9 (Dev A): RFC 8785 strings and SHA-256 digests; also checked |
+| `fixtures/<kind>/valid_*.json`, `invalid_*.json` | `{description, valid, reason?, status?, instance}`. The same files serve the TypeScript validator, which must give the same verdict on each. |
+
+Rules a schema cannot express (RFC 8785 hash, real dates, pair order, freshness against age) are in the checker.
