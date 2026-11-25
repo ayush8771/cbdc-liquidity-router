@@ -1,0 +1,70 @@
+# Phase 3 D-24 observations overlay (AD-1 component view v0.5 §3.6; scope v1.4 §2.2.2, D-24, D-25).
+# Optional and local only. It adds the synthetic FX ingestion service and turns the feature on in the backend
+# and the web bundle. infra/compose.yaml is NOT changed: `--profile full` on its own never needs ingestion.
+#
+#   CBDC_ENV_DIR=<dir> docker compose -f infra/compose.yaml -f infra/compose.observations.yaml \
+#       --profile full --profile observations up --build
+#
+# Requires Docker Engine 28.0.0 or newer (isolated gateway mode; see the network below and infra/README.md).
+#
+# Networks (§3.6, P-6):
+#   default        the Phase 2 network: web, backend, inference, postgres. Unchanged.
+#   observations   internal: true (no route out of Docker). Only the backend and ingestion are on it.
+# The backend lists BOTH networks, because naming any network removes the implicit `default`. Ingestion is on
+# `observations` only, so it has no path to inference or PostgreSQL. Express forwards nothing between the two.
+# Residual, accepted in AD-1 §3.6: ingestion can reach the backend's port 4000 (no token, so protected routes
+# return 401). `internal: true` may still leave the host gateway reachable; the runtime test probes it.
+# D-25: the INFERENCE side of AD-6 B-4 is not isolated here. This overlay does not change inference.
+#
+# Off by default: nothing here is read unless this file is passed. Images get separate tags, so building the overlay
+# never replaces cbdc-backend:local or cbdc-web:local. Nothing is published, and no secret, env file or volume is added.
+#
+# Values owned by others, not decided here:
+#   OBSERVATIONS_URL       Dev B's variable (AD-1 §3.5). Express takes an ORIGIN ONLY, as confirmed by Dev B: scheme, host
+#                          and port, no path, with strict hostname and port validation; Express appends /v1/latest itself.
+#                          The host is this overlay's service name and the port is Dev A's CBDC_INGESTION_PORT default.
+#   VITE_OBSERVATIONS      Dev C's web build argument (AD-1 §5 item 3); the web Dockerfile declares it when Dev C lands.
+services:
+  ingestion:
+    profiles: [observations]
+    build:
+      context: ../services/ingestion
+    image: cbdc-ingestion:local
+    environment:
+      CBDC_INGESTION_HOST: 0.0.0.0 # inside the container only; the network is internal and nothing is published
+      CBDC_INGESTION_PORT: "8300"
+    networks: [observations]
+    expose: ["8300"]
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    restart: "no"
+
+  backend:
+    image: cbdc-backend-observations:local
+    environment:
+      OBSERVATIONS_URL: http://ingestion:8300
+    networks: [default, observations]
+
+  web:
+    build:
+      args:
+        VITE_OBSERVATIONS: "on"
+    image: cbdc-web-observations:local
+
+networks:
+  observations:
+    internal: true
+    # `internal: true` alone leaves the bridge's gateway address reachable from inside the network: the T-5 probe found a
+    # host listener reachable through it (AD-1 §3.6 anticipated this). Isolated gateway mode gives the bridge no address, so
+    # there is no host-facing gateway to reach; containers on the network still reach each other. Needs Docker Engine
+    # 28.0.0 or newer (the release that accepts "isolated", on an internal network only); on an older engine the network
+    # fails to create, which is the safe failure.
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+    # IPv6 stays off, stated here so that it is a decision and not a default. Isolation is verified for IPv4 only.
+    enable_ipv6: false

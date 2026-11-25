@@ -189,3 +189,20 @@ Run from the repository root. `docker build` did not hit the Windows Buildx erro
   - `services/backend/README.md` says the repository has no `.nvmrc`; it now has one (`20.20.2`).
 
 Python tooling and the contract checker: see `contracts/README.md`, section "Validate".
+
+## Phase 3 observations overlay (optional, D-24 only)
+
+`infra/compose.observations.yaml` adds the synthetic FX ingestion service and turns the observation feature on. It is optional, local only and off by default: `compose.yaml` and `--profile full` on their own are unchanged and never start ingestion. Design: `docs/PHASE3_AD1_COMPONENT_VIEW.md` §3.6.
+
+```powershell
+$env:CBDC_ENV_DIR = "<dir>"   # the same env files as above
+docker compose -f infra/compose.yaml -f infra/compose.observations.yaml --profile full --profile observations up --build
+```
+
+- **Docker Engine 28.0.0 or newer is required.** The `observations` network uses `com.docker.network.bridge.gateway_mode_ipv4: isolated`, which Docker accepts from Engine 28.0.0 and only on an `internal` network. An isolated internal network has no address on the host, so ingestion cannot reach host services through the bridge gateway. `internal: true` alone does not give that: the isolation probe reached a host listener through the gateway. On an older engine the network fails to create, which is the safe failure. GitHub's `ubuntu-24.04` image lists Docker 28.0.4 at the time of writing. Check yours with `docker version --format '{{.Server.Version}}'`.
+- **IPv6 is disabled** on that network (`enable_ipv6: false`, and the network has one IPv4 subnet). Isolation was verified for IPv4 only; the CI job fails if the container has any IPv6 address, so enabling IPv6 would need an explicit decision and its own checks.
+- Ingestion is on the `observations` network only. The backend is on both networks and forwards nothing between them. No port is published, and ingestion gets no env file, secret or volume.
+- The overlay builds separately tagged images (`cbdc-backend-observations:local`, `cbdc-web-observations:local`, `cbdc-ingestion:local`) so it never replaces the default `cbdc-*:local` images.
+- `OBSERVATIONS_URL` is an origin only (`http://ingestion:8300`); Express appends `/v1/latest`.
+- AD-6 B-4 stays open: the inference side is not isolated by this overlay (D-25, D-24 slice only; closed by AD-10).
+- The checks are in `.github/workflows/phase3-observations.yml`; the Nginx stub under `infra/testing/` is test-only and is in no image.

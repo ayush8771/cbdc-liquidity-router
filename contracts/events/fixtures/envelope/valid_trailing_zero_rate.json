@@ -1,0 +1,46 @@
+{
+  "description": "Trailing zeros in a rate are part of the hashed string.",
+  "valid": true,
+  "instance": {
+    "schema_version": "1.0",
+    "event_id": "5f18a3d3-690c-5955-8019-34f1e535eae0",
+    "event_type": "fx_rate",
+    "usage": "display_only",
+    "source": {
+      "source_id": "synthetic.fx",
+      "transport": "synthetic",
+      "source_url": null,
+      "gate3_decision_ref": null
+    },
+    "provenance_class": "synthetic",
+    "derived_from": [],
+    "derivation": null,
+    "timestamps": {
+      "source_timestamp": "2026-11-24T10:00:00.000Z",
+      "source_timestamp_basis": "observed",
+      "retrieved_at": "2026-11-24T10:00:00.050Z",
+      "emitted_at": "2026-11-24T10:00:00.060Z"
+    },
+    "source_sequence": "4",
+    "payload": {
+      "base_currency": "GBP",
+      "quote_currency": "PHP",
+      "rate": "71.2300",
+      "rate_type": "mid"
+    },
+    "payload_sha256": "6f02a50828ae98f7a9d0c36f518ef150caf92b83843dff9ad827fdc6327ebb45",
+    "raw_sha256": null,
+    "validation": {
+      "status": "validated",
+      "reasons": []
+    },
+    "extraction": null,
+    "review": null,
+    "supersedes": null,
+    "synthetic": {
+      "generator_version": "0.0.0-fixture",
+      "seed": 1,
+      "case_id": "normal"
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "description": "A heartbeat carries no extra field.",
+  "valid": false,
+  "reason": "A heartbeat carries no extra field.",
+  "instance": {
+    "protocol_version": "1.0",
+    "type": "heartbeat",
+    "stream_seq": 4,
+    "server_time": "2026-11-24T10:00:00.900Z",
+    "source": {
+      "source_id": "synthetic.fx",
+      "status": "ok"
+    },
+    "value": {
+      "base_currency": "AED",
+      "quote_currency": "MXN",
+      "event": {
+        "schema_version": "1.0",
+        "event_id": "9ee0ce2c-3351-5c2d-8d11-8864e6cc010f",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": "2026-11-24T10:00:00.000Z",
+          "source_timestamp_basis": "observed",
+          "retrieved_at": "2026-11-24T10:00:00.050Z",
+          "emitted_at": "2026-11-24T10:00:00.060Z"
+        },
+        "source_sequence": "40",
+        "payload": {
+          "base_currency": "AED",
+          "quote_currency": "MXN",
+          "rate": "3.4567",
+          "rate_type": "mid"
+        },
+        "payload_sha256": "ce3922182f5da7131d02d783aaba8aa65b16bc6700e9d6fecab4a859911f1118",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      },
+      "age_ms": 1,
+      "freshness": "fresh"
+    }
+  }
+}

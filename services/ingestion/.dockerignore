@@ -1,0 +1,5 @@
+# Allow-list: only the package enters the build context.
+*
+!cbdc_ingestion/
+**/__pycache__
+**/*.pyc

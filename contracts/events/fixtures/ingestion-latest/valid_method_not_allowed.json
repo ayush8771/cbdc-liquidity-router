@@ -1,0 +1,11 @@
+{
+  "description": "METHOD_NOT_ALLOWED with status 405.",
+  "valid": true,
+  "status": 405,
+  "instance": {
+    "error": {
+      "code": "METHOD_NOT_ALLOWED",
+      "message": "Request refused."
+    }
+  }
+}

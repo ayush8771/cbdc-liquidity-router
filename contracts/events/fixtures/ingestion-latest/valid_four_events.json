@@ -1,0 +1,180 @@
+{
+  "description": "All four pairs, sorted by base then quote.",
+  "valid": true,
+  "instance": {
+    "protocol_version": "1.0",
+    "instance_id": "6f1f6c0e-2f0a-4b6e-8a53-0d6a2d1f3a11",
+    "source_id": "synthetic.fx",
+    "generated_at": "2026-11-24T10:00:00.700Z",
+    "events": [
+      {
+        "schema_version": "1.0",
+        "event_id": "c1faa55a-4b3c-5f05-a62e-7b0ccdc2b547",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": "2026-11-24T10:00:00.000Z",
+          "source_timestamp_basis": "observed",
+          "retrieved_at": "2026-11-24T10:00:00.050Z",
+          "emitted_at": "2026-11-24T10:00:00.060Z"
+        },
+        "source_sequence": "20",
+        "payload": {
+          "base_currency": "AED",
+          "quote_currency": "MXN",
+          "rate": "3.4567",
+          "rate_type": "mid"
+        },
+        "payload_sha256": "ce3922182f5da7131d02d783aaba8aa65b16bc6700e9d6fecab4a859911f1118",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      },
+      {
+        "schema_version": "1.0",
+        "event_id": "aa1c1174-fc97-5f7c-9d73-2f62b0390e9b",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": "2026-11-24T10:00:00.100Z",
+          "source_timestamp_basis": "observed",
+          "retrieved_at": "2026-11-24T10:00:00.150Z",
+          "emitted_at": "2026-11-24T10:00:00.160Z"
+        },
+        "source_sequence": "21",
+        "payload": {
+          "base_currency": "EUR",
+          "quote_currency": "USD",
+          "rate": "0.9876",
+          "rate_type": "mid"
+        },
+        "payload_sha256": "d687f1640b8d8dfd04c95fd7f0ddff266275fe8a9749e3fbc42e1afd42d48233",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      },
+      {
+        "schema_version": "1.0",
+        "event_id": "f46ea067-2085-5247-8217-aaa0ff02d34a",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": "2026-11-24T10:00:00.200Z",
+          "source_timestamp_basis": "observed",
+          "retrieved_at": "2026-11-24T10:00:00.250Z",
+          "emitted_at": "2026-11-24T10:00:00.260Z"
+        },
+        "source_sequence": "22",
+        "payload": {
+          "base_currency": "GBP",
+          "quote_currency": "PHP",
+          "rate": "71.2300",
+          "rate_type": "mid"
+        },
+        "payload_sha256": "6f02a50828ae98f7a9d0c36f518ef150caf92b83843dff9ad827fdc6327ebb45",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      },
+      {
+        "schema_version": "1.0",
+        "event_id": "905dbdea-9ce6-5aba-bd18-ea3ce7c90dc9",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": "2026-11-24T10:00:00.300Z",
+          "source_timestamp_basis": "observed",
+          "retrieved_at": "2026-11-24T10:00:00.350Z",
+          "emitted_at": "2026-11-24T10:00:00.360Z"
+        },
+        "source_sequence": "23",
+        "payload": {
+          "base_currency": "USD",
+          "quote_currency": "INR",
+          "rate": "1.2345",
+          "rate_type": "mid"
+        },
+        "payload_sha256": "22fe8747cb6a035235c3ad84c45c5214d271941c784a5a2e4cc0c8c048798ca4",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      }
+    ]
+  }
+}

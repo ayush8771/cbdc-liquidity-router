@@ -1,0 +1,64 @@
+{
+  "description": "Closed schema.",
+  "valid": false,
+  "reason": "Closed schema.",
+  "instance": {
+    "protocol_version": "1.0",
+    "type": "update",
+    "stream_seq": 2,
+    "server_time": "2026-11-24T10:00:00.900Z",
+    "source": {
+      "source_id": "synthetic.fx",
+      "status": "ok"
+    },
+    "value": {
+      "base_currency": "EUR",
+      "quote_currency": "USD",
+      "event": {
+        "schema_version": "1.0",
+        "event_id": "5d68a1ab-34c8-5828-9b3b-d32e4c5b3631",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": "2026-11-24T10:00:00.000Z",
+          "source_timestamp_basis": "observed",
+          "retrieved_at": "2026-11-24T10:00:00.050Z",
+          "emitted_at": "2026-11-24T10:00:00.060Z"
+        },
+        "source_sequence": "41",
+        "payload": {
+          "base_currency": "EUR",
+          "quote_currency": "USD",
+          "rate": "0.9876",
+          "rate_type": "mid"
+        },
+        "payload_sha256": "d687f1640b8d8dfd04c95fd7f0ddff266275fe8a9749e3fbc42e1afd42d48233",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      },
+      "age_ms": 0,
+      "freshness": "fresh"
+    },
+    "note": "x"
+  }
+}

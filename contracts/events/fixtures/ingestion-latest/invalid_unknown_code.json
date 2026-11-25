@@ -1,0 +1,12 @@
+{
+  "description": "Unknown code.",
+  "valid": false,
+  "status": 418,
+  "reason": "code",
+  "instance": {
+    "error": {
+      "code": "TEAPOT",
+      "message": "x"
+    }
+  }
+}

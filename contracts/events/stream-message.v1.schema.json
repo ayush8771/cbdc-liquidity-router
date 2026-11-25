@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cbdc-liquidity-router:observations-stream-message:v1",
+  "$comment": "AD-1 v0.5 section 3.2: one data: payload of GET /api/rt/v1/observations/stream. Closed, as a producer schema; a client ignores unknown fields and types at run time (section 3.3.3). The pair order, the profile ordering and freshness against age are checked by infra/scripts/check_event_contracts.py.",
+  "title": "Observation stream message",
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/snapshot"
+    },
+    {
+      "$ref": "#/$defs/update"
+    },
+    {
+      "$ref": "#/$defs/heartbeat"
+    }
+  ],
+  "$defs": {
+    "pos_int": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_interval_ms",
+        "live_max_age_ms",
+        "stale_after_ms",
+        "unavailable_after_ms",
+        "clock_tolerance_ms"
+      ],
+      "properties": {
+        "expected_interval_ms": {
+          "$ref": "#/$defs/pos_int"
+        },
+        "live_max_age_ms": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/pos_int"
+            }
+          ]
+        },
+        "stale_after_ms": {
+          "$ref": "#/$defs/pos_int"
+        },
+        "unavailable_after_ms": {
+          "$ref": "#/$defs/pos_int"
+        },
+        "clock_tolerance_ms": {
+          "$ref": "#/$defs/pos_int"
+        }
+      }
+    },
+    "value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_currency",
+        "quote_currency",
+        "event",
+        "age_ms",
+        "freshness"
+      ],
+      "properties": {
+        "base_currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "quote_currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "event": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:cbdc-liquidity-router:event-envelope:v1"
+            }
+          ]
+        },
+        "age_ms": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          ]
+        },
+        "freshness": {
+          "enum": [
+            "fresh",
+            "stale",
+            "unavailable"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "freshness": {
+            "const": "unavailable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event": {
+            "type": "null"
+          },
+          "age_ms": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "event": {
+            "type": "object"
+          },
+          "age_ms": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "type",
+        "stream_seq",
+        "server_time",
+        "source",
+        "profile",
+        "values"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "1.0"
+        },
+        "type": {
+          "const": "snapshot"
+        },
+        "stream_seq": {
+          "$ref": "#/$defs/stream_seq"
+        },
+        "server_time": {
+          "$ref": "#/$defs/server_time"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        },
+        "values": {
+          "type": "array",
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/value"
+                },
+                {
+                  "properties": {
+                    "base_currency": {
+                      "const": "AED"
+                    },
+                    "quote_currency": {
+                      "const": "MXN"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/value"
+                },
+                {
+                  "properties": {
+                    "base_currency": {
+                      "const": "EUR"
+                    },
+                    "quote_currency": {
+                      "const": "USD"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/value"
+                },
+                {
+                  "properties": {
+                    "base_currency": {
+                      "const": "GBP"
+                    },
+                    "quote_currency": {
+                      "const": "PHP"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/value"
+                },
+                {
+                  "properties": {
+                    "base_currency": {
+                      "const": "USD"
+                    },
+                    "quote_currency": {
+                      "const": "INR"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "update": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "type",
+        "stream_seq",
+        "server_time",
+        "source",
+        "value"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "1.0"
+        },
+        "type": {
+          "const": "update"
+        },
+        "stream_seq": {
+          "$ref": "#/$defs/stream_seq"
+        },
+        "server_time": {
+          "$ref": "#/$defs/server_time"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "value": {
+          "$ref": "#/$defs/value"
+        }
+      }
+    },
+    "heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "type",
+        "stream_seq",
+        "server_time",
+        "source"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "1.0"
+        },
+        "type": {
+          "const": "heartbeat"
+        },
+        "stream_seq": {
+          "$ref": "#/$defs/stream_seq"
+        },
+        "server_time": {
+          "$ref": "#/$defs/server_time"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        }
+      }
+    },
+    "stream_seq": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "server_time": {
+      "$ref": "urn:cbdc-liquidity-router:event-envelope:v1#/$defs/timestamp"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "status"
+      ],
+      "properties": {
+        "source_id": {
+          "const": "synthetic.fx"
+        },
+        "status": {
+          "enum": [
+            "starting",
+            "ok",
+            "outage"
+          ]
+        }
+      }
+    }
+  }
+}

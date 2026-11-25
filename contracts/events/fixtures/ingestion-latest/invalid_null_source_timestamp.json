@@ -1,0 +1,55 @@
+{
+  "description": "The slice rejects an event with no source timestamp.",
+  "valid": false,
+  "reason": "The slice rejects an event with no source timestamp.",
+  "instance": {
+    "protocol_version": "1.0",
+    "instance_id": "6f1f6c0e-2f0a-4b6e-8a53-0d6a2d1f3a11",
+    "source_id": "synthetic.fx",
+    "generated_at": "2026-11-24T10:00:00.700Z",
+    "events": [
+      {
+        "schema_version": "1.0",
+        "event_id": "e68f0e6d-e415-5689-a534-c39ae1c77a19",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": null,
+          "source_timestamp_basis": "none",
+          "retrieved_at": "2026-11-24T10:00:00.050Z",
+          "emitted_at": "2026-11-24T10:00:00.060Z"
+        },
+        "source_sequence": "3",
+        "payload": {
+          "base_currency": "USD",
+          "quote_currency": "INR",
+          "rate": "1.2345",
+          "rate_type": "mid"
+        },
+        "payload_sha256": "22fe8747cb6a035235c3ad84c45c5214d271941c784a5a2e4cc0c8c048798ca4",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      }
+    ]
+  }
+}

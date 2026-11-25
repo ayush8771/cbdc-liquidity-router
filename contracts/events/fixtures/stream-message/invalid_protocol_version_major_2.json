@@ -1,0 +1,15 @@
+{
+  "description": "protocol_version 2.0: a producer of this contract never sends it; a client stops on an unknown major version.",
+  "valid": false,
+  "reason": "protocol_version",
+  "instance": {
+    "protocol_version": "2.0",
+    "type": "heartbeat",
+    "stream_seq": 4,
+    "server_time": "2026-11-24T10:00:00.900Z",
+    "source": {
+      "source_id": "synthetic.fx",
+      "status": "outage"
+    }
+  }
+}

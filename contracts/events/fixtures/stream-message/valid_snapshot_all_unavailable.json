@@ -1,0 +1,51 @@
+{
+  "description": "First message with no value yet, source starting.",
+  "valid": true,
+  "instance": {
+    "protocol_version": "1.0",
+    "type": "snapshot",
+    "stream_seq": 1,
+    "server_time": "2026-11-24T10:00:00.900Z",
+    "source": {
+      "source_id": "synthetic.fx",
+      "status": "starting"
+    },
+    "profile": {
+      "expected_interval_ms": 2000,
+      "live_max_age_ms": null,
+      "stale_after_ms": 6000,
+      "unavailable_after_ms": 30000,
+      "clock_tolerance_ms": 1000
+    },
+    "values": [
+      {
+        "base_currency": "AED",
+        "quote_currency": "MXN",
+        "event": null,
+        "age_ms": null,
+        "freshness": "unavailable"
+      },
+      {
+        "base_currency": "EUR",
+        "quote_currency": "USD",
+        "event": null,
+        "age_ms": null,
+        "freshness": "unavailable"
+      },
+      {
+        "base_currency": "GBP",
+        "quote_currency": "PHP",
+        "event": null,
+        "age_ms": null,
+        "freshness": "unavailable"
+      },
+      {
+        "base_currency": "USD",
+        "quote_currency": "INR",
+        "event": null,
+        "age_ms": null,
+        "freshness": "unavailable"
+      }
+    ]
+  }
+}

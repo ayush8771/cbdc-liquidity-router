@@ -1,0 +1,47 @@
+{
+  "description": "FX base and quote are equal.",
+  "valid": false,
+  "reason": "FX base and quote are equal.",
+  "instance": {
+    "schema_version": "1.0",
+    "event_id": "e9acdb73-7710-5cb5-b9e8-a7e4debd8cc5",
+    "event_type": "fx_rate",
+    "usage": "display_only",
+    "source": {
+      "source_id": "synthetic.fx",
+      "transport": "synthetic",
+      "source_url": null,
+      "gate3_decision_ref": null
+    },
+    "provenance_class": "synthetic",
+    "derived_from": [],
+    "derivation": null,
+    "timestamps": {
+      "source_timestamp": "2026-11-24T10:00:00.000Z",
+      "source_timestamp_basis": "observed",
+      "retrieved_at": "2026-11-24T10:00:00.050Z",
+      "emitted_at": "2026-11-24T10:00:00.060Z"
+    },
+    "source_sequence": "10",
+    "payload": {
+      "base_currency": "USD",
+      "quote_currency": "USD",
+      "rate": "1.2345",
+      "rate_type": "mid"
+    },
+    "payload_sha256": "3ecbd30e8f6468c5a40d7e3e134adfcb198a103a0b4d3ff85c8b89df04365fcd",
+    "raw_sha256": null,
+    "validation": {
+      "status": "validated",
+      "reasons": []
+    },
+    "extraction": null,
+    "review": null,
+    "supersedes": null,
+    "synthetic": {
+      "generator_version": "0.0.0-fixture",
+      "seed": 1,
+      "case_id": "normal"
+    }
+  }
+}

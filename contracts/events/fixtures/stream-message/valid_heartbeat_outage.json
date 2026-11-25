@@ -1,0 +1,14 @@
+{
+  "description": "Heartbeat sent at once on a status change.",
+  "valid": true,
+  "instance": {
+    "protocol_version": "1.0",
+    "type": "heartbeat",
+    "stream_seq": 4,
+    "server_time": "2026-11-24T10:00:00.900Z",
+    "source": {
+      "source_id": "synthetic.fx",
+      "status": "outage"
+    }
+  }
+}

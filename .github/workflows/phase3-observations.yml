@@ -1,0 +1,514 @@
+name: phase3-observations
+
+# Dev D (AD-1 component view v0.5 section 3.7, P-10; scope v1.4, D-24). Focused checks for the D-24 synthetic
+# observations slice. It runs next to the phase2-* workflows and changes none of them: it adds checks, and removes
+# or relaxes none.
+#
+# What it runs (Linux, ubuntu-24.04, Docker available):
+#   contracts           contracts/events schemas, fixtures and the P-9 hash vectors; the AD-6 B-3 import rules
+#                       (with deliberate violations that must fail); the checkers' own tests.
+#   ingestion-unit      Dev A's ingestion test suite, with its two optional cross-checks installed.
+#   compose-invariants  the merged Compose configuration, with CBDC_REQUIRE_DOCKER=1 so that a missing docker CLI fails
+#                       instead of skipping (infra/scripts/tests/test_compose_observations.py).
+#   web-observations    Dev C's observation panel (PR #16): lint with the AD-6 B-8 import rules, type check, the observation
+#                       vitest suite with a no-skip check, and a production build with VITE_OBSERVATIONS=on. It does not
+#                       repeat the Phase 2 web tests (phase2-docker.yml). Needs services/web from PR #16.
+#   backend-observations  Dev B's observation module (PR #17): typecheck and the observation node:test files (the same runner
+#                       as `npm test`, tsx, Node from .nvmrc) with a no-skip check; then the frames the REAL stream hub writes
+#                       (infra/testing/observations/dump_frames.ts) are checked against the stream-message schema and its
+#                       semantic rules (check_event_contracts.py --frames, P-8). Needs the `contracts` job first.
+#   nginx-sse           P-7: the repository's nginx.conf.template, in the pinned Nginx image of services/web/Dockerfile, in
+#                       front of a TEST-ONLY stub backend (infra/testing/nginx_sse/, in no image): immediate snapshot,
+#                       unbatched updates, a quiet stream past 60 s, client abort, 401/429/503/405 and header
+#                       passthrough, 502 and recovery on a new address. Each check has a positive or negative control.
+#                       It needs nothing from PR #15 or from Dev B and Dev C.
+#   runtime             builds the ingestion image, starts ONLY that service from the overlay, and checks its isolation
+#                       (AD-6 T-5, ingestion side only: D-25) and that its real /v1/latest body conforms.
+# Every pytest step writes a JUnit report that infra/scripts/assert_junit_no_skips.py checks: a mandatory test that
+# is skipped, errored or never ran fails the job.
+#
+# NOT here yet, and deliberately not represented as a job, so nothing reports green for work that does not exist:
+#   the same Nginx checks against Dev B's real stream, the client-side 401/429/reconnect/stale-state checks, the
+#   fault-injection fake ingestion server (Dev B), AD-6 T-1/T-2/T-3/T-6 to T-8/T-10 against a running stack, the browser
+#   tests (Dev C), and the TypeScript tests that run the shared contracts/events fixtures (Dev B and Dev C follow-ups, not yet
+#   landed; they are added to the backend-observations and web-observations jobs when they do). The inference side of
+#   T-5 is excepted for D-24 (D-25) and is neither run nor claimed.
+#
+# Dependencies on other branches: the checks need Dev A's ingestion component (PR #15: services/ingestion/,
+# contracts/events/ingestion-latest.v1.schema.json, contracts/test-vectors/event_payload_hash.v1.json) and Dev C's
+# observation panel (PR #16: services/web/src/features/observations/, test/observations/, the Dockerfile ARG). On a
+# branch without them the contracts, ingestion-unit, runtime and web-observations jobs FAIL, by design: they must not
+# pass for code that is not there.
+#
+# No GitHub secret is used. The disposable database password and token file are generated per run in RUNNER_TEMP, and
+# the runtime job starts only the ingestion service, which reads none of them. Nothing from the pull request (branch
+# name, title, file names) is placed in a shell command; only the default GITHUB_* run variables are used.
+on:
+  push:
+    branches: [main, feature/phase3-platform]
+    paths:
+      - ".github/workflows/phase3-observations.yml"
+      - "services/ingestion/**"
+      - "services/backend/**"
+      - "services/web/**"
+      - "infra/compose.observations.yaml"
+      - "infra/compose.yaml"
+      - "infra/scripts/**"
+      - "infra/testing/**"
+      - "contracts/events/**"
+      - "contracts/test-vectors/**"
+  pull_request:
+    paths:
+      - ".github/workflows/phase3-observations.yml"
+      - "services/ingestion/**"
+      - "services/backend/**"
+      - "services/web/**"
+      - "infra/compose.observations.yaml"
+      - "infra/compose.yaml"
+      - "infra/scripts/**"
+      - "infra/testing/**"
+      - "contracts/events/**"
+      - "contracts/test-vectors/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase3-observations-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  contracts:
+    name: contracts, hash vectors and import rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # ubuntu-24.04, not ubuntu-latest: ubuntu-latest has no Python 3.10.11 build for setup-python (see phase2-integration).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          cache: pip
+          cache-dependency-path: infra/scripts/requirements.txt
+
+      - name: Install tooling
+        run: |
+          python -m pip install -r infra/scripts/requirements.txt
+          python -m pip check
+
+      - name: Event schemas, fixtures and hash vectors (P-8, P-9)
+        run: python infra/scripts/check_event_contracts.py
+
+      # --require-observation-module: a tree without services/backend/src/observations FAILS instead of skipping the
+      # observation-to-routing direction. Merge order: PR #17 (backend module) before this workflow.
+      - name: AD-6 B-3 import rules
+        run: python infra/scripts/check_import_boundaries.py --require-observation-module
+
+      - name: Test the checkers
+        run: |
+          python -m pytest -q -p no:cacheprovider --junitxml="$RUNNER_TEMP/p3-contracts.xml" \
+            infra/scripts/tests/test_check_event_contracts.py \
+            infra/scripts/tests/test_check_import_boundaries.py \
+            infra/scripts/tests/test_assert_junit_no_skips.py \
+            infra/scripts/tests/test_probe_scripts.py \
+            infra/scripts/tests/test_nginx_sse_harness.py \
+            infra/scripts/tests/test_phase3_workflow.py
+
+      - name: No skipped test
+        run: python infra/scripts/assert_junit_no_skips.py "$RUNNER_TEMP/p3-contracts.xml"
+
+  ingestion-unit:
+    name: ingestion unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+
+      # The suite needs pytest 9 (services/ingestion/pyproject.toml); the infra tooling pins pytest 8, so this job has
+      # its own environment. rfc8785 and jsonschema are the two cross-checks that the suite skips when absent. They are
+      # installed here so that they run, and the no-skip step below fails if they do not. Versions match
+      # infra/scripts/requirements.txt.
+      - name: Install test tooling
+        run: |
+          python -m pip install pytest==9.1.1 rfc8785==0.1.4 jsonschema==4.23.0 referencing==0.36.2 \
+            attrs==26.1.0 rpds-py==0.30.0 jsonschema-specifications==2025.9.1 typing_extensions==4.16.0
+          python -m pip check
+
+      - name: Ingestion tests
+        working-directory: services/ingestion
+        run: python -m pytest -q -p no:cacheprovider --junitxml="$RUNNER_TEMP/p3-ingestion.xml"
+
+      - name: No skipped test
+        run: python infra/scripts/assert_junit_no_skips.py "$RUNNER_TEMP/p3-ingestion.xml"
+
+  compose-invariants:
+    name: merged Compose invariants
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          cache: pip
+          cache-dependency-path: infra/scripts/requirements.txt
+
+      - name: Install tooling
+        run: |
+          python -m pip install -r infra/scripts/requirements.txt
+          python -m pip check
+          docker compose version
+
+      # CBDC_REQUIRE_DOCKER=1: a missing docker CLI fails the merged-config tests instead of skipping them.
+      - name: Compose invariants, default stack and overlay
+        env:
+          CBDC_REQUIRE_DOCKER: "1"
+        run: |
+          python -m pytest -q -p no:cacheprovider --junitxml="$RUNNER_TEMP/p3-compose.xml" \
+            infra/scripts/tests/test_compose.py \
+            infra/scripts/tests/test_compose_observations.py
+
+      - name: No skipped test
+        run: python infra/scripts/assert_junit_no_skips.py "$RUNNER_TEMP/p3-compose.xml"
+
+  backend-observations:
+    name: backend observation module (types, tests, real stream frames vs schema)
+    needs: [contracts]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Node from .nvmrc (20.20.2): the backend package pins >=20.6.0 <21 and its Dockerfile uses the same version.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: services/backend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          cache: pip
+          cache-dependency-path: infra/scripts/requirements.txt
+
+      - name: Install (lockfiles only)
+        run: |
+          (cd services/backend && npm ci)
+          python -m pip install -r infra/scripts/requirements.txt
+          python -m pip check
+
+      - name: Type check
+        working-directory: services/backend
+        run: npm run typecheck
+
+      # The observation test files only (the Phase 2 backend tests run in phase2-docker.yml and are not repeated). The glob is
+      # expanded by bash; when it matches nothing node fails on the literal name, so an empty run cannot pass.
+      # Same runner as `npm test` (scripts/run-tests.mjs): node --import tsx --test. JUnit feeds the no-skip check.
+      - name: Observation tests
+        working-directory: services/backend
+        run: |
+          node --import tsx --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=junit --test-reporter-destination="$RUNNER_TEMP/p3-backend.xml" \
+            test/unit/observation*.test.ts
+
+      - name: No skipped test
+        run: python infra/scripts/assert_junit_no_skips.py "$RUNNER_TEMP/p3-backend.xml"
+
+      # The real createObservationStore and createStreamHub write the frames; the shared checker judges them. Nothing is
+      # relaxed: the same schema and semantic rules as the fixtures, plus type = SSE event name and stream_seq 1, 2, 3.
+      - name: Real stream frames conform to the stream-message schema (P-8)
+        run: |
+          (cd services/backend && node --import tsx ../../infra/testing/observations/dump_frames.ts "$RUNNER_TEMP/frames.json")
+          python infra/scripts/check_event_contracts.py --frames "$RUNNER_TEMP/frames.json"
+
+  web-observations:
+    name: web observation panel (lint, types, tests, build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: services/web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Node from .nvmrc (20.20.2), as phase2-integration does; the web package accepts ^20.19.0 || ^22.13.0.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: services/web/package-lock.json
+
+      - name: Install (lockfile only)
+        run: npm ci
+
+      # eslint also enforces the AD-6 B-8 import rules for the observation folder (see test/observations/isolation.test.ts).
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      # Only the observation tests: the Phase 2 web tests run in phase2-docker.yml (the Docker test stage) and are not repeated.
+      # The JUnit report feeds the no-skip check, so a skipped or empty test run fails.
+      - name: Observation tests
+        run: npx vitest run test/observations --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/p3-web.xml"
+
+      - name: No skipped test
+        working-directory: .
+        run: python3 infra/scripts/assert_junit_no_skips.py "$RUNNER_TEMP/p3-web.xml"
+
+      # The overlay builds the web image with VITE_OBSERVATIONS=on (services/web/Dockerfile ARG). The same production build,
+      # run here, must succeed and must contain the stream client. The flag is read at run time, so a build with the flag off
+      # contains the same code and cannot serve as a negative control: the flag-off behaviour is tested in panel.test.tsx.
+      - name: Production build with the flag on contains the stream client
+        env:
+          VITE_OBSERVATIONS: "on"
+        run: |
+          set -euo pipefail
+          npm run build
+          grep -rlF "/api/rt/v1/observations/stream" dist/assets > /dev/null || { echo "::error::the built bundle does not contain the stream client"; exit 1; }
+
+  nginx-sse:
+    name: Nginx streaming through the published port (P-7)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+
+      - name: Name this run's resources
+        run: echo "P3_PROJECT=cbdc-p3n-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+
+      # The script prints PASS or FAIL per check and exits 1 on any FAIL. `timeout` bounds the whole run; every socket and
+      # docker call inside it has its own deadline (about 4 minutes in all, most of it the 72 s quiet-stream check).
+      - name: Nginx streaming checks
+        run: timeout 900 python infra/testing/nginx_sse/run_checks.py
+
+      # The script removes what it created; this is the safety net if it was killed. Only names containing this run's project.
+      - name: Remove what this run created
+        if: always()
+        run: |
+          docker rm -f "${P3_PROJECT}-nginx" "${P3_PROJECT}-nginx-stub" "${P3_PROJECT}-nginx-filler" > /dev/null 2>&1 || true
+          docker network rm "${P3_PROJECT}_nginx" > /dev/null 2>&1 || true
+
+  runtime:
+    name: ingestion runtime isolation (T-5, ingestion side)
+    needs: [contracts, ingestion-unit, compose-invariants]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      COMPOSE_FILES: -f infra/compose.yaml -f infra/compose.observations.yaml
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          cache: pip
+          cache-dependency-path: infra/scripts/requirements.txt
+
+      - name: Install tooling
+        run: python -m pip install -r infra/scripts/requirements.txt
+
+      # Compose resolves every service in the base file, so it needs the env files even though only ingestion starts.
+      # They hold a disposable password and no token; the ingestion container is given none of them.
+      - name: Generate disposable env files
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/cbdc-p3-env"
+          mkdir -p "$d"
+          pw="$(openssl rand -hex 16)"
+          echo "::add-mask::$pw"
+          for n in postgres backend inference; do
+            sed "s/CHANGE_ME_LOCAL_ONLY/$pw/g" "infra/env/$n.env.example" > "$d/$n.env"
+          done
+          echo '{"users":[]}' > "$d/dev-tokens.json"
+          echo "CBDC_ENV_DIR=$d" >> "$GITHUB_ENV"
+          echo "CBDC_DEV_TOKENS_FILE=$d/dev-tokens.json" >> "$GITHUB_ENV"
+          echo "P3_PROJECT=cbdc-p3-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+
+      # Plain docker build under the overlay's tag, then `up --no-build`, as phase2-stack does.
+      - name: Build the ingestion image
+        run: docker build -t cbdc-ingestion:local services/ingestion
+
+      - name: Start only the ingestion service
+        run: |
+          set -euo pipefail
+          # Isolated gateway mode needs Docker Engine 28.0.0 or newer (infra/README.md). Say so plainly instead of failing later.
+          engine="$(docker version --format '{{.Server.Version}}')"
+          echo "docker engine $engine"
+          [ "$(printf '%s\n28.0.0\n' "$engine" | sort -V | head -n1)" = "28.0.0" ] \
+            || { echo "::error::Docker Engine $engine is older than 28.0.0, which the overlay's isolated gateway mode needs"; exit 1; }
+          docker compose -p "$P3_PROJECT" $COMPOSE_FILES --profile observations up -d --no-build --wait --wait-timeout 60 ingestion
+          running="$(docker compose -p "$P3_PROJECT" $COMPOSE_FILES --profile observations ps --services --status running | sort | tr '\n' ' ')"
+          [ "$running" = "ingestion " ] || { echo "::error::only ingestion may run, got: $running"; exit 1; }
+
+      - name: Container settings match AD-1 section 3.6
+        run: |
+          set -euo pipefail
+          id="$(docker compose -p "$P3_PROJECT" $COMPOSE_FILES --profile observations ps -q ingestion)"
+          fail() { echo "::error::$1"; exit 1; }
+          i() { docker inspect --format "$1" "$id"; }
+          [ "$(i '{{.Config.User}}')" = "10001:10001" ] || fail "ingestion must run as 10001:10001"
+          [ "$(i '{{.HostConfig.ReadonlyRootfs}}')" = "true" ] || fail "root filesystem must be read-only"
+          [ "$(i '{{json .HostConfig.CapDrop}}')" = '["ALL"]' ] || fail "all capabilities must be dropped"
+          i '{{json .HostConfig.SecurityOpt}}' | grep -q 'no-new-privileges' || fail "no-new-privileges is required"
+          pb="$(i '{{json .HostConfig.PortBindings}}')"
+          { [ "$pb" = "{}" ] || [ "$pb" = "null" ]; } || fail "ingestion must publish no port, got: $pb"
+          mounts="$(i '{{json .Mounts}}')"
+          { [ "$mounts" = "[]" ] || [ "$mounts" = "null" ]; } || fail "ingestion must have no volume or bind mount, got: $mounts"
+          [ "$(i '{{.HostConfig.Privileged}}')" = "false" ] || fail "ingestion must not be privileged"
+          nets="$(i '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}')"
+          [ "$nets" = "${P3_PROJECT}_observations " ] || fail "ingestion must be on the observations network only, got: $nets"
+          [ "$(docker network inspect --format '{{.Internal}}' "${P3_PROJECT}_observations")" = "true" ] || fail "the observations network must be internal"
+          [ "$(docker network inspect --format '{{index .Options "com.docker.network.bridge.gateway_mode_ipv4"}}' "${P3_PROJECT}_observations")" = "isolated" ]             || fail "the observations network must use isolated gateway mode (AD-1 section 3.6)"
+          # IPv6 is off by design and isolation is verified for IPv4 only: the network must not have it, in any form.
+          [ "$(docker network inspect --format '{{.EnableIPv6}}' "${P3_PROJECT}_observations")" = "false" ] || fail "IPv6 must be disabled on the observations network"
+          subnets="$(docker network inspect --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' "${P3_PROJECT}_observations")"
+          case "$subnets" in *:*) fail "the observations network must have IPv4 subnets only, got: $subnets";; esac
+          echo "observations network: internal, isolated gateway mode, IPv6 disabled, subnets: $subnets"
+          echo "ingestion settings match"
+
+      # CBDC_INGESTION_HOST defaults to 127.0.0.1 in the component, which only the container itself could reach. The backend
+      # polls over the network, so a PEER on the observations network must reach ingestion by its service name. This is
+      # the control that the overlay's CBDC_INGESTION_HOST=0.0.0.0 took effect; the probe's own-port control uses loopback.
+      - name: A peer on the observations network reaches ingestion
+        run: docker run --rm -i --network "${P3_PROJECT}_observations" cbdc-ingestion:local python - ingestion:8300 < infra/scripts/tcp_check.py
+
+      # The refusals below only mean something if there is something to refuse. This step creates it, all under this
+      # run's name: an ordinary (non-internal) network holding two listening sentinels aliased `inference` and `postgres`
+      # (stand-ins for the Phase 2 services, which this job does not start), and a listener on the runner host. It then
+      # proves each is reachable the way ingestion would have to reach it, from a container on the sentinel network.
+      - name: Create sentinels and prove they are reachable (positive controls)
+        run: |
+          set -euo pipefail
+          S="${P3_PROJECT}_sentinel"
+          docker network create "$S" > /dev/null
+          for n in inference postgres; do
+            docker run -d --name "${P3_PROJECT}-sentinel-$n" --network "$S" --network-alias "$n" \
+              --read-only --cap-drop ALL --security-opt no-new-privileges \
+              cbdc-ingestion:local python -m http.server 9000 --bind 0.0.0.0 > /dev/null
+          done
+          addr() { docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${P3_PROJECT}-sentinel-$1"; }
+          INFERENCE_IP="$(addr inference)"; POSTGRES_IP="$(addr postgres)"
+          ipv4='^[0-9]{1,3}(\.[0-9]{1,3}){3}$'
+          [[ "$INFERENCE_IP" =~ $ipv4 && "$POSTGRES_IP" =~ $ipv4 ]] || { echo "::error::sentinel addresses not found"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/p3-listener"
+          HOST_PORT="$(python -c "import socket; s = socket.socket(); s.bind(('0.0.0.0', 0)); print(s.getsockname()[1])")"
+          nohup python -m http.server "$HOST_PORT" --bind 0.0.0.0 --directory "$RUNNER_TEMP/p3-listener" > /dev/null 2>&1 &
+          echo $! > "$RUNNER_TEMP/p3-listener.pid"
+          # The gateway of the sentinel (ordinary) network, as Docker reports it.
+          S_GW="$(docker network inspect --format '{{range .IPAM.Config}}{{.Gateway}} {{end}}' "$S" | awk '{print $1}')"
+          # The gateway of the observations network, as Docker reports it: never assumed to be .1. In isolated gateway mode
+          # (the overlay's setting) the bridge has no address and Docker reports none ("invalid"); that is accepted ONLY when
+          # the isolated mode is really set on the network, and then the first address of the subnet, where the gateway would
+          # have been, is probed instead. A reported gateway is probed as it is.
+          O_GW="$(docker network inspect --format '{{range .IPAM.Config}}{{.Gateway}} {{end}}' "${P3_PROJECT}_observations" | awk '{print $1}')"
+          O_MODE="$(docker network inspect --format '{{index .Options "com.docker.network.bridge.gateway_mode_ipv4"}}' "${P3_PROJECT}_observations")"
+          if ! [[ "$O_GW" =~ $ipv4 ]]; then
+            [ "$O_MODE" = "isolated" ] || { echo "::error::no gateway reported and the network is not in isolated gateway mode (mode '$O_MODE')"; exit 1; }
+            O_SUBNET="$(docker network inspect --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' "${P3_PROJECT}_observations" | awk '{print $1}')"
+            O_GW="$(python -c "import ipaddress, sys; print(next(ipaddress.ip_network(sys.argv[1]).hosts()))" "$O_SUBNET")"
+            echo "isolated gateway mode: no gateway is reported; probing the subnet's first address $O_GW"
+          fi
+          [[ "$S_GW" =~ $ipv4 && "$O_GW" =~ $ipv4 ]] || { echo "::error::network gateways not found (sentinel '$S_GW', observations '$O_GW')"; exit 1; }
+          for _ in $(seq 1 20); do python infra/scripts/tcp_check.py "127.0.0.1:$HOST_PORT" > /dev/null && break; sleep 0.5; done
+          # Controls, from a container on the sentinel network: both aliases and both addresses accept a connection,
+          # and the host listener is reachable through that network's gateway.
+          docker run --rm -i --network "$S" cbdc-ingestion:local python - inference:9000 postgres:9000 "$INFERENCE_IP:9000" "$POSTGRES_IP:9000" "$S_GW:$HOST_PORT" < infra/scripts/tcp_check.py
+          {
+            echo "P3_SENTINEL_NETWORK=$S"
+            echo "P3_PROBE_BLOCKED=inference=$INFERENCE_IP:9000,postgres=$POSTGRES_IP:9000"
+            echo "P3_PROBE_GATEWAY=$O_GW:$HOST_PORT"
+          } >> "$GITHUB_ENV"
+
+      - name: AD-6 T-5, ingestion side, from inside the container
+        run: |
+          docker compose -p "$P3_PROJECT" $COMPOSE_FILES --profile observations exec -T \
+            -e "PROBE_BLOCKED=$P3_PROBE_BLOCKED" -e "PROBE_GATEWAY=$P3_PROBE_GATEWAY" \
+            ingestion python - < infra/scripts/probe_ingestion_isolation.py
+
+      - name: The live /v1/latest body conforms to the schema
+        run: |
+          set -euo pipefail
+          # The generator emits 4 pairs, one per 500 ms stagger within 2 s: wait until all four are present.
+          for attempt in $(seq 1 30); do
+            docker compose -p "$P3_PROJECT" $COMPOSE_FILES --profile observations exec -T ingestion python -c \
+              "import sys, urllib.request as u; sys.stdout.write(u.urlopen('http://127.0.0.1:8300/v1/latest', timeout=3).read().decode())" \
+              > "$RUNNER_TEMP/latest.json"
+            if python infra/scripts/check_event_contracts.py --instance ingestion-latest "$RUNNER_TEMP/latest.json" --expect-events 4; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::no conforming 4-event /v1/latest body within 30 s"
+          python infra/scripts/check_event_contracts.py --instance ingestion-latest "$RUNNER_TEMP/latest.json" --expect-events 4 || true
+          exit 1
+
+      # SIGTERM is what `docker stop` and Compose send. The process must handle it, finish within the grace period and
+      # exit 0. Control: a Python process that ignores SIGTERM is killed only when the grace period ends (exit 137), so the
+      # timing check below is known to be able to fail. Run last, because it stops the service.
+      - name: SIGTERM is handled, with a control that ignores it
+        run: |
+          set -euo pipefail
+          now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
+          ctl="${P3_PROJECT}-sigterm-control"
+          docker run -d --name "$ctl" cbdc-ingestion:local python -c             "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); time.sleep(600)" > /dev/null
+          for _ in $(seq 1 30); do docker logs "$ctl" 2>&1 | grep -q '^ready$' && break; sleep 0.5; done
+          docker logs "$ctl" 2>&1 | grep -q '^ready$' || { echo "::error::the control never installed its handler"; exit 1; }
+          t0="$(now_ms)"; docker stop -t 5 "$ctl" > /dev/null; t1="$(now_ms)"
+          code="$(docker inspect --format '{{.State.ExitCode}}' "$ctl")"
+          echo "control: exit $code after $((t1 - t0)) ms"
+          [ "$code" = "137" ] && [ $((t1 - t0)) -ge 4500 ] || { echo "::error::the control must be killed at the end of the grace period"; exit 1; }
+          id="$(docker compose -p "$P3_PROJECT" $COMPOSE_FILES --profile observations ps -q ingestion)"
+          t0="$(now_ms)"; docker stop -t 10 "$id" > /dev/null; t1="$(now_ms)"
+          code="$(docker inspect --format '{{.State.ExitCode}}' "$id")"
+          echo "ingestion: exit $code after $((t1 - t0)) ms"
+          [ "$code" = "0" ] || { echo "::error::ingestion must exit 0 on SIGTERM, got $code"; exit 1; }
+          [ $((t1 - t0)) -lt 5000 ] || { echo "::error::ingestion took $((t1 - t0)) ms to stop; it must handle SIGTERM"; exit 1; }
+          docker logs "$id" 2>&1 | grep -q "ingestion exited" || { echo "::error::no graceful-exit line in the logs"; exit 1; }
+
+      - name: Ingestion logs (on failure)
+        if: failure()
+        run: docker compose -p "$P3_PROJECT" $COMPOSE_FILES --profile observations logs --no-color ingestion || true
+
+      # Only what this run created, each by its exact name, which contains this run's project: the compose project, the
+      # two sentinels, the sentinel network and the host listener. Nothing else is touched.
+      - name: Remove what this run created
+        if: always()
+        run: |
+          docker compose -p "$P3_PROJECT" $COMPOSE_FILES --profile observations down --volumes --remove-orphans || true
+          for n in inference postgres; do docker rm -f "${P3_PROJECT}-sentinel-$n" > /dev/null 2>&1 || true; done
+          docker rm -f "${P3_PROJECT}-sigterm-control" > /dev/null 2>&1 || true
+          docker network rm "${P3_PROJECT}_sentinel" > /dev/null 2>&1 || true
+          if [ -f "$RUNNER_TEMP/p3-listener.pid" ]; then kill "$(cat "$RUNNER_TEMP/p3-listener.pid")" > /dev/null 2>&1 || true; fi

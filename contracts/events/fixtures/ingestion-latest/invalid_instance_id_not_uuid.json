@@ -1,0 +1,12 @@
+{
+  "description": "instance_id must be a UUID.",
+  "valid": false,
+  "reason": "instance_id",
+  "instance": {
+    "protocol_version": "1.0",
+    "instance_id": "123",
+    "source_id": "synthetic.fx",
+    "generated_at": "2026-11-24T10:00:00.700Z",
+    "events": []
+  }
+}

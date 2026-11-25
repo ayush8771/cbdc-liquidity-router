@@ -1,0 +1,55 @@
+{
+  "description": "Only mid rates are accepted.",
+  "valid": false,
+  "reason": "Only mid rates are accepted.",
+  "instance": {
+    "protocol_version": "1.0",
+    "instance_id": "6f1f6c0e-2f0a-4b6e-8a53-0d6a2d1f3a11",
+    "source_id": "synthetic.fx",
+    "generated_at": "2026-11-24T10:00:00.700Z",
+    "events": [
+      {
+        "schema_version": "1.0",
+        "event_id": "9144a587-d799-5d9f-8bad-6b671a82bf6b",
+        "event_type": "fx_rate",
+        "usage": "display_only",
+        "source": {
+          "source_id": "synthetic.fx",
+          "transport": "synthetic",
+          "source_url": null,
+          "gate3_decision_ref": null
+        },
+        "provenance_class": "synthetic",
+        "derived_from": [],
+        "derivation": null,
+        "timestamps": {
+          "source_timestamp": "2026-11-24T10:00:00.000Z",
+          "source_timestamp_basis": "observed",
+          "retrieved_at": "2026-11-24T10:00:00.050Z",
+          "emitted_at": "2026-11-24T10:00:00.060Z"
+        },
+        "source_sequence": "33",
+        "payload": {
+          "base_currency": "USD",
+          "quote_currency": "INR",
+          "rate": "1.2345",
+          "rate_type": "bid"
+        },
+        "payload_sha256": "9a04b24c23fda35fd1ab830bca0ae58172f873433ebc0b7c284637d1fe9c30ea",
+        "raw_sha256": null,
+        "validation": {
+          "status": "validated",
+          "reasons": []
+        },
+        "extraction": null,
+        "review": null,
+        "supersedes": null,
+        "synthetic": {
+          "generator_version": "0.0.0-fixture",
+          "seed": 1,
+          "case_id": "normal"
+        }
+      }
+    ]
+  }
+}

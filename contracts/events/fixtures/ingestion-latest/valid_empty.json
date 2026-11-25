@@ -1,0 +1,11 @@
+{
+  "description": "Before the first event: 200 with no events (never 204 or 404).",
+  "valid": true,
+  "instance": {
+    "protocol_version": "1.0",
+    "instance_id": "6f1f6c0e-2f0a-4b6e-8a53-0d6a2d1f3a11",
+    "source_id": "synthetic.fx",
+    "generated_at": "2026-11-24T10:00:00.700Z",
+    "events": []
+  }
+}

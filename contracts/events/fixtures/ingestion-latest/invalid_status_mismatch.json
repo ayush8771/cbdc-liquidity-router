@@ -1,0 +1,12 @@
+{
+  "description": "NOT_READY must be 503.",
+  "valid": false,
+  "status": 500,
+  "reason": "status",
+  "instance": {
+    "error": {
+      "code": "NOT_READY",
+      "message": "x"
+    }
+  }
+}
