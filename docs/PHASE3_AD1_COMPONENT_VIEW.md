@@ -1,6 +1,7 @@
 # AD-1: Component View
 
-**Status:** **DRAFT v0.2**, 25 November 2026. **Not approved.** v0.2 reconciles the D-24 review feedback from Dev B, C and D (§8). The reviewers have not confirmed this revision. No code may start before the owner approves it (D-22).
+**Status:** **DRAFT v0.3**, 25 November 2026. **Not approved.** v0.2 reconciled the D-24 review feedback (§8); v0.3 answers Dev C's five blockers B1 to B5 (§3.3.1 to §3.3.4) and records the owner's D-24-only exception on inference outbound isolation (§5 item 1).
+**Review state:** Dev B **APPROVE** and Dev D **ADOPT + APPROVE** were given on **v0.2**; Dev C returned **REQUEST CHANGES** on v0.2. v0.3 changes only the client-side sections those blockers name, plus §5 item 1, §6 and §8. Nobody has confirmed v0.3, and the owner has not approved any version. No code may start before the owner approves it (D-22).
 **Lead:** Dev D. **Reviewers:** Dev A, Dev B, Dev C. **Approver:** project owner.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.3 §2.2.2, §7.3; D-22, D-24; F-2, F-3, F-6.
 **Extends:** `PHASE2_ARCHITECTURE.md` §2. **Relies on:** AD-4 (envelope) and AD-6 (boundary), both drafts.
@@ -112,7 +113,7 @@ Outside API contract v0.4; read with `fetch`. No query. `Last-Event-ID` is ignor
 - **`value`:** `{base_currency, quote_currency, event, age_ms, freshness}`. `event` is the unmodified envelope; `freshness` is `fresh`, `stale` or `unavailable`. If unavailable or never received, `event` and `age_ms` are null and `freshness` is `unavailable`.
 - **`profile`:** `expected_interval_ms` 2000, `live_max_age_ms` null, `stale_after_ms` 6000, `unavailable_after_ms` 30000, `clock_tolerance_ms` 1000.
 
-**Versioning:** a minor version adds optional fields or message types; a major version changes meaning and the path (`/api/rt/v2`). A client ignores an unknown type. On an unknown major version it shows Unavailable and stops.
+**Versioning:** a minor version adds optional fields or message types; a major version changes meaning and the path (`/api/rt/v2`). A client ignores an unknown type. On an unknown major version it shows Unavailable and stops. The client checks every message against §3.3.3 before using it.
 
 **Errors before the stream starts** use the Phase 2 envelope (contract v0.4 §4):
 
@@ -132,18 +133,86 @@ With the feature off the route is not registered, so it is 404. An ingestion out
 - **Thresholds:** stale at age **> 6 s**; unavailable at age **> 30 s**. Exactly 6.000 s is fresh; exactly 30.000 s is stale.
 - **Labels:** "Simulated" (shown as SIMULATED), "Simulated · stale", then "Unavailable" with no number (AD-4 §8). Every available value shows its source, age and transport.
 - **Lost stream:** a disconnected status; values stay and their ages keep advancing through the same states. A new snapshot replaces all state. Source `outage` is shown separately from "disconnected".
-- **Resume:** when a hidden or suspended page becomes visible, the client reconnects before showing values, because monotonic clocks may pause during sleep.
+- **Hidden tabs and resumption:** §3.3.1. A hidden tab closes its stream, so a background tab holds no slot.
 - **Routing is unaffected throughout** (AD6-Q2).
 
 | Client sees | Client does **[P-2]** |
 |---|---|
-| 401 | Stops, uses the existing sign-in handling, never reconnects by itself |
-| 403, 404, other 4xx | Stops; shows "Observations unavailable" |
-| 429 | Shows "too many streams"; waits the larger of `Retry-After` (5 s if absent) and the backoff, at most 30 s, then retries |
+| 401 | **Stopped** (§3.3.2). The existing sign-in handling runs; the client never reconnects by itself |
+| 403, 404, other 4xx | **Stopped** (§3.3.2); shows "Observations unavailable" |
+| 429 | Shows "too many streams"; waits the larger of the §3.3.2 `Retry-After` and the backoff, then retries |
 | 5xx, network error, normal stream end | Reconnects with the backoff below. `Retry-After` on 503 is honoured, at most 30 s. An Nginx 502 or 504 without an envelope is keyed by status. |
 | No response headers within 2 s; no bytes for 35 s; a `stream_seq` gap; a malformed message; a first message that is not `snapshot` | Aborts and reconnects. Three malformed, gap or first-message faults without 60 s of valid streaming between them stop it with an error. |
 
-**Backoff:** 1 s, then 2 s (the maximum), each multiplied by a random 0.5–1; reset after a valid snapshot. This lowers v0.1's 4 s maximum, because 4 s after a hung 2 s attempt would exceed the 5 s target. The target excludes stopped states, 429 and server-requested waits.
+**Backoff:** 1 s, then 2 s (the maximum), each multiplied by a random 0.5–1; reset after a valid snapshot. This lowers v0.1's 4 s maximum, because 4 s after a hung 2 s attempt would exceed the 5 s target. The target excludes stopped states, 429, server-requested waits and the §3.3.1 states.
+
+#### 3.3.1 Hidden tabs and resumption [B1]
+
+The client closes the stream whenever the page is not being watched, so a background or restored tab holds no backend slot (§3.5) and no frozen timer is trusted.
+
+| Event | Client does |
+|---|---|
+| `visibilitychange` to `hidden` | Starts a 30 s timer. Still hidden at its end: aborts the stream, releases the slot, cancels any pending reconnect, and shows "paused". Visible again before it fires: nothing happens and the stream continues. |
+| `visibilitychange` to `visible`, from paused or disconnected | Drops all displayed values, resets backoff and fault counters, and connects at once. Values appear only from the new `snapshot`. |
+| `pageshow` with `persisted: true` (restored from the back/forward cache) | Treated as a fresh start: any stream handle from before the restore is discarded unread, state is dropped, and it connects if visible. |
+| `pagehide`, `freeze`, `beforeunload` | Aborts the stream at once, without waiting for the 30 s timer. |
+| `offline` | Aborts the stream, cancels the pending reconnect, shows "offline"; no retry is attempted while offline. |
+| `online` | If paused by `offline`, or stopped by a network error, resets backoff and connects at once if visible. `online` never restarts a stream stopped by 401, 403, 404 or an unknown major version. |
+
+- **While paused,** displayed ages keep advancing and reach stale and then unavailable at the §3.3.3 boundaries, so a paused tab never shows a frozen number as current. The panel states that it is paused.
+- The 30 s grace exists so that switching tabs briefly does not drop the stream; it is deliberately equal to `unavailable_after_ms`, so nothing survives paused long enough to be shown as fresh.
+- The client listens on `document` and `window` only, adds every listener when the panel mounts, and removes every one when it unmounts.
+
+#### 3.3.2 Stopped state and `Retry-After` [B2]
+
+**Stopped** means the client holds no stream and schedules no reconnect. It is entered on 401, 403, 404, any other 4xx that is not 429, an unknown major version, or three protocol faults (§3.3.3). It is left only by: the user pressing **Retry now**, a `visibilitychange` to visible, or `online` after a network error.
+
+- **Retry now** is shown in the panel in every stopped state. It resets the backoff, the fault counter and any `Retry-After` wait, then connects once. It is disabled while a connection attempt is in flight, and in preview mode it does not exist (§3.3.4). Pressing it after a 401 does not re-authenticate: the sign-in handling owns that.
+- A stopped state never retries on a timer, and the panel always names what happened.
+
+**`Retry-After` is advisory and bounded.** It is read on 429 and 503 only, from the stream request's own response.
+
+| Header value | Client uses |
+|---|---|
+| Absent, empty, or not parseable | 5 s |
+| `0`, a negative number, or a date at or before now | 1 s (the floor) |
+| A positive number of seconds | That value, clamped to 1–30 s |
+| An HTTP-date (RFC 9110) | The date minus the response's `Date` header, or minus the local clock when `Date` is absent or unparseable, then clamped to 1–30 s |
+| Above 30 s, or not finite | 30 s (the ceiling) |
+
+The client waits the larger of this value and its own backoff, never more than 30 s, and the wait is cancelled by **Retry now**, `pagehide` and `offline`. The server sends only `Retry-After: 5` and `Retry-After: 1` (§3.2); the table covers what a proxy or a later server version may send.
+
+#### 3.3.3 Client-side message validation [B3]
+
+The client trusts nothing it is sent. A failure here is a **protocol fault**: the stream is aborted and reconnected, and three faults without 60 s of valid streaming between them stop it (§3.3.2).
+
+**Protocol faults:** a response whose `Content-Type` does not start with `text/event-stream` (an HTML error page or a proxy notice, even with status 200); a `data:` line that is not one JSON object; a missing or wrongly typed `protocol_version`, `type`, `stream_seq`, `server_time` or `source`; a `type` that does not match the SSE event name; a `stream_seq` that is not an integer, not 1 on the first message, or not exactly one more than the last; a first message that is not `snapshot`; a second `snapshot` on one connection; `values` that is not exactly the four §3.4 pairs in order; an `update` whose pair is outside the allowlist.
+
+**Not a fault:** an unknown `type` or an unknown extra field. The message is ignored, but its `stream_seq` still counts, so the sequence check keeps working.
+
+**Stops the client, no reconnect:** a `protocol_version` whose major part is not `1` (AD-4 §9: an unknown major version shows Unavailable).
+
+**Per-value checks.** A value is shown only if its envelope reads `usage: display_only`, `provenance_class: synthetic`, `transport: synthetic`, a `source_id` beginning `synthetic.`, `validation.status: validated`, and an `fx_rate` payload whose currencies are the value's own pair. Anything else — including an unknown value in those four fields — makes that one value **Unavailable** with no number, counted and logged, and leaves the rest of the message usable. This is AD-4 §8 rule 1 applied in the browser, and it is why a non-synthetic or quarantined event can never appear as a number in the slice. The client never re-derives a rate, and never computes or checks `payload_sha256`: Express owns that (§3.4).
+
+**Provenance labels.** Every shown value is **Simulated**, from `provenance_class: synthetic`, with "· stale" appended when stale (AD-4 §8.1, AD4-Q3). **Live**, **Delayed** and **Manually entered** cannot occur in this slice, and the client has no code path that produces them; if the four fields ever say otherwise, the value is Unavailable rather than relabelled.
+
+**Freshness boundaries.** The client uses the `profile` of the current connection's `snapshot` and recomputes from the advancing age: age ≤ `stale_after_ms` is fresh; above it, stale; above `unavailable_after_ms`, unavailable with no number. The boundary value itself takes the lower state, so exactly 6.000 s is fresh and exactly 30.000 s is stale (§3.3). A negative age counts as 0. Between messages a value may only degrade: fresh to stale to unavailable, never back, because only a new `update` or `snapshot` can improve it. A `freshness` field that disagrees with the recomputed state is a protocol fault, so Express and the browser cannot drift apart silently.
+
+#### 3.3.4 Client integration: session and flags [B4, B5]
+
+**Session access is additive [B4].** `createApiClient`, `ApiClient` and every existing call site stay **unchanged**: the client buffers whole responses and accepts only `/api/v1` paths, so it cannot carry a stream. Instead `AuthContextValue` gains one member, implemented in `AuthProvider` beside the existing client:
+
+- `openObservationStream(signal: AbortSignal): Promise<Response>` — issues the §3.2 request with the session's bearer token in the `Authorization` header, and calls the same `expire` handler the API client uses when it answers 401.
+
+The token stays inside the auth module: it is not returned, and no component or hook reads it, so the existing rule that the token never reaches a URL, a log or another origin is unchanged. Rejected alternative: exposing `getToken` on the context, which would widen the token's surface to every component for no gain. The observation panel calls `useAuth()` for this one function and never constructs a client.
+
+**Both flags are required [B5].** The panel mounts, listeners are added and the stream is opened only when **all** of these hold:
+
+1. `useDataMode() === "live"` — the existing `VITE_API_MODE` mode (`dataMode.ts`, unchanged, including its default of live);
+2. the new build flag `VITE_OBSERVATIONS === "on"`, read once at start-up like the data mode, defaulting to off for any other value or none;
+3. the session is signed in.
+
+**Preview mode is unchanged.** In `VITE_API_MODE=preview` the panel is absent whatever `VITE_OBSERVATIONS` says, nothing is requested, no listener is added, and no "Retry now" exists. There is no preview or illustrative observation data: an observation is either received and labelled Simulated, or not shown. `dataModeFromEnv` and the preview screens are not touched.
 
 ### 3.4 Pairs, ordering and event handling
 
@@ -182,7 +251,7 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 - **Isolated ingestion [P-6].** No published port, `env_file`, secret or volume; non-root, read-only root filesystem, `cap_drop: [ALL]`, `no-new-privileges`, process and memory limits. Without capabilities it cannot add a route through the dual-network backend. `internal: true` alone may leave the host gateway address reachable, so the runtime test probes it. If it is reachable, use isolated gateway mode where the Docker version supports it, or record the residual risk for the owner.
 - **Residual:** ingestion can open the backend's port 4000 on the shared network. It holds no token, so protected routes return 401; health routes are public.
 - **Optional overlay:** `-f compose.yaml -f compose.observations.yaml`, profile `observations`. `compose.yaml` and `--profile full` alone are unchanged and never need ingestion. The backend has no `depends_on` ingestion. Overlay images have separate tags.
-- **Off by default.** Without `OBSERVATIONS_URL`, Express neither polls nor registers the route. Without the build flag `VITE_OBSERVATIONS=on`, the panel is absent and requests nothing. The overlay sets both.
+- **Off by default.** Without `OBSERVATIONS_URL`, Express neither polls nor registers the route. The panel needs both `VITE_OBSERVATIONS=on` and live API mode (§3.3.4). The overlay sets both of its variables; `VITE_API_MODE` keeps its existing default.
 - **Nginx [P-7].** No configuration change is planned: `/api/` already proxies the path, the response header disables buffering, `text/event-stream` is not in `gzip_types`, and 15 s heartbeats fit the default 60 s read timeout. This is **reasoned from the configuration, not tested**. Verify through the published port:
   - the snapshot arrives at once, and updates one by one, not batched;
   - a quiet stream stays open > 60 s;
@@ -198,7 +267,7 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 |---|---|
 | **Contract validation** | Machine schemas for §3.1 and §3.2 in `contracts/events/`, referring to the AD-4 schema, with valid and invalid fixtures for every message, error and empty state. Both languages must give the same verdict on each event fixture. `check_contracts.py` does not cover `contracts/events/` today; a separate check is added **[P-8]**. |
 | **Cross-language hashes** | `contracts/test-vectors/event_payload_hash.v1.json`: input, exact RFC 8785 string and SHA-256, checked by Python (`rfc8785`) and TypeScript, including AD-4 §10's hash, reordered keys, trailing-zero rates, and altered payloads that must fail. The backend has no RFC 8785 or JSON Schema library. Proposed: a strict `fx_rate` validator and a canonicalizer limited to objects and ASCII strings, with no new dependency **[P-9]**. |
-| **Fault injection** | A controllable fake ingestion server, test-only and absent from runtime images. Events: duplicate, late, tie, ID conflict, future (at and beyond 1 s), malformed, wrong hash, quarantined, non-synthetic, extra pair. Responses: duplicate pair, oversized, empty, slow, 401, 429 with and without `Retry-After`, 5xx, redirect. Source: outage, recovery, restart, clock moved back. Streams: slow and abandoned clients, caps, sign-out, shutdown. Threshold tests use fake clocks. |
+| **Fault injection** | A controllable fake ingestion server, test-only and absent from runtime images. Events: duplicate, late, tie, ID conflict, future (at and beyond 1 s), malformed, wrong hash, quarantined, non-synthetic, extra pair. Responses: duplicate pair, oversized, empty, slow, 401, 429 with and without `Retry-After`, 5xx, redirect. Source: outage, recovery, restart, clock moved back. Streams: slow and abandoned clients, caps, sign-out, shutdown. Client: hidden tab at and past 30 s, `pageshow` restore, `offline` and `online`, manual retry from each stopped state, every `Retry-After` row of §3.3.2, a `text/html` 200 body, sequence gap and repeat, unknown type, unknown major version, a non-synthetic or quarantined value, and a `freshness` that disagrees. Threshold and timer tests use fake clocks. |
 | **Focused CI** | A separate `phase3-observations` workflow, path-filtered to `services/ingestion/`, the overlay, `contracts/events/`, `contracts/test-vectors/`, `services/backend/` and `services/web/`. Unit, schema and hash checks on both languages; the AD-6 import rules; merged-Compose invariants; then one disposable overlay stack for Nginx, isolation, fault and T-1 tests, plus the existing API smoke test. No repository secrets. `phase2-*` workflows and their checks are not modified **[P-10]**. |
 
 **Not recorded:** which observations were displayed (AD-6 §6.1). This slice stores nothing; that work stays with AD-7 and AD-11.
@@ -215,11 +284,14 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 
 ## 5. Known gaps
 
-1. **UNRESOLVED: inference outbound-network isolation.** AD-6 B-4 also says inference has no route to the internet. The Phase 2 stack does not enforce that, and this slice delivers only the ingestion side of B-4. The gap has not been accepted, and v0.1's proposal to accept it no longer stands as the default. The owner decides, with Dev B and Dev D:
-   - **(a)** a recorded B-4 exception for D-24 only, closed in AD-10. Recommended: ingestion has no path to inference either way, and the Phase 2 stack stays unchanged; or
-   - **(b)** isolate inference on an internal network in the overlay. This leaves `--profile full` alone unfixed and first needs proof that inference works without egress.
+1. **Inference outbound-network isolation: exception granted, requirement UNRESOLVED.** AD-6 B-4 also says inference has no route to the internet. The Phase 2 stack does not enforce that, and this slice delivers only the ingestion side of B-4. The project owner granted option (a): **an exception for the D-24 slice only.** Recorded here pending its entry in `docs/PHASE3_SCOPE.md` §2.
 
-   Until then T-5 cannot fully pass, and AD-6 must not be described as fully enforced.
+   What the exception does **not** do:
+
+   - It does not satisfy B-4, which stays **unresolved** and is closed by **AD-10**, whose exposure plan must state how inference egress is controlled. The overlay does not isolate inference, and `--profile full` is unchanged.
+   - It does not extend past the slice: milestones 3.2 to 3.7 and any later component get no exception, and §4's placement is still unconfirmed.
+   - It is **not Gate 4 evidence and no gate has passed** (D-6, D-18). Nothing here is reachable outside the private development environment (D-16).
+   - **T-5 is limited to the ingestion side** for this slice: ingestion has no route to inference, PostgreSQL or the internet, and holds no credential. The inference side of T-5 is not run and not claimed, so AD-6 must not be described as fully enforced.
 2. Express is on both networks, so it is the single point that keeps them apart.
 3. `fetch` streaming needs one addition to the web API client, whose current method buffers whole responses and accepts only `/api/v1` paths; the token rule must allow exactly one more path. The web Dockerfile needs one build argument, off by default.
 4. Browsers allow about 6 HTTP/1.1 connections per origin, so several dashboard tabs compete with ordinary requests. The cap of 3 per user limits this.
@@ -233,16 +305,18 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 5. AD-6 T-1 to T-4, T-6 to T-8 and T-10 pass; T-5 passes for ingestion (no route to inference, PostgreSQL or the internet; the host gateway per §3.6; no credentials). The inference side of T-5 waits on §5 item 1. T-9 does not apply, because no context is recorded.
 6. With the feature off, the Phase 1 and 2 suites, the fixtures and the existing Compose and stack-security checks pass unmodified.
 7. The §3.6 Nginx checks pass through the published port.
+8. §3.3.1 to §3.3.3 hold in the browser: a hidden tab releases its slot after 30 s and shows paused; a restore, `online` and **Retry now** each produce exactly one fresh `snapshot`; every §3.3.3 fault and per-value rejection gives the stated result; no value is ever labelled anything but Simulated, with or without "· stale".
+9. §3.3.4: the panel is absent in preview mode and with the flag unset or any value but `on`, and in both cases no observation request is made; `createApiClient` and its tests are unmodified.
 
 ## 7. Confirmations and approval
 
-All are open. A tick means that person confirmed **v0.2**; earlier feedback does not count.
+A tick means that person confirmed **the stated version**. The owner has approved no version.
 
-- [ ] **Dev A:** P-1 (§3.1); P-3 pairs; P-4 ordering and quarantine; P-9 hash vectors; generator (§3, AD-12)
-- [ ] **Dev B:** P-1 polling; §3.2 errors and authentication; P-4; P-5 lifecycle hook, limits and backpressure; P-9 no-dependency validator; §5 item 1
-- [ ] **Dev C:** §3.2 messages; §3.3 freshness ownership and labels; P-2 client handling, backoff and resume; P-3 pairs; §5 items 3 and 4
-- [ ] **Dev D (lead):** P-6 isolation; P-7 Nginx; P-8 schema location and check (also AD4-Q5); P-10 workflow; §5 item 1
-- [ ] **Project owner:** the §5 item 1 choice; approval of AD-1, AD-4 and AD-6, recorded in `docs/PHASE3_SCOPE.md` §2
+- [ ] **Dev A:** P-1 (§3.1); P-3 pairs; P-4 ordering and quarantine; P-9 hash vectors; generator (§3, AD-12). **No verdict recorded.**
+- [x] **Dev B — APPROVE, on v0.2:** P-1 polling; §3.2 errors and authentication; P-4; P-5 lifecycle hook, limits and backpressure; P-9 no-dependency validator. Its conditions stand, and §5 item 1 was referred to the owner. **v0.3's §3.3.4 adds a backend-visible item** (per-tab stream closure changes the slot pattern, §3.3.1), so Dev B should re-read §3.3.1 to §3.3.4; the approval is not extended to them here.
+- [ ] **Dev C — REQUEST CHANGES, on v0.2:** blockers B1 to B5. v0.3 answers them in §3.3.1 (hidden tabs, `visibilitychange`, `pageshow`, `online`), §3.3.2 (stopped-state manual retry, bounded `Retry-After`), §3.3.3 (strict validation, provenance labels, freshness boundaries, sequence and version checks, content type), §3.3.4 B4 (additive `AuthContext` member, `createApiClient` untouched) and §3.3.4 B5 (both flags; preview unchanged). **Still open:** Dev C has not confirmed that these answers close B1 to B5, and the earlier conditional limitations on §3.2, §3.3 and §5 items 3 and 4 remain in force until they do.
+- [x] **Dev D (lead) — ADOPT + APPROVE, on v0.2:** P-6 isolation; P-7 Nginx; P-8 schema location and check (also AD4-Q5); P-10 workflow. Its conditions stand. **Open for v0.3:** §3.7's added client faults and the §5 item 1 wording.
+- [ ] **Project owner:** §5 item 1 is **decided** (the D-24-only exception) and awaits recording in `docs/PHASE3_SCOPE.md` §2. Approval of AD-1, AD-4 and AD-6 is **not given**.
 
 ## 8. Review reconciliation
 
@@ -257,6 +331,11 @@ The repository holds no text of the individual reviews. This table follows the f
 | Lifecycle, authentication, limits, backpressure | §3.2, §3.5 |
 | Networks, isolation, overlay, Nginx | §3.6 |
 | Contracts, hash fixtures, faults, CI | §3.7 |
-| Inference outbound-network isolation | §5 item 1, unresolved |
+| Inference outbound-network isolation | §5 item 1: exception granted for D-24 only; B-4 unresolved, for AD-10 |
+| B1 hidden tabs and resumption | §3.3.1 |
+| B2 stopped-state retry and `Retry-After` | §3.3.2 |
+| B3 message validation, labels, freshness, sequence, version, content type | §3.3.3 |
+| B4 additive `AuthContext` access | §3.3.4 |
+| B5 live mode and `VITE_OBSERVATIONS=on` | §3.3.4, §3.6 |
 
 **AD-4 and AD-6:** as relayed by the project owner, Dev B, C and D approved AD-4, and Dev B and C approved AD-6, in the D-24 review. These are kept as **reviewer feedback**. They are not owner approvals and do not satisfy D-24's preconditions. The AD-4 and AD-6 checkboxes stay open. They do not settle the AD-6 B-4 gap (§5 item 1).
