@@ -28,7 +28,8 @@ def run_text(job):
 
 def test_jobs_and_runner(wf):
     assert wf["name"] == "phase3-observations"
-    assert set(wf["jobs"]) == {"contracts", "ingestion-unit", "compose-invariants", "web-observations", "nginx-sse", "runtime"}
+    assert set(wf["jobs"]) == {"contracts", "ingestion-unit", "compose-invariants", "backend-observations", "web-observations",
+                                "nginx-sse", "runtime"}
     for name, job in wf["jobs"].items():
         assert job["runs-on"] == "ubuntu-24.04", name
         assert job["timeout-minutes"] <= 20, name
@@ -198,3 +199,39 @@ def test_runtime_job_checks_the_engine_version_and_that_ipv6_is_off(wf):
     assert "sort -V" in text and "28.0.0" in text and "older than 28.0.0" in text
     assert "{{.EnableIPv6}}" in text and "IPv6 must be disabled" in text and "IPv4 subnets only" in text
     assert text.index("sort -V") < text.index("up -d --no-build --wait"), "the engine is checked before the network is created"
+
+
+def test_import_boundaries_are_mandatory_for_the_observation_module(wf):
+    step = next(s for s in steps(wf["jobs"]["contracts"]) if "check_import_boundaries.py" in s.get("run", "") and "pytest" not in s["run"])
+    assert "--require-observation-module" in step["run"], "a tree without the observation module must fail, not skip"
+    assert "continue-on-error" not in TEXT
+
+
+def test_backend_job_runs_the_supported_toolchain_and_cannot_pass_empty(wf):
+    job = wf["jobs"]["backend-observations"]
+    assert job["needs"] == ["contracts"] and set(wf["jobs"]) >= set(job["needs"]), "needs must name real job ids"
+    node = next(s for s in steps(job) if str(s.get("uses", "")).startswith("actions/setup-node@"))
+    assert node["with"]["node-version-file"] == ".nvmrc" and node["with"]["cache-dependency-path"] == "services/backend/package-lock.json"
+    text = run_text(job)
+    assert "npm ci" in text and "npm install" not in text, "the lockfile only"
+    assert "npm run typecheck" in text
+    # The same runner as `npm test` (tsx + node:test), restricted to the observation files, with a JUnit report.
+    assert "node --import tsx --test" in text and "--test-reporter=junit" in text and "test/unit/observation*.test.ts" in text
+    assert "--experimental-strip-types" not in text and "--experimental-transform-types" not in text
+    assert "sharedContracts" not in TEXT, "the shared-fixture tests are a Dev B/C follow-up and are not referenced yet"
+    assert text.index("--test-reporter=junit") < text.index("assert_junit_no_skips.py") < text.index("dump_frames.ts")
+
+
+def test_backend_job_checks_real_frames_with_the_shared_checker(wf):
+    text = run_text(wf["jobs"]["backend-observations"])
+    assert "node --import tsx ../../infra/testing/observations/dump_frames.ts" in text
+    assert re.search(r'check_event_contracts\.py --frames "\$RUNNER_TEMP/frames\.json"', text)
+    dump = (ROOT / "infra" / "testing" / "observations" / "dump_frames.ts").read_text(encoding="utf-8")
+    assert "createStreamHub" in dump and "createObservationStore" in dump, "frames must come from the real hub and store"
+
+
+def test_existing_mandatory_phase3_checks_are_still_wired(wf):
+    jobs = wf["jobs"]
+    assert "check_event_contracts.py" in run_text(jobs["contracts"]) and "ingestion" in run_text(jobs["ingestion-unit"])
+    assert "probe_ingestion_isolation.py" in run_text(jobs["runtime"])
+    assert set(jobs["runtime"]["needs"]) == {"contracts", "ingestion-unit", "compose-invariants"}

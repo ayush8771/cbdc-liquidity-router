@@ -5,6 +5,7 @@
 # services/web/ (its own .dockerignore).
 #
 #   docker build -t cbdc-web:local services/web                   # runtime (default)
+#   docker build --build-arg VITE_OBSERVATIONS=on -t cbdc-web:obs services/web   # the D-24 observation panel (default: off)
 #   docker build --target test --build-context contracts=contracts --build-context docs=docs -t cbdc-web-test:local services/web   # lint + tests (from the repo root)
 #
 # Run-time settings (no rebuild): BACKEND_HOST (default backend) and BACKEND_PORT (default 4000).
@@ -19,6 +20,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# Phase 3 D-24 (AD-1 §3.6): the observation panel is built in only when this is "on". Off by default; public, not a secret.
+# An ARG, not an ENV, so it reaches `npm run build` but not the test stage below.
+ARG VITE_OBSERVATIONS=off
 RUN npm run build
 
 # ---- test: `docker build --target test` ----

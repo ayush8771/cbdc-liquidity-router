@@ -26,6 +26,9 @@ import { getNetwork, getScenarios } from "./routes/metadata.js";
 import { replayCalendar } from "./routes/replay.js";
 import { getState } from "./routes/state.js";
 import { createTransaction, getTransaction, listTransactions } from "./routes/transactions.js";
+import { STREAM_PATH } from "./observations/constants.js";
+import { observationStream } from "./observations/route.js";
+import type { StreamHub } from "./observations/streamHub.js";
 
 export interface AppOptions {
   logger?: Logger;
@@ -52,6 +55,11 @@ export interface AppOptions {
   dashboard?: DashboardRepository;
   /** Stored comparisons. Without one (no DATABASE_URL), both comparison routes return 500 INTERNAL_ERROR. */
   comparisons?: ComparisonStore;
+  /**
+   * Phase 3 D-24 observation streams (AD-1 v0.5 §3.2). Without one (no
+   * OBSERVATIONS_URL), the stream route is not registered, so it is 404.
+   */
+  observationStreams?: StreamHub;
 }
 
 /**
@@ -137,6 +145,13 @@ export function createApp(options: AppOptions = {}): Express {
   // Database reads only (§3.8), any role. HEAD is answered by this GET route,
   // as for the other read-only GETs.
   app.get("/api/v1/dashboard/summary", authenticated, getDashboardSummary(options.dashboard));
+
+  // Phase 3 D-24 (AD-1 v0.5 §3.2), outside API contract v0.4 and API_ROUTES.
+  // app.all with authentication first: 401 before 405, HEAD included; the
+  // handler answers every other method with 405 itself.
+  if (options.observationStreams !== undefined) {
+    app.all(STREAM_PATH, authenticated, observationStream(options.observationStreams));
+  }
 
   // A registered path with an unregistered method: 405 with Allow (§4).
   // OPTIONS gets 405 too. The API is same-origin through the Vite proxy (§1),

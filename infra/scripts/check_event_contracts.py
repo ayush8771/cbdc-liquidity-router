@@ -27,8 +27,14 @@ Checks, in order:
 
 Usage:  python infra/scripts/check_event_contracts.py [--root REPO_ROOT]
         python infra/scripts/check_event_contracts.py --instance KIND FILE [--expect-events N]
+        python infra/scripts/check_event_contracts.py --frames FILE
 The second form checks one live JSON body (for example a real GET /v1/latest response) against the schema and the
 semantic rules of KIND, and with --expect-events also that a success body carries exactly N events.
+The third form checks the frames a real producer wrote (infra/testing/observations/dump_frames.ts): a JSON array of
+{"connection", "event", "msg"}, with "event" the SSE event name and "msg" the parsed data. Every msg must pass the
+stream-message verdict above (strict: the same schema and semantic rules as the fixtures), "type" must equal "event",
+each connection must start with a snapshot at stream_seq 1 and count up by one, and the frames must include all three
+message types and all three freshness states, so an empty or one-sided dump cannot pass.
 Exit status 0 when everything conforms, 1 otherwise. Needs only infra/scripts/requirements.txt.
 """
 from __future__ import annotations
@@ -327,13 +333,57 @@ class Checker:
         return self.problems
 
 
+def frames_problems(checker: "Checker", validators: dict, frames) -> list[str]:
+    """Strict producer verdicts for real stream frames (see the module docstring). Reuses Checker.verdict unchanged."""
+    if not isinstance(frames, list) or not frames:
+        return ["frames: expected a non-empty JSON array"]
+    out, last, types, states = [], {}, set(), set()
+    for i, fr in enumerate(frames):
+        where = f"frame {i} ({fr.get('connection')}/{fr.get('event')})" if isinstance(fr, dict) else f"frame {i}"
+        if not isinstance(fr, dict) or not {"connection", "event", "msg"} <= set(fr) or not isinstance(fr["msg"], dict):
+            out.append(f"{where}: needs connection, event and msg (an object)")
+            continue
+        msg = fr["msg"]
+        found = checker.verdict(validators, "stream-message", {"instance": msg})
+        out += [f"{where}: {f}" for f in found]
+        if msg.get("type") != fr["event"]:
+            out.append(f"{where}: type {msg.get('type')!r} differs from the SSE event name {fr['event']!r}")
+        seq, prev = msg.get("stream_seq"), last.get(fr["connection"])
+        if prev is None and msg.get("type") != "snapshot":
+            out.append(f"{where}: the first frame of a connection must be a snapshot")
+        if seq != (1 if prev is None else prev + 1):
+            out.append(f"{where}: stream_seq {seq!r} is not {1 if prev is None else prev + 1}")
+        last[fr["connection"]] = seq if isinstance(seq, int) else (prev or 0)
+        types.add(msg.get("type"))
+        states.update(v.get("freshness") for v in (msg.get("values") or ([msg["value"]] if "value" in msg else [])))
+    for t in MESSAGE_TYPES:
+        if t not in types:
+            out.append(f"frames: no {t} was produced")
+    for f in ("fresh", "stale", "unavailable"):
+        if f not in states:
+            out.append(f"frames: no {f} value was produced")
+    return out
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2], help="repository root")
     parser.add_argument("--instance", nargs=2, metavar=("KIND", "FILE"), help="check one JSON body instead of the repository")
+    parser.add_argument("--frames", type=Path, metavar="FILE", help="check the frames a real producer wrote, instead of the repository")
     parser.add_argument("--expect-events", type=int, help="with --instance: the exact number of events expected")
     args = parser.parse_args(argv)
     checker = Checker(args.root)
+    if args.frames:
+        validators = checker.load_schemas()
+        if validators is None:
+            print("FAIL " + "; ".join(checker.problems))
+            return 1
+        found = frames_problems(checker, validators, json.loads(args.frames.read_text(encoding="utf-8")))
+        for f in found:
+            print(f"FAIL {f}")
+        if not found:
+            print(f"{args.frames} conforms: every frame passes the stream-message verdict")
+        return 1 if found else 0
     if args.instance:
         kind, file = args.instance
         validators = checker.load_schemas()

@@ -27,6 +27,10 @@ export interface Config {
     devTokensFile: string;
     users: readonly DevUser[];
   };
+  // Phase 3 D-24 synthetic observation feed (AD-1 v0.5 §3.1, §3.6). Off unless
+  // OBSERVATIONS_URL is set: without it nothing polls and the stream route is
+  // not registered.
+  observations: { url: string } | undefined;
 }
 
 export const DEFAULTS = {
@@ -103,6 +107,12 @@ export function loadConfig(env: NodeJS.ProcessEnv, options: { cwd?: string } = {
     problems.push("INFERENCE_TIMEOUT_MS must be a positive whole number of milliseconds");
   }
 
+  const observationsUrl = read("OBSERVATIONS_URL");
+  if (observationsUrl !== undefined) {
+    const observationsUrlProblem = checkObservationsUrl(observationsUrl);
+    if (observationsUrlProblem) problems.push(observationsUrlProblem);
+  }
+
   const devTokensFile = resolveDevTokensFile(env, cwd);
   const tokens = readDevTokensFile(devTokensFile);
   problems.push(...tokens.problems.map((p) => `DEV_TOKENS_FILE: ${p}`));
@@ -122,6 +132,7 @@ export function loadConfig(env: NodeJS.ProcessEnv, options: { cwd?: string } = {
       devTokensFile,
       users: tokens.users,
     },
+    observations: observationsUrl === undefined ? undefined : { url: new URL(observationsUrl).origin },
   });
 }
 
@@ -154,6 +165,41 @@ function checkInferenceUrl(value: string): string | undefined {
   }
   if (url.search || url.hash) {
     return "INFERENCE_URL must be a base URL without a query string or fragment";
+  }
+  return undefined;
+}
+
+// AD-1 v0.5 §3.1: the ingestion URL is fixed by configuration: http, with no
+// credentials, query or fragment. The owner's D-24 decisions narrow it further
+// to exactly one approved destination, the ingestion service on the internal
+// Compose network: http://ingestion:8300. There is no allow-list, no
+// environment override and no loopback or test exception: any other value is a
+// startup failure. Tests reach loopback servers by passing a URL directly to
+// createHttpFetch / createObservationService, never through this check.
+//
+// The raw value must match the approved origin literally (one trailing "/"
+// tolerated; scheme and hostname compared case-insensitively, as DNS does).
+// Matching the raw text, not just the parsed URL, rules out what WHATWG
+// parsing would otherwise normalize away: percent-encoded or IDNA hostnames,
+// trailing-dot hostnames, a default or zero-padded port, an empty "@", "?" or
+// "#", and backslashes. The parsed origin is then checked as well.
+export const APPROVED_OBSERVATIONS_ORIGIN = "http://ingestion:8300";
+const APPROVED_OBSERVATIONS_RAW = /^http:\/\/ingestion:8300\/?$/i;
+
+function checkObservationsUrl(value: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "OBSERVATIONS_URL must be a valid http:// origin";
+  }
+  if (url.protocol !== "http:" || url.hostname === "") return "OBSERVATIONS_URL must be a valid http:// origin";
+  if (url.username || url.password || value.includes("@")) return "OBSERVATIONS_URL must not contain credentials";
+  if (url.search || url.hash || value.includes("?") || value.includes("#")) {
+    return "OBSERVATIONS_URL must be an origin without a query string or fragment";
+  }
+  if (!APPROVED_OBSERVATIONS_RAW.test(value) || url.origin !== APPROVED_OBSERVATIONS_ORIGIN || url.pathname !== "/") {
+    return `OBSERVATIONS_URL must be exactly ${APPROVED_OBSERVATIONS_ORIGIN}, the approved internal ingestion origin`;
   }
   return undefined;
 }

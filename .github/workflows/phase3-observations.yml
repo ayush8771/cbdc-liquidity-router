@@ -13,6 +13,10 @@ name: phase3-observations
 #   web-observations    Dev C's observation panel (PR #16): lint with the AD-6 B-8 import rules, type check, the observation
 #                       vitest suite with a no-skip check, and a production build with VITE_OBSERVATIONS=on. It does not
 #                       repeat the Phase 2 web tests (phase2-docker.yml). Needs services/web from PR #16.
+#   backend-observations  Dev B's observation module (PR #17): typecheck and the observation node:test files (the same runner
+#                       as `npm test`, tsx, Node from .nvmrc) with a no-skip check; then the frames the REAL stream hub writes
+#                       (infra/testing/observations/dump_frames.ts) are checked against the stream-message schema and its
+#                       semantic rules (check_event_contracts.py --frames, P-8). Needs the `contracts` job first.
 #   nginx-sse           P-7: the repository's nginx.conf.template, in the pinned Nginx image of services/web/Dockerfile, in
 #                       front of a TEST-ONLY stub backend (infra/testing/nginx_sse/, in no image): immediate snapshot,
 #                       unbatched updates, a quiet stream past 60 s, client abort, 401/429/503/405 and header
@@ -25,8 +29,9 @@ name: phase3-observations
 #
 # NOT here yet, and deliberately not represented as a job, so nothing reports green for work that does not exist:
 #   the same Nginx checks against Dev B's real stream, the client-side 401/429/reconnect/stale-state checks, the
-#   fault-injection fake ingestion server (Dev B), AD-6 T-1/T-2/T-3/T-6 to T-8/T-10 against a running stack, and the
-#   browser tests (Dev C). They need the backend observation module and the web panel and are added with them. The inference side of
+#   fault-injection fake ingestion server (Dev B), AD-6 T-1/T-2/T-3/T-6 to T-8/T-10 against a running stack, the browser
+#   tests (Dev C), and the TypeScript tests that run the shared contracts/events fixtures (Dev B and Dev C follow-ups, not yet
+#   landed; they are added to the backend-observations and web-observations jobs when they do). The inference side of
 #   T-5 is excepted for D-24 (D-25) and is neither run nor claimed.
 #
 # Dependencies on other branches: the checks need Dev A's ingestion component (PR #15: services/ingestion/,
@@ -102,8 +107,10 @@ jobs:
       - name: Event schemas, fixtures and hash vectors (P-8, P-9)
         run: python infra/scripts/check_event_contracts.py
 
+      # --require-observation-module: a tree without services/backend/src/observations FAILS instead of skipping the
+      # observation-to-routing direction. Merge order: PR #17 (backend module) before this workflow.
       - name: AD-6 B-3 import rules
-        run: python infra/scripts/check_import_boundaries.py
+        run: python infra/scripts/check_import_boundaries.py --require-observation-module
 
       - name: Test the checkers
         run: |
@@ -180,6 +187,60 @@ jobs:
 
       - name: No skipped test
         run: python infra/scripts/assert_junit_no_skips.py "$RUNNER_TEMP/p3-compose.xml"
+
+  backend-observations:
+    name: backend observation module (types, tests, real stream frames vs schema)
+    needs: [contracts]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Node from .nvmrc (20.20.2): the backend package pins >=20.6.0 <21 and its Dockerfile uses the same version.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: services/backend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          cache: pip
+          cache-dependency-path: infra/scripts/requirements.txt
+
+      - name: Install (lockfiles only)
+        run: |
+          (cd services/backend && npm ci)
+          python -m pip install -r infra/scripts/requirements.txt
+          python -m pip check
+
+      - name: Type check
+        working-directory: services/backend
+        run: npm run typecheck
+
+      # The observation test files only (the Phase 2 backend tests run in phase2-docker.yml and are not repeated). The glob is
+      # expanded by bash; when it matches nothing node fails on the literal name, so an empty run cannot pass.
+      # Same runner as `npm test` (scripts/run-tests.mjs): node --import tsx --test. JUnit feeds the no-skip check.
+      - name: Observation tests
+        working-directory: services/backend
+        run: |
+          node --import tsx --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=junit --test-reporter-destination="$RUNNER_TEMP/p3-backend.xml" \
+            test/unit/observation*.test.ts
+
+      - name: No skipped test
+        run: python infra/scripts/assert_junit_no_skips.py "$RUNNER_TEMP/p3-backend.xml"
+
+      # The real createObservationStore and createStreamHub write the frames; the shared checker judges them. Nothing is
+      # relaxed: the same schema and semantic rules as the fixtures, plus type = SSE event name and stream_seq 1, 2, 3.
+      - name: Real stream frames conform to the stream-message schema (P-8)
+        run: |
+          (cd services/backend && node --import tsx ../../infra/testing/observations/dump_frames.ts "$RUNNER_TEMP/frames.json")
+          python infra/scripts/check_event_contracts.py --frames "$RUNNER_TEMP/frames.json"
 
   web-observations:
     name: web observation panel (lint, types, tests, build)

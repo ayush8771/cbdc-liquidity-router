@@ -253,3 +253,60 @@ def test_the_fixture_total_and_the_empty_states():
     assert empty_latest["events"] == []
     empty_stream = json.loads((REPO_FIXTURES / "stream-message" / "valid_snapshot_all_unavailable.json").read_text(encoding="utf-8"))["instance"]
     assert [v["freshness"] for v in empty_stream["values"]] == ["unavailable"] * 4 and empty_stream["source"]["status"] == "starting"
+
+
+# --- --frames: the frames a real producer wrote (P-8; infra/testing/observations/dump_frames.ts) ---
+
+def _fixture(rel):
+    return json.loads((REPO / "contracts" / "events" / "fixtures" / rel).read_text(encoding="utf-8"))["instance"]
+
+
+def _frames():
+    """One connection built from shared fixtures: snapshot (fresh), stale update, unavailable update, heartbeat."""
+    msgs = [_fixture("stream-message/valid_snapshot.json"), _fixture("stream-message/valid_update_stale_value.json"),
+            _fixture("stream-message/valid_update_unavailable_value.json"), _fixture("stream-message/valid_heartbeat_outage.json")]
+    for seq, m in enumerate(msgs, 1):
+        m["stream_seq"] = seq
+    return [{"connection": "c", "event": m["type"], "msg": m} for m in msgs]
+
+
+def _frame_problems(frames):
+    checker = cec.Checker(REPO)
+    validators = checker.load_schemas()
+    assert validators is not None, checker.problems
+    return cec.frames_problems(checker, validators, frames)
+
+
+def test_frames_built_from_valid_fixtures_conform():
+    assert _frame_problems(_frames()) == []
+
+
+@pytest.mark.parametrize("change, expected", [
+    (lambda f: f[0]["msg"]["values"][0].update(freshness="stale"), "freshness disagrees"),
+    (lambda f: f[1].update(event="snapshot"), "differs from the SSE event name"),
+    (lambda f: f[2]["msg"].update(stream_seq=9), "stream_seq 9 is not 3"),
+    (lambda f: f[1]["msg"].update(extra=1), "schema"),
+    (lambda f: f.__delitem__(0), "must be a snapshot"),
+    (lambda f: f.__delitem__(3), "no heartbeat was produced"),
+])
+def test_a_broken_frame_is_reported(change, expected):
+    frames = _frames()
+    change(frames)
+    assert any(expected in p for p in _frame_problems(frames)), expected
+
+
+def test_a_dump_without_every_freshness_state_or_with_no_frames_cannot_pass():
+    one_sided = [f for i, f in enumerate(_frames()) if i != 2]
+    assert any("no unavailable value" in p for p in _frame_problems(one_sided))
+    assert _frame_problems([]) and _frame_problems({"not": "a list"})
+
+
+def test_the_frames_command_exits_nonzero_on_a_bad_file(tmp_path, capsys):
+    good, bad = tmp_path / "good.json", tmp_path / "bad.json"
+    good.write_text(json.dumps(_frames()), encoding="utf-8")
+    frames = _frames()
+    frames[2]["msg"]["stream_seq"] = 9
+    bad.write_text(json.dumps(frames), encoding="utf-8")
+    assert cec.main(["--frames", str(good)]) == 0
+    assert cec.main(["--frames", str(bad)]) == 1
+    assert "stream_seq 9" in capsys.readouterr().out
