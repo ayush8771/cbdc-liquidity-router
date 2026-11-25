@@ -11,6 +11,7 @@ import { createInferenceClient } from "./inferenceClient/client.js";
 import { createInferenceHealthProbe } from "./inferenceClient/health.js";
 import { createShutdown } from "./lifecycle.js";
 import { createLogger } from "./logger.js";
+import { createObservationService } from "./observations/service.js";
 
 const PORT = 4000;
 
@@ -48,6 +49,9 @@ const comparisons = prisma === undefined ? undefined : createPrismaComparisonSto
 // inference service; health reports "mock".
 const inferenceClient = createInferenceClient(config.inference, { logger });
 const inference = createInferenceHealthProbe(inferenceClient, logger);
+// Phase 3 D-24 synthetic observations: only with OBSERVATIONS_URL (off by default).
+const observations =
+  config.observations === undefined ? undefined : createObservationService({ url: config.observations.url, logger });
 
 // No listen() callback: Express 5 would also route startup errors into it.
 const server = createApp({
@@ -61,6 +65,7 @@ const server = createApp({
   explanations,
   dashboard,
   comparisons,
+  observationStreams: observations?.hub,
 }).listen(PORT, HOST);
 
 server.once("listening", () => {
@@ -73,6 +78,11 @@ server.once("listening", () => {
   // aren't needed here.
   void database.check();
   void inference.check();
+  // Polling starts after the server listens; readiness never depends on it.
+  if (observations !== undefined) {
+    console.log("Observations: synthetic feed enabled (display only; does not affect routing)");
+    observations.start();
+  }
 });
 
 server.on("error", (error: NodeJS.ErrnoException) => {
@@ -92,6 +102,7 @@ const shutdown = createShutdown({
   disconnect: disconnectPrismaClient,
   logger,
   exit: (code) => process.exit(code),
+  beforeClose: observations === undefined ? undefined : () => observations.shutdown(),
 });
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => void shutdown(signal));
