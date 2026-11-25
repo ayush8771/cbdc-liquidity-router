@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cbdc-ingestion"
+version = "0.1.0"
+description = "Phase 3 D-24 ingestion component (Dev A): seeded synthetic FX observation envelopes over a private HTTP endpoint."
+requires-python = ">=3.10"
+# The component has NO third-party dependency: standard library only. That is
+# deliberate (AD-1 §3.7's "no new dependency" condition, and the isolated,
+# read-only, non-root runtime of §3.6/P-6). `pytest` runs the tests; `rfc8785` and
+# `jsonschema` are optional cross-checks the tests skip when not importable.
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["cbdc_ingestion*"]
+
+# pytest configuration for this service only. Phase 1's `python -m pytest tests/`
+# never collects these tests: they live outside the repository-root tests/ folder,
+# exactly as the inference service's do.
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["--import-mode=importlib", "-ra", "--strict-markers"]
