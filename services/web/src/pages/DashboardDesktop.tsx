@@ -24,6 +24,7 @@ import {
 } from "../features/dashboard/dashboardQuery";
 import { KpiGrid } from "../features/dashboard/KpiGrid";
 import { CorridorMetricsTable, PolicyMetricsTable } from "../features/dashboard/PolicyMetricsTable";
+import { ObservationsSection } from "../features/observations/ObservationPanel";
 import { describeHistoryError } from "../features/transactions/historyApi";
 import { TransactionList } from "../features/transactions/TransactionList";
 import { POLICY_NAMES } from "../features/transactions/types";
@@ -329,6 +330,9 @@ export function DashboardDesktop() {
           <Notice>{NO_LIQUIDITY_CARRY_OVER}</Notice>
         </>
       ) : null}
+
+      {/* Phase 3 D-24: renders nothing unless live mode, VITE_OBSERVATIONS=on and signed in. Own state; touches nothing above. */}
+      <ObservationsSection />
     </div>
   );
 }

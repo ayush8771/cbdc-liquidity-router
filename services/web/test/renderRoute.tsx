@@ -6,6 +6,7 @@ import type { MeResponse } from "../src/api/types";
 import { routes } from "../src/app/routes";
 import { AuthContext, type AuthContextValue } from "../src/auth/AuthContext";
 import { AuthProvider } from "../src/auth/AuthProvider";
+import { ObservationsFlagContext } from "../src/features/observations/flags";
 import { createTokenStore } from "../src/auth/tokenStore";
 
 export const TEST_USER: MeResponse = {
@@ -35,6 +36,8 @@ export type RenderOptions = {
   role?: "analyst" | "viewer";
   /** The `fetch` the fixed session's API client uses (default: the global one). */
   fetchImpl?: typeof fetch;
+  /** The VITE_OBSERVATIONS build flag (Phase 3 D-24). Default off, as in the app. */
+  observations?: boolean;
 };
 
 function fixedSession(
@@ -53,6 +56,12 @@ function fixedSession(
     signIn: async () => ({ ok: false, reason: "unavailable" }),
     signOut: () => {},
     api: createApiClient({ getToken: () => (status === "signedIn" ? MOCK_TOKENS[role] : null), fetchImpl }),
+    // The observation stream (Phase 3 D-24). The screens under test never open it: the flag is off.
+    openObservationStream: (signal) =>
+      (fetchImpl ?? fetch)("/api/rt/v1/observations/stream", {
+        headers: { Accept: "text/event-stream", ...(status === "signedIn" ? { Authorization: `Bearer ${MOCK_TOKENS[role]}` } : {}) },
+        signal,
+      }),
   };
 }
 
@@ -74,5 +83,12 @@ export function renderRoute(path: string, options: RenderOptions = {}) {
     ) : (
       <AuthContext.Provider value={fixedSession(auth, options.role ?? "analyst", options.fetchImpl)}>{tree}</AuthContext.Provider>
     );
-  return { router, ...render(<DataModeContext.Provider value={data}>{wrapped}</DataModeContext.Provider>) };
+  return {
+    router,
+    ...render(
+      <DataModeContext.Provider value={data}>
+        <ObservationsFlagContext.Provider value={options.observations ?? false}>{wrapped}</ObservationsFlagContext.Provider>
+      </DataModeContext.Provider>,
+    ),
+  };
 }

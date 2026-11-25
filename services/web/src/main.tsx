@@ -12,6 +12,7 @@ import "./styles/globals.css";
 import { routes } from "./app/routes";
 import { DataModeContext, dataModeFromEnv } from "./api/dataMode";
 import { AuthProvider } from "./auth/AuthProvider";
+import { ObservationsFlagContext, observationsFlagFromEnv } from "./features/observations/flags";
 
 const router = createBrowserRouter(routes);
 
@@ -21,9 +22,11 @@ if (!root) throw new Error("Missing #root element");
 createRoot(root).render(
   <StrictMode>
     <DataModeContext.Provider value={dataModeFromEnv(import.meta.env.VITE_API_MODE)}>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
+      <ObservationsFlagContext.Provider value={observationsFlagFromEnv(import.meta.env.VITE_OBSERVATIONS)}>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </ObservationsFlagContext.Provider>
     </DataModeContext.Provider>
   </StrictMode>,
 );
