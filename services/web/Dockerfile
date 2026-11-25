@@ -27,9 +27,11 @@ RUN npm run build
 
 # ---- test: `docker build --target test` ----
 FROM build AS test
-# The tests read ../../../../contracts/fixtures and ../../docs/PHASE2_ARCHITECTURE.md, outside this
-# build context, so only this target takes those two folders as named contexts.
+# The tests read ../../../../contracts/fixtures, ../../../../contracts/events and
+# ../../docs/PHASE2_ARCHITECTURE.md, outside this build context, so only this target takes those
+# folders as named contexts.
 COPY --from=contracts fixtures /contracts/fixtures
+COPY --from=contracts events /contracts/events
 COPY --from=docs PHASE2_ARCHITECTURE.md /docs/PHASE2_ARCHITECTURE.md
 # Two workers, not one per CPU: with 4 workers a CPU-heavy jsdom test passed alone in about 3 s
 # but exceeded the 5 s default timeout in the full parallel run.
