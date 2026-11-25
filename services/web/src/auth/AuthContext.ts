@@ -31,6 +31,13 @@ export type AuthContextValue = {
   signOut(): void;
   /** The API client every screen uses: it adds this session's token, and ends the session on a 401. */
   api: ApiClient;
+  /**
+   * Opens the observation stream (Phase 3 D-24, AD-1 §3.3.4) with this session's bearer token. The token
+   * stays inside the auth module. A 401 ends the session like any other request's, unless the attempt
+   * belongs to a session that has since ended; then the response is discarded unread. The caller aborts it.
+   * It is not part of `api`: that client buffers whole responses and reaches only /api/v1.
+   */
+  openObservationStream(signal: AbortSignal): Promise<Response>;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
