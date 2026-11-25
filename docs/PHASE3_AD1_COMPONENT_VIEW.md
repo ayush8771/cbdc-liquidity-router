@@ -1,12 +1,12 @@
 # AD-1: Component View
 
-**Status:** **DRAFT v0.5**, 25 November 2026. **Not approved.** v0.3 answered Dev C's blockers B1 to B5; v0.4 applies Dev C's and Dev B's follow-up on the same sections: immediate abort (B1), recoverable versus permanent states (B2), SSE wire parsing and `profile` validation (B3), the §5 wording for the additive session method (B4), Dev B's §7 reference correction, and a safeguard against a late 401 from a superseded session. **v0.5** applies Varshini's final feedback: a mandatory positive `unavailable_after_ms` for the slice (§3.2, §3.3.3) and a single-connection rule that stops `pageshow` and `visibilitychange` opening two streams (§3.3.1).
-**Review state:** Dev B **APPROVE** and Dev D **ADOPT + APPROVE** were given on **v0.3**; Dev C returned **REQUEST CHANGES** on v0.3, answered in v0.4 and not yet confirmed. Varshini's v0.4 feedback is applied here, and **Varshini has not approved v0.5 or any earlier version**. Every approval is version-specific: none covers v0.4 or v0.5, and the owner has approved no version. B5 is **resolved** and v0.5 does not touch it. No code may start before the owner approves it (D-22).
+**Status:** **APPROVED v0.5** (component view), 25 November 2026. Approved by the project owner on 25 November 2026 **for the D-24 slice only** (D-22 for that slice; §2.2.2 and §2.2.3 of `docs/PHASE3_SCOPE.md` v1.4). The text of v0.5 is unchanged by this approval: v0.3 answered Dev C's blockers B1 to B5; v0.4 applied Dev C's and Dev B's follow-up on the same sections: immediate abort (B1), recoverable versus permanent states (B2), SSE wire parsing and `profile` validation (B3), the §5 wording for the additive session method (B4), Dev B's §7 reference correction, and a safeguard against a late 401 from a superseded session. **v0.5** applied Varshini's (Dev C) final feedback: a mandatory positive `unavailable_after_ms` for the slice (§3.2, §3.3.3) and a single-connection rule that stops `pageshow` and `visibilitychange` opening two streams (§3.3.1).
+**Review state:** all reviews are now in **on v0.5**. **Dev B APPROVE**, **Dev C (Varshini) APPROVE** — confirming B1 to B4 closed, B5 already resolved — and **Dev D ADOPT + APPROVE**. **Dev A** gave **technical approval** of the §3.1 ingestion contract, the four FX pairs (§3.4), the ordering and quarantine rules (§3.4) and the shared cross-language hash fixtures (§3.7): P-1, P-3, P-4 and P-9, and the generator. The **project owner approved v0.5 on 25 November 2026 for the D-24 slice**. Approval is version-specific: it covers **v0.5 only**, and any later revision needs fresh review and approval. The owner has **not** confirmed §4's placement of later components, so **no milestone 3.2–3.7 is authorized** (D-22 for those milestones is not satisfied). **No gate has passed.**
 **Lead:** Dev D. **Reviewers:** Dev A, Dev B, Dev C. **Approver:** project owner.
-**Scope source:** `docs/PHASE3_SCOPE.md` v1.3 §2.2.2, §7.3; D-22, D-24; F-2, F-3, F-6.
-**Extends:** `PHASE2_ARCHITECTURE.md` §2. **Relies on:** AD-4 (envelope) and AD-6 (boundary), both drafts.
+**Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §2.2.2, §2.2.3, §7.3; D-22, D-24, D-25; F-2, F-3, F-6.
+**Extends:** `PHASE2_ARCHITECTURE.md` §2. **Relies on:** AD-4 v0.2 (envelope) and AD-6 v0.2 (boundary), both approved for the D-24 slice only on 25 November 2026.
 
-Approving this view satisfies D-22 **for the D-24 slice only**. §4 places the later components, but the owner must confirm that placement before any milestone 3.2–3.7 begins. Everything not citing a decision is **proposed**; **[P-n]** marks proposals that need a named confirmation (§7).
+This approval satisfies D-22 **for the D-24 slice only**. §4 places the later components, but the owner must confirm that placement before any milestone 3.2–3.7 begins. Everything not citing a decision is **proposed**; **[P-n]** marks proposals that need a named confirmation (§7).
 
 ## 1. Components of the slice
 
@@ -317,7 +317,7 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 
 ## 5. Known gaps
 
-1. **Inference outbound-network isolation: exception granted, requirement UNRESOLVED.** AD-6 B-4 also says inference has no route to the internet. The Phase 2 stack does not enforce that, and this slice delivers only the ingestion side of B-4. The project owner granted option (a): **an exception for the D-24 slice only.** Recorded here pending its entry in `docs/PHASE3_SCOPE.md` §2.
+1. **Inference outbound-network isolation: exception granted, requirement UNRESOLVED.** AD-6 B-4 also says inference has no route to the internet. The Phase 2 stack does not enforce that, and this slice delivers only the ingestion side of B-4. The project owner granted option (a): **an exception for the D-24 slice only.** It is **recorded** as D-25 in `docs/PHASE3_SCOPE.md` §2.2 and §2.2.3 (v1.4, 25 November 2026).
 
    What the exception does **not** do:
 
@@ -343,16 +343,17 @@ Express validates each event (AD-4 schema, synthetic markers, code membership, `
 
 ## 7. Confirmations and approval
 
-A tick means that person confirmed **the stated version**. The owner has approved no version.
+All verdicts below were given on **v0.5**, 25 November 2026.
 
-- [ ] **Dev A:** P-1 (§3.1); P-3 pairs; P-4 ordering and quarantine; P-9 hash vectors; generator (§3, AD-12). **No verdict recorded.**
-- [x] **Dev B — APPROVE, on v0.3:** P-1 polling; §3.2 errors and authentication; P-4; P-5 lifecycle hook, limits and backpressure; P-9 no-dependency validator. Its conditions stand. **Raised with v0.3 and applied in v0.4:** the §7 reference correction below, and the superseded-session safeguard now in §3.3.4. The approval is not extended to v0.4's changes.
-- [ ] **Dev C — REQUEST CHANGES, pending review of v0.4:** B1 to B5 were raised on v0.2 and answered in v0.3; the follow-up on B1 to B4 is answered in v0.4 — §3.3.1 (abort at once, no grace, fresh snapshot on visible), §3.3.2 (recoverable versus permanent; no auto-reconnect after an authentication or protocol failure), §3.3.3 (wire parsing across chunks, CRLF, comments, both 64 KiB caps, `profile` validation) and §3.3.4 with §5 item 3 (the additive session method; `createApiClient` untouched). **B5 is resolved.** **Still open:** Dev C has not confirmed that B1 to B4 are now closed, and the conditional limitations on §3.2, §3.3 and §5 item 4 remain in force until they do.
-- [x] **Dev D (lead) — ADOPT + APPROVE, on v0.3:** P-6 isolation; P-7 Nginx; P-8 schema location and check (also AD4-Q5); P-10 workflow. Its conditions stand. **Open for v0.4:** §3.7's client faults, which v0.4 extends.
+- [x] **Dev A — TECHNICAL APPROVAL, on v0.5:** the §3.1 ingestion contract (P-1), the four FX pairs AED/MXN, EUR/USD, GBP/PHP, USD/INR (P-3), the §3.4 ordering and quarantine rules (P-4), the shared cross-language hash fixtures `contracts/test-vectors/event_payload_hash.v1.json` with the no-dependency validator and canonicalizer (P-9), and the generator (§3, AD-12). This is technical review, not the owner approval.
+- [x] **Dev B — APPROVE, on v0.5:** P-1 polling; §3.2 errors and authentication; P-4; P-5 lifecycle hook, limits and backpressure; P-9 no-dependency validator. Its conditions stand, and the approval now covers v0.4's and v0.5's changes, including §3.7's client faults. The §7 reference correction below was raised on v0.3 and applied in v0.4.
+- [x] **Dev C (Varshini) — APPROVE, on v0.5:** **B1 to B4 are confirmed closed** by §3.3.1 (abort at once, no grace, fresh snapshot on visible), §3.3.2 (recoverable versus permanent; no auto-reconnect after an authentication or protocol failure), §3.3.3 (wire parsing across chunks, CRLF, comments, both 64 KiB caps, `profile` validation) and §3.3.4 with §5 item 3 (the additive session method; `createApiClient` untouched). **B5 stays resolved.** The two v0.4 items raised by this reviewer are applied in v0.5 — a mandatory positive `unavailable_after_ms` for the slice (§3.2, §3.3.3, AD-4 untouched) and the single-connection rule with exactly one snapshot per resumption (§3.3.1), with tests in §3.7 and §6 item 8. The earlier **REQUEST CHANGES** on v0.3 is **withdrawn**, and the conditional limitations on §3.2, §3.3 and §5 item 4 are **lifted**.
+- [x] **Dev D (lead) — ADOPT + APPROVE, on v0.5:** P-6 isolation; P-7 Nginx; P-8 schema location and check (also AD4-Q5); P-10 workflow. Its conditions stand, and the approval now covers §3.7's client faults as extended in v0.4 and v0.5.
+- [x] **Project owner — APPROVED v0.5 for the D-24 slice, 25 November 2026.** §5 item 1 is decided and recorded as D-25 (`docs/PHASE3_SCOPE.md` §2.2, §2.2.3). AD-4 v0.2 and AD-6 v0.2 are approved for D-24 on the same date. **Not approved:** §4's placement of later components, and therefore no milestone 3.2–3.7 start. **No gate has passed.**
 
-**Dev B's §7 reference correction, as applied:** this section's Dev B entry said that "§5 item 1 was referred to the owner". The owner has since decided it (§5 item 1), so the sentence was stale and is removed; §5 item 1 is no longer an open Dev B condition, and §6 item 5 remains the place where T-5's ingestion-only limit is stated. **If this is not the reference Dev B meant, the correction is unapplied and Dev B should restate it** — it was relayed, not quoted, and nothing else in this document was changed on account of it.
-- [ ] **Varshini — feedback applied, no verdict:** the two items raised on v0.4 are applied in v0.5 — a mandatory positive `unavailable_after_ms` for the slice (§3.2, §3.3.3, AD-4 untouched) and the single-connection rule with exactly one snapshot per resumption (§3.3.1), with tests in §3.7 and §6 item 8. **Varshini has approved nothing**, and which reviewer role this feedback carries is not recorded here.
-- [ ] **Project owner:** §5 item 1 is **decided** (the D-24-only exception) and awaits recording in `docs/PHASE3_SCOPE.md` §2. Approval of AD-1, AD-4 and AD-6 is **not given**.
+**Dev B's §7 reference correction, as applied:** this section's Dev B entry said that "§5 item 1 was referred to the owner". The owner has since decided it (§5 item 1, now D-25), so the sentence was stale and was removed; §5 item 1 is no longer an open Dev B condition, and §6 item 5 remains the place where T-5's ingestion-only limit is stated. **If this is not the reference Dev B meant, the correction is unapplied and Dev B should restate it** — it was relayed, not quoted, and nothing else in this document was changed on account of it.
+
+**Still open after this approval:** AD-6 **B-4** (inference outbound-network isolation), which D-25 does not satisfy and which **AD-10** closes; §4's placement; every gate.
 
 ## 8. Review reconciliation
 
@@ -367,7 +368,7 @@ The repository holds no text of the individual reviews. This table follows the f
 | Lifecycle, authentication, limits, backpressure | §3.2, §3.5 |
 | Networks, isolation, overlay, Nginx | §3.6 |
 | Contracts, hash fixtures, faults, CI | §3.7 |
-| Inference outbound-network isolation | §5 item 1: exception granted for D-24 only; B-4 unresolved, for AD-10 |
+| Inference outbound-network isolation | §5 item 1: exception granted for D-24 only, recorded as D-25; B-4 unresolved, for AD-10 |
 | B1 hidden tabs and resumption | §3.3.1; v0.4: abort at once, no grace period |
 | B2 stopped-state retry and `Retry-After` | §3.3.2; v0.4: recoverable versus permanent, no auto-reconnect on authentication or protocol failure |
 | B3 message validation, labels, freshness, sequence, version, content type | §3.3.3; v0.4: wire parsing, comments, 64 KiB caps, `profile` validation |
@@ -377,4 +378,4 @@ The repository holds no text of the individual reviews. This table follows the f
 | Varshini: `unavailable_after_ms` positive, never null, for D-24 only | §3.2, §3.3.3; AD-4 unchanged |
 | Varshini: no duplicate connection from `pageshow` and `visibilitychange` | §3.3.1 single-connection rule; §6 item 8, §3.7 |
 
-**AD-4 and AD-6:** as relayed by the project owner, Dev B, C and D approved AD-4, and Dev B and C approved AD-6, in the D-24 review. These are kept as **reviewer feedback**. They are not owner approvals and do not satisfy D-24's preconditions. The AD-4 and AD-6 checkboxes stay open. They do not settle the AD-6 B-4 gap (§5 item 1).
+**AD-4 and AD-6:** as relayed by the project owner, Dev B, C and D approved AD-4, and Dev B and C approved AD-6, in the D-24 review. The **project owner approved AD-4 v0.2 and AD-6 v0.2 for the D-24 slice on 25 November 2026**, so D-24's three document preconditions (this component view, AD-4, AD-6) are now met. Neither approval settles the AD-6 **B-4** gap (§5 item 1, D-25), which stays unresolved and belongs to AD-10.

@@ -1,6 +1,11 @@
 # Phase 3 Milestone 3.1 — Architecture Work Plan
 
-**Status:** **Approved in part**, 24 November 2026. The project owner approved:
+**Status:** **Approved in part**, last updated 25 November 2026. The project owner approved, on **25 November 2026**:
+
+- the **AD-1 component view v0.5**, **AD-4 v0.2** and **AD-6 v0.2**, **for the D-24 slice only** (scope §2.2.3), on Dev B's, Dev C's and Dev D's approvals of AD-1 v0.5 and Dev A's technical approval of its ingestion contract, four FX pairs, ordering and quarantine rules and shared hash fixtures;
+- **D-25**, the D-24-only inference-network isolation exception (AD-6 **B-4 unresolved**, closed by AD-10; T-5 ingestion-side only).
+
+On **24 November 2026** the project owner approved:
 
 - the first decisions F-1 to F-6 (§2);
 - the deliverable leads (§3; scope D-21);
@@ -9,8 +14,8 @@
 - the reviewers of AD-2, AD-5 and AD-12 (§3; scope D-23).
 
 The sequence in §4 is a plan, not a decision.
-**Milestone state:** 3.1 has **begun**. Wave 0 (the first decisions) is complete; AD-4 and AD-6 (v0.2) and the AD-1 component view (v0.5) are drafted, **not approved**; the other deliverables are not written yet.
-**Scope source:** `docs/PHASE3_SCOPE.md` v1.3, which records the decisions (§2.2, §2.3) and the approved deliverable list (§7.3).
+**Milestone state:** 3.1 has **begun**. Wave 0 (the first decisions) is complete. The **AD-1 component view v0.5, AD-4 v0.2 and AD-6 v0.2 are approved by the project owner for the D-24 slice only** (25 November 2026; scope §2.2.3), which authorizes the D-24 slice and no milestone. The other deliverables are not written yet. The component view's §4 placement of later components is **not confirmed**, so **D-22 is not satisfied for milestones 3.2–3.7** and none of them may begin. **No gate has passed.**
+**Scope source:** `docs/PHASE3_SCOPE.md` v1.4, which records the decisions (§2.2, §2.3), the D-24 implementation authorization and D-25 (§2.2.3), and the approved deliverable list (§7.3).
 **Boundaries:** milestone 3.1 produces documents and schemas only. It writes no application code, changes no Compose file or database, installs no broker, leaves API contract v0.4 and the Phase 1 files unchanged, and uses no provider data before that provider has passed Gate 3 (D-17).
 
 ## 1. Roles
@@ -42,12 +47,12 @@ Leads are approved (D-21). The reviewers of AD-2, AD-5 and AD-12, which were adj
 
 | # | Deliverable | Lead | Reviewers | Needs first | Unblocks |
 |---|---|---|---|---|---|
-| AD-1 | Phase 3 architecture document (component view **drafted, not approved**: `docs/PHASE3_AD1_COMPONENT_VIEW.md`) | Dev D | Dev A, B, C | Component view: F-2, F-3. Final version: all other ADs. | Component view: every code milestone (3.2–3.7) and AD-10. Final version: the integrated architecture. |
+| AD-1 | Phase 3 architecture document (component view **v0.5 approved 25 Nov 2026 for the D-24 slice only**: `docs/PHASE3_AD1_COMPONENT_VIEW.md`; §4 placement unconfirmed) | Dev D | Dev A, B, C | Component view: F-2, F-3. Final version: all other ADs. | Component view: every code milestone (3.2–3.7) and AD-10. Final version: the integrated architecture. |
 | AD-2 | Streaming requirements | Dev B | Dev A, Dev D | F-4, F-5 | AD-3; milestone 3.4 |
 | AD-3 | Streaming mechanism decision record | Dev D | Dev B (the PostgreSQL option) | AD-2, F-6 | AD-11; milestone 3.4 |
-| AD-4 | Event envelope and provenance schema (**drafted, not approved**: `docs/PHASE3_AD4_EVENT_ENVELOPE.md`) | Dev A | Dev B, C, D | — | AD-5, AD-7, AD-9, AD-11, AD-12; milestone 3.3 |
+| AD-4 | Event envelope and provenance schema (**v0.2 approved 25 Nov 2026 for the D-24 slice only**: `docs/PHASE3_AD4_EVENT_ENVELOPE.md`) | Dev A | Dev B, C, D | — | AD-5, AD-7, AD-9, AD-11, AD-12; milestone 3.3 |
 | AD-5 | Source adapter contract | Dev A | Dev B, Dev D | F-2, F-4, AD-4 | AD-12; milestone 3.3 |
-| AD-6 | Live-data-to-engine boundary (**drafted, not approved**: `docs/PHASE3_AD6_ENGINE_BOUNDARY.md`) | Dev A | Dev B, Dev C | — (records D-9 and D-15) | AD-9; milestone 3.5 |
+| AD-6 | Live-data-to-engine boundary (**v0.2 approved 25 Nov 2026 for the D-24 slice only**, subject to D-25, B-4 unresolved: `docs/PHASE3_AD6_ENGINE_BOUNDARY.md`) | Dev A | Dev B, Dev C | — (records D-9 and D-15) | AD-9; milestone 3.5 |
 | AD-7 | Real-time channel contract | Dev B | Dev C, Dev D | F-3, AD-4, AD-10 | Milestone 3.5 |
 | AD-8 | Non-functional budgets | Dev A | Dev B, C, D | F-5, F-6 | AD-9; milestones 3.5, 3.7; exit criterion 9 |
 | AD-9 | Fallback and degradation spec | Dev C | Dev A, Dev B | AD-4, AD-6, AD-8 | Milestone 3.5 |
@@ -67,7 +72,7 @@ Leads are approved (D-21). The reviewers of AD-2, AD-5 and AD-12, which were adj
 | 3.6 | AD-1 component view, AD-12 |
 | 3.7 | AD-1 component view. Depends on 3.2; uses AD-8 and AD-11 |
 
-**D-24 slice** (scope §2.2.2): needs the AD-1 component view, AD-4 and AD-6 only. It is not a milestone and changes no row above.
+**D-24 slice** (scope §2.2.2, §2.2.3): needed the AD-1 component view, AD-4 and AD-6 only. **All three are approved (25 November 2026) and the slice is authorized**, under D-25's limits. It is not a milestone and changes no row above: every milestone 3.2–3.7 still waits on the owner's confirmation of the component view's §4 placement, plus its own deliverables and gates.
 
 The final AD-1 is not a precondition of any code milestone. AD-10 also needs the component view.
 
@@ -76,7 +81,7 @@ The final AD-1 is not a precondition of any code milestone. AD-10 also needs the
 | Wave | Work | Starts when |
 |---|---|---|
 | **0** | Decisions F-1 to F-6 | **Complete** (24 November 2026) |
-| **1** | AD-1 component view, AD-2, AD-4, AD-6, AD-8, AD-13 gate templates | Now. Their first decisions are made, and AD-4 and AD-6 need none. **The AD-1 component view, AD-4 and AD-6 are drafted, awaiting review.** |
+| **1** | AD-1 component view, AD-2, AD-4, AD-6, AD-8, AD-13 gate templates | Now. Their first decisions are made, and AD-4 and AD-6 need none. **The AD-1 component view v0.5, AD-4 v0.2 and AD-6 v0.2 are approved for the D-24 slice (25 November 2026); AD-2, AD-8 and the AD-13 gate templates are not written.** |
 | **2** | AD-3, AD-5, AD-9, AD-10 | Their wave-1 inputs are approved |
 | **3** | AD-7, AD-11, AD-12 | Their wave-2 inputs are approved |
 | **4** | AD-1 final, AD-13 test strategy | All other ADs are approved or deferred |
@@ -112,3 +117,5 @@ Milestone 3.1 exits when:
 - each of AD-1 to AD-13 is approved by the project owner after the listed reviews, or explicitly deferred with a reason and the code milestone it holds back;
 - AD-3 is recorded as the roadmap §6 streaming decision;
 - the approvals are recorded in `docs/PHASE3_SCOPE.md` §2.
+
+The D-24-slice approvals of 25 November 2026 do not exit 3.1: AD-2, AD-3, AD-5, AD-7 to AD-13 and the final AD-1 are still outstanding, and the component view's §4 placement is unconfirmed.

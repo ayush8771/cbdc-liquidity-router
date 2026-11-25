@@ -1,9 +1,9 @@
 # Major Phase 3 — Real-Time Streaming & Production: Scope
 
 **Document type:** Phase 3 scope and decision record. Not an implementation specification.
-**Status:** v1.3, 24 November 2026. **Accepted.** The project owner accepted v0.3 as the milestone 3.0 decision record on 24 November 2026. v1.3 records D-24, the synthetic demo slice. v1.2 records that AD-4 and AD-6 are drafted, not approved. v1.1 adds D-22 (an approved AD-1 component view is required before any code milestone) and D-23 (the AD-2, AD-5 and AD-12 reviewers are confirmed). v1.0 added the decisions made with the acceptance: the first milestone 3.1 decisions F-1 to F-6 (§2.3), and the approved gate reviewers, second-reviewer rule and deliverable leads (D-19 to D-21).
-**Milestone state:** 3.0 is **complete**. 3.1 (architecture documents) has **begun**: its first decisions are recorded. AD-4 and AD-6 (v0.2) and the AD-1 component view (v0.5) are drafted, **not approved**; the other deliverables are not written yet. 3.2–3.7 are **not started**.
-**Authorization:** No application code is authorized yet. The D-24 slice may begin only when its preconditions are met (§2.2.2). Under F-1, as tightened by D-22, a code milestone (3.2–3.7) may begin once the **AD-1 component view** and its own required 3.1 deliverables are approved, subject to its dependencies, and each gated capability also needs its gate. **No gate has passed.**
+**Status:** v1.4, 25 November 2026. **Accepted.** The project owner accepted v0.3 as the milestone 3.0 decision record on 24 November 2026. v1.4 records the D-24 implementation authorization: the owner's approval of the AD-1 component view v0.5, AD-4 v0.2 and AD-6 v0.2 for the D-24 slice, and D-25, the D-24-only inference-network isolation exception. v1.3 records D-24, the synthetic demo slice. v1.2 records that AD-4 and AD-6 are drafted, not approved. v1.1 adds D-22 (an approved AD-1 component view is required before any code milestone) and D-23 (the AD-2, AD-5 and AD-12 reviewers are confirmed). v1.0 added the decisions made with the acceptance: the first milestone 3.1 decisions F-1 to F-6 (§2.3), and the approved gate reviewers, second-reviewer rule and deliverable leads (D-19 to D-21).
+**Milestone state:** 3.0 is **complete**. 3.1 (architecture documents) has **begun**: its first decisions are recorded. The **AD-1 component view v0.5, AD-4 v0.2 and AD-6 v0.2 are approved for the D-24 slice only** (25 November 2026, §2.2.3); the other deliverables are not written yet. 3.2–3.7 are **not started** and **not authorized**: §4 of the component view (the placement of later components) is not confirmed, so D-22 is not satisfied for them.
+**Authorization:** **The D-24 slice is authorized for implementation** as of 25 November 2026: its three document preconditions are met (§2.2.2, §2.2.3). No other application code is authorized. Under F-1, as tightened by D-22, a code milestone (3.2–3.7) may begin once the **AD-1 component view** and its own required 3.1 deliverables are approved, subject to its dependencies, and each gated capability also needs its gate. **No gate has passed.**
 **Derived from:** `docs/FUTURE_PHASES_ROADMAP.md` §4 (Phase 3), §5 (technology status), §6 "Architecture decisions that remain open" and §7 (principles); `docs/PHASE2_ARCHITECTURE.md`; `docs/PHASE2_API_CONTRACT.md` v0.4; `docs/PHASE2_STATUS.md`.
 **Phase 3 implementation status:** **not started.** No live feeds, no streaming, no production inference.
 **Phase 2 status:** **integration sign-off recorded** (D-14, §2.2). This is not a production-readiness statement and not formal OpenAPI approval.
@@ -19,6 +19,7 @@
 
 ### Revision history
 
+- **v1.4 (25 November 2026).** Records the **D-24 implementation authorization** (§2.2.3): the project owner's approval of the AD-1 component view **v0.5**, AD-4 **v0.2** and AD-6 **v0.2**, for the D-24 slice only; the reviewer verdicts behind them (Dev B, Dev C and Dev D approvals of AD-1 v0.5, and Dev A's technical approval of the ingestion contract, the four FX pairs, the ordering and quarantine rules and the shared hash fixtures); and **D-25**, the D-24-only inference outbound-network isolation exception. **AD-6 B-4 stays unresolved** and is closed by AD-10; T-5 is claimed for the ingestion side only. No milestone 3.2–3.7 is authorized, no exit criterion, gate or milestone dependency changed, and **no gate has passed.**
 - **v1.3 (24 November 2026).** Records D-24 (§2.2.2): the owner approves a local-only synthetic FX demo slice, as a narrow exception to F-1. D-22 applies to it in full. The AD-1 component view is drafted, not approved. No gate has passed, and no exit criterion, gate or milestone dependency changed.
 - **v1.2 (24 November 2026).** Records that AD-4 and AD-6 are drafted, not approved, and that the owner decided eight of their questions: AD4-Q2, Q3, Q4 and Q8 (AD-4 §11.1) and AD6-Q1 to Q4 (AD-6 §9.1). §3.D's proposed fallback is noted as not applying to observation outages (AD6-Q2). No gate has passed, and no exit criterion, milestone dependency or gate changed.
 - **v1.1 (24 November 2026).** Records two owner decisions. D-22 requires an approved AD-1 component view before any code milestone (3.2–3.7), which tightens F-1. D-23 confirms the reviewers of AD-2, AD-5 and AD-12. The start rules in §2.3, §6 and §7, and §2.4 and §12, are updated to match, and §2.2.1 reflects the updated Phase 2 status page. No gate has passed, and no exit criterion changed.
@@ -121,6 +122,7 @@ Status documents and the UI use this description. They do not describe Phase 3 r
 | D-22 | **The AD-1 component view must be approved before any code milestone (3.2–3.7) begins**, in addition to that milestone's own required deliverables. The final AD-1 is not required for this; it is completed last, as planned. | §7; `docs/PHASE3_MILESTONE_3_1_PLAN.md` §3 |
 | D-23 | The reviewers adjusted after a lead changed are **confirmed**: **AD-2** Dev A and Dev D; **AD-5** Dev B and Dev D; **AD-12** Dev A (Stage 1E rules) and Dev B (review-queue persistence). | `docs/PHASE3_MILESTONE_3_1_PLAN.md` §3 |
 | D-24 | **Synthetic demo slice:** one local-only, synthetic FX streaming slice (Python generator → Express SSE → React dashboard) may be built as a narrow exception to F-1, under the conditions in §2.2.2. D-22 stays mandatory. | §2.2.2 |
+| D-25 | **Inference outbound-network isolation exception, D-24 only.** For the D-24 slice the owner waives enforcement of AD-6 **B-4** on the **inference** side: the slice delivers only the ingestion side. **B-4 stays unresolved**, is closed by **AD-10**, whose exposure plan must state how inference egress is controlled, and the exception extends to no later milestone or component. It is **not Gate 4 evidence, and no gate has passed** (D-6, D-18). | §2.2.3; AD-1 component view §5 item 1 |
 
 #### 2.2.1 Evidence for D-14
 
@@ -151,11 +153,11 @@ Status documents and the UI use this description. They do not describe Phase 3 r
 
 **[APPROVED]** (D-24) **Content:** a deterministic Python generator, an Express SSE endpoint and a React dashboard panel, for synthetic `fx_rate` events only. Local only; no broker, database or provider integration; off by default; every value clearly labelled SIMULATED (the AD-4 label "Simulated"); no routing-engine change.
 
-**Before any code,** all of these must be approved by the project owner after their listed reviews, and the approvals recorded here:
+**Before any code,** all of these must be approved by the project owner after their listed reviews, and the approvals recorded here. **All three are now approved** (25 November 2026, §2.2.3), so **the slice is authorized to begin**:
 
-- the AD-1 component view (D-22);
-- AD-4;
-- AD-6.
+- the AD-1 component view (D-22) — **approved, v0.5**;
+- AD-4 — **approved, v0.2**;
+- AD-6 — **approved, v0.2**, subject to D-25 (B-4 unresolved).
 
 **What the exception covers.** For this slice only, it waives F-1's requirement for AD-2, AD-3, AD-5, AD-7 to AD-9 and AD-12 (and AD-10, which AD-7 lists as an input), the AD-3 condition in §6, and the 3.3-S and 3.4-S dependencies. The AD-1 component view §3 states the slice's decisions in their place; it does not approve those deliverables. SSE is chosen for the slice, and AD-7 stays open.
 
@@ -165,6 +167,43 @@ Status documents and the UI use this description. They do not describe Phase 3 r
 - Every §6 labelling and reporting rule. Status text reads "streaming pipeline exercised with synthetic events only; no live source integrated".
 - Milestones: the slice earns no S or L exit and starts no milestone. Extending it needs the normal F-1 and D-22 conditions, or a new decision.
 - AD6-Q3: the slice stores nothing, so displayed context is not recorded. The requirement stays for milestone 3.5.
+
+#### 2.2.3 D-24 implementation authorization (25 November 2026)
+
+**[APPROVED]** The project owner approved, on **25 November 2026**, **for the D-24 slice only**:
+
+| Document | Version | Approval |
+|---|---|---|
+| AD-1 component view (`docs/PHASE3_AD1_COMPONENT_VIEW.md`) | **v0.5** | Approved; satisfies **D-22 for the D-24 slice only** |
+| AD-4 (`docs/PHASE3_AD4_EVENT_ENVELOPE.md`) | **v0.2** | Approved |
+| AD-6 (`docs/PHASE3_AD6_ENGINE_BOUNDARY.md`) | **v0.2** | Approved, subject to **D-25** |
+
+Each approval is **version-specific**. A later revision of any of the three needs fresh review and a fresh owner approval before the slice continues on it.
+
+**Technical reviews behind the approvals**, all on the stated versions:
+
+| Reviewer | Verdict |
+|---|---|
+| Dev A | **Technical approval** of the AD-1 v0.5 ingestion contract (`GET /v1/latest`, P-1), the four FX pairs AED/MXN, EUR/USD, GBP/PHP, USD/INR (P-3), the §3.4 ordering and quarantine rules (P-4), and the shared cross-language hash fixtures `contracts/test-vectors/event_payload_hash.v1.json` with the no-dependency validator (P-9), plus the generator. Dev A is also the owner, so D-20's second-reviewer rule is satisfied by Dev B, C and D |
+| Dev B | **APPROVE** AD-1 v0.5; approved AD-4 v0.2 and AD-6 v0.2 |
+| Dev C (Varshini) | **APPROVE** AD-1 v0.5, confirming blockers **B1 to B4 closed** (B5 was already resolved) and withdrawing the earlier REQUEST CHANGES; approved AD-4 v0.2 and AD-6 v0.2 |
+| Dev D (lead) | **ADOPT + APPROVE** AD-1 v0.5; approved AD-4 v0.2 |
+
+**What this authorization does:** the D-24 slice (§2.2.2) may be implemented, under every §2.2.2 condition — local only, off by default, synthetic `fx_rate` events only, SIMULATED labelling, no broker, database or provider integration, no routing-engine change, no change to Phase 1 or 2 behaviour, API contract v0.4 or `infra/compose.yaml`.
+
+**What it does not do:**
+
+- **It authorizes no milestone.** Milestones 3.2–3.7 stay **not started and not authorized**: the owner has **not** confirmed the component view's §4 placement of later components, so **D-22 is not satisfied for them**, and each still needs its own F-1 deliverables and gates.
+- **It passes no gate.** **No gate has passed** (D-18). Nothing is reachable outside the private development environment (D-16), and no exposure, staging host, LAN access, tunnel or demo URL is permitted (D-6).
+- **It resolves no open deliverable.** AD-2, AD-3, AD-5, AD-7 to AD-13 remain unwritten or unapproved; the AD-1 component view §3 stands in for them **for this slice only** and approves none of them. AD-4 §11.2 and AD-6 §9.2 stay open, as does the final AD-1.
+- **It does not resolve AD-6 B-4** (see D-25 below).
+- The slice earns **no S or L milestone exit** and changes no milestone dependency or exit criterion.
+
+**D-25, the inference-network isolation exception.** AD-6 B-4 requires that inference have no route to the internet. The Phase 2 stack does not enforce that, and the slice delivers only the **ingestion** side. The owner granted an exception **for the D-24 slice only**:
+
+- **B-4 remains unresolved.** It is closed by **AD-10**, whose exposure plan must state how inference egress is controlled. The D-24 Compose overlay does not isolate inference, and `--profile full` is unchanged.
+- **Test T-5 covers the ingestion side only** for this slice: ingestion has no route to inference, PostgreSQL or the internet, and holds no credential. The inference side of T-5 is **not run and not claimed**, so **AD-6 must not be described as fully enforced** (AD-1 component view §5 item 1, §6 item 5).
+- The exception **extends to no later milestone or component**, and is **not Gate 4 evidence**.
 
 ### 2.3 Milestone 3.1 first decisions (approved by the project owner, 24 November 2026)
 
@@ -453,7 +492,7 @@ Milestone 3.0 (complete) and the Phase 2 integration sign-off (D-14) are already
 | Milestone | Content | Depends on | Before its gate (private env, synthetic) | Gate-blocked capability | Exit |
 |---|---|---|---|---|---|
 | **3.0 — Scope approval and gate register** | Owner accepts the scope. Records the pilot framing, the gate definitions, the gate approver, the §4.2 restrictions and the private-environment boundary. | — | Documents only | — | **Complete.** v0.3 accepted on 24 November 2026 as the decision record. |
-| **3.1 — Architecture and requirements** | The 3.1 architecture deliverables (§7.3). | 3.0 | Documents only | — | AD-1 to AD-13 approved or explicitly deferred; mechanism recorded as a roadmap §6 decision. **Begun:** F-1 to F-6 decided; AD-4 and AD-6 drafted, not approved. The AD-1 component view comes first for code (D-22). |
+| **3.1 — Architecture and requirements** | The 3.1 architecture deliverables (§7.3). | 3.0 | Documents only | — | AD-1 to AD-13 approved or explicitly deferred; mechanism recorded as a roadmap §6 decision. **Begun:** F-1 to F-6 decided; the AD-1 component view v0.5, AD-4 v0.2 and AD-6 v0.2 are approved for the D-24 slice only (§2.2.3). The AD-1 component view comes first for code (D-22), and its §4 placement is still unconfirmed for milestones 3.2–3.7. |
 | **3.2 — Security baseline** | Identity provider, dev mode removed, httpOnly cookies, strict CSP, secrets management, authorization and rate limits. | 3.1 (AD-10), Phase 2 sign-off (D-14) | All of it | None: it **produces** Gate 4 evidence | 3.2 complete; Gate 4 evidence assembled with 3.7's private-env items |
 | **3.3 — First live adapter** | Adapter contract implemented; synthetic adapter; then one approved provider end to end with the full envelope, outage and stale handling. Polling is labelled as polling. | 3.1 (AD-4, AD-5, AD-12), D-14 | Contract, synthetic adapter, outage and stale handling | That provider's ingestion — Gate 3 | **S:** synthetic adapter feeding the envelope, faults handled. **L:** one Gate 3-approved source live and labelled, outages handled, bridge state still simulated |
 | **3.4 — Event distribution** | Workstream B on the approved mechanism: validation, normalization, duplicates, late events, idempotency, replay, downstream publication. | 3.1 (AD-2, AD-3), 3.3-S | All of it | None of its own. Real events flow only from a source that has passed 3.3-L. | **S:** replay and fault handling shown with synthetic events, observed and simulated state kept distinct. **L:** the same with 3.3-L traffic |
@@ -497,12 +536,12 @@ Rationale:
 
 | # | Deliverable | Content | Feeds |
 |---|---|---|---|
-| AD-1 | **Phase 3 architecture document** | A context and component view extending `PHASE2_ARCHITECTURE.md`: where the separate Python ingestion component (F-2), event distribution, the observation store and the Express-terminated update channel (F-3) sit; trust boundaries; what stays on the private network; how Phase 2 services are reused, not duplicated. The **component view** is approved first and is required before any code milestone (D-22) and the D-24 slice (drafted, not approved: `docs/PHASE3_AD1_COMPONENT_VIEW.md`); the final version follows the other ADs | All |
+| AD-1 | **Phase 3 architecture document** | A context and component view extending `PHASE2_ARCHITECTURE.md`: where the separate Python ingestion component (F-2), event distribution, the observation store and the Express-terminated update channel (F-3) sit; trust boundaries; what stays on the private network; how Phase 2 services are reused, not duplicated. The **component view** is approved first and is required before any code milestone (D-22) and the D-24 slice (**v0.5 approved 25 November 2026 for the D-24 slice only**: `docs/PHASE3_AD1_COMPONENT_VIEW.md`; its §4 placement of later components is not confirmed, so no milestone 3.2–3.7 is authorized); the final version follows the other ADs | All |
 | AD-2 | **Streaming requirements** | Throughput, ordering, replay window, durability and operational burden, with estimated event rates per source category | 3.4 |
 | AD-3 | **Streaming mechanism decision record** | Alternatives (for example a PostgreSQL queue with LISTEN/NOTIFY, or a dedicated broker), evidence, trade-offs, risks; the choice made **from** AD-2. Closes roadmap §6's broker decision. | 3.4 |
-| AD-4 | **Event envelope and provenance schema** (drafted, not approved) | Envelope fields; schema versioning; the Phase 1 provenance classes and how they map to display labels (live, delayed, simulated, manually entered, unavailable); synthetic-marking rules | 3.3–3.6 |
+| AD-4 | **Event envelope and provenance schema** (**v0.2 approved 25 November 2026 for the D-24 slice only**; §11.2 open) | Envelope fields; schema versioning; the Phase 1 provenance classes and how they map to display labels (live, delayed, simulated, manually entered, unavailable); synthetic-marking rules | 3.3–3.6 |
 | AD-5 | **Source adapter contract** | Transports (websocket, poll, scheduled, manual, synthetic), lifecycle, backoff, outage and staleness semantics, idempotency key | 3.3 |
-| AD-6 | **Live-data-to-engine boundary** (drafted, not approved) | Records D-9 and D-15: every observed field is display or context only. Explains why (the engine's date limit, non-overridable cost and risk under A-6, simulated bridge state) and what approved engine change would be needed to go further. | 3.5 |
+| AD-6 | **Live-data-to-engine boundary** (**v0.2 approved 25 November 2026 for the D-24 slice only**, subject to D-25: B-4 unresolved, for AD-10; §9.2 open) | Records D-9 and D-15: every observed field is display or context only. Explains why (the engine's date limit, non-overridable cost and risk under A-6, simulated bridge state) and what approved engine change would be needed to go further. | 3.5 |
 | AD-7 | **Real-time channel contract** | The channel Express terminates (F-3): WebSocket or SSE choice; message schemas; versioning; authentication on the channel; reconnect and resync. An extension alongside API contract v0.4, which it does not modify. | 3.5 |
 | AD-8 | **Non-functional budgets** | Finalizes F-5's provisional targets (event-to-display p95 ≤ 1 s, reconnect p95 ≤ 5 s, synthetic stale after three expected intervals), defines their measurement points, and adds provider-specific freshness thresholds, the remaining latency budgets and an availability target for the single-host pilot (F-6) | 3.5, 3.7 |
 | AD-9 | **Fallback and degradation spec** | The fallback order; when routing is refused; how stale, simulated or missing values are shown | 3.5 |
@@ -631,9 +670,14 @@ Rationale:
 - exit criteria 7–12;
 - acceptance of v0.3 as the milestone 3.0 decision record.
 
+**Recorded (project owner, 25 November 2026):**
+
+- D-25;
+- the AD-1 component view **v0.5**, AD-4 **v0.2** and AD-6 **v0.2**, **for the D-24 slice only** (§2.2.3), which authorizes that slice's implementation and nothing else.
+
 **Remaining during milestone 3.1:**
 
-1. Approve the AD-1 component view, which every code milestone waits for (D-22). For the D-24 slice, also approve AD-4 and AD-6.
+1. Confirm the AD-1 component view **§4 placement of later components**, which every code milestone 3.2–3.7 waits for (D-22). The D-24-slice approval does not cover it.
 2. Approve AD-1 to AD-13 as they are delivered. These include the streaming mechanism (AD-3), the WebSocket or SSE choice (AD-7), and the final budgets and measurement points (AD-8).
 3. Confirm or reject the items still [PROPOSED] (§2.4).
 

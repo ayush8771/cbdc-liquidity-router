@@ -1,6 +1,6 @@
 # AD-6: Live-Data-to-Engine Boundary
 
-**Status:** **DRAFT v0.2**, 24 November 2026. **Not approved by the project owner.** Dev B and C approved it in the D-24 review; this is recorded as reviewer feedback only (AD-1 §8). v0.2 applies the owner decisions in §9.1; they settle those points, but do not approve the document.
+**Status:** **APPROVED v0.2 for the D-24 slice**, 25 November 2026. The project owner approved v0.2 on 25 November 2026 **for the D-24 slice only** (`docs/PHASE3_SCOPE.md` v1.4 §2.2.2, §2.2.3), after the technical approvals of Dev B and Dev C. v0.2's text is unchanged by this approval; it applies the owner decisions in §9.1. The approval is version-specific to **v0.2** and authorizes no milestone 3.2–3.7 and no gate. **B-4 (inference has no route to the internet) is NOT satisfied:** D-25 grants a D-24-only exception for the inference side, B-4 stays **unresolved** and is closed by **AD-10**, and test T-5 covers the **ingestion side only** in this slice, so AD-6 must not be described as fully enforced. §9.2 (AD6-Q5, AD6-Q6) stays open.
 **Lead:** Dev A. **Reviewers:** Dev B, Dev C. **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.2 §1.3, §4.2, §7.3; D-1, D-9, D-15; A-3 to A-8.
 **Feeds:** AD-9; milestone 3.5.
@@ -177,8 +177,8 @@ Milestone 3.5's real-time path therefore means pushed observations, and pushed s
 
 ## 10. Approval checklist
 
-- [ ] Dev B: backend, persistence and credential controls. **Flagged:** the inference side of B-4 is not enforced today (AD-1 component view §5)
-- [ ] Dev C: UI rules and wording
-- [ ] Project owner: approval, recorded in `docs/PHASE3_SCOPE.md` §2
+- [x] **Dev B — approved** (D-24 review): backend, persistence and credential controls. **Flag stands:** the inference side of B-4 is not enforced today (AD-1 component view §5 item 1); the approval does not waive B-4
+- [x] **Dev C — approved** (D-24 review): UI rules and wording
+- [x] **Project owner — approved v0.2 for the D-24 slice, 25 November 2026**, recorded in `docs/PHASE3_SCOPE.md` §2.2.3. The inference-side B-4 exception is **D-25**, D-24 only; **B-4 remains unresolved for AD-10**, and T-5 is run and claimed for the ingestion side only
 
 Dev D is not a listed AD-6 reviewer. B-4 to B-6 need Dev D's work, so consulting Dev D is recommended; the approved reviewer list is unchanged.

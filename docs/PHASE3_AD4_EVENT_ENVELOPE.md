@@ -1,6 +1,6 @@
 # AD-4: Event Envelope and Provenance Schema
 
-**Status:** **DRAFT v0.2**, 24 November 2026. **Not approved by the project owner.** Dev B, C and D approved it in the D-24 review; this is recorded as reviewer feedback only (AD-1 §8). v0.2 applies the owner decisions in §11.1; they settle those points, but do not approve the document.
+**Status:** **APPROVED v0.2 for the D-24 slice**, 25 November 2026. The project owner approved v0.2 on 25 November 2026 **for the D-24 slice only** (`docs/PHASE3_SCOPE.md` v1.4 §2.2.2, §2.2.3), after the technical approvals of Dev B, C and D. v0.2's text is unchanged by this approval; it applies the owner decisions in §11.1. The approval is version-specific to **v0.2** and authorizes no milestone 3.2–3.7 and no gate. §11.2's questions (AD4-Q1, Q5, Q6, Q7) stay **open** and are decided by the deliverables named there; the slice uses the §3.2 profile fixed in the AD-1 component view and does not use AD-4 §7's null `unavailable_after_ms` allowance, which is unchanged here.
 **Lead:** Dev A. **Reviewers:** Dev B, Dev C, Dev D. **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies.
 **Schema:** `contracts/events/event-envelope.v1.schema.json` (JSON Schema 2020-12, DRAFT).
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.2 §3.A, §3.B, §6, §7.3.
@@ -261,7 +261,7 @@ The rate is deliberately unrealistic.
 
 ## 12. Approval checklist
 
-- [ ] Dev B: persistence and hashing
-- [ ] Dev C: labels and freshness, including how §8.2's two labels appear together
-- [ ] Dev D: schema, location and versioning. **Flagged:** AD4-Q5 (schema location) is yours to decide
-- [ ] Project owner: approval, recorded in `docs/PHASE3_SCOPE.md` §2
+- [x] **Dev B — approved** (D-24 review): persistence and hashing
+- [x] **Dev C — approved** (D-24 review): labels and freshness, including how §8.2's two labels appear together
+- [x] **Dev D — approved** (D-24 review): schema, location and versioning. **AD4-Q5 (schema location) remains Dev D's to decide** and is still open in §11.2; the AD-1 component view §3.7 (P-8) records the slice's location and check
+- [x] **Project owner — approved v0.2 for the D-24 slice, 25 November 2026**, recorded in `docs/PHASE3_SCOPE.md` §2.2.3. Scope of the approval: the D-24 slice only. No milestone 3.2–3.7 start, no gate, and §11.2 unchanged
