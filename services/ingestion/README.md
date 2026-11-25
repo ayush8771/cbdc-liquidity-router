@@ -79,7 +79,10 @@ matches a current event with different content or another pair, and the offset i
 constant, so those pairs' values would have stalled and aged out for the whole
 run. `tests/test_restart_identity.py` pins this. AD-1 §3's AD-12 row carries the
 corrected derivation as **correction C-1** (§3.4.1), approved by the project
-owner on 25 November 2026, with Dev B's second review outstanding under D-20.
+owner on 25 November 2026. The D-20 peer review for this implementation is Dev
+B's communicated technical approval, as determined by the owner; it is relayed
+rather than quoted, and a C-1-specific confirmation from Dev B is still wanted
+before the Express acceptance rules (P-4) are implemented.
 
 A restart one whole interval later is a separate, benign case: the pair and the
 source timestamp coincide but the sequence differs, so AD-1 §3.4's tie rule
