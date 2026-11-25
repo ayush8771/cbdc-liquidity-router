@@ -4,9 +4,9 @@ import type { AddressInfo } from "node:net";
 import { after, describe, it } from "node:test";
 import { createApp } from "../../src/app.js";
 import type { DevUser } from "../../src/config/devTokens.js";
-import type { SourceStatus } from "../../src/observations/constants.js";
+import { PROFILE, type SourceProfile, type SourceStatus } from "../../src/observations/constants.js";
 import type { FxEnvelope } from "../../src/observations/envelope.js";
-import { ProfileError, freshnessOf } from "../../src/observations/freshness.js";
+import { ProfileError, evaluateAll, freshnessOf } from "../../src/observations/freshness.js";
 import { createObservationService } from "../../src/observations/service.js";
 import { createObservationStore } from "../../src/observations/store.js";
 import { createStreamHub, encodeFrame } from "../../src/observations/streamHub.js";
@@ -185,6 +185,97 @@ describe("stream hub: message contracts (§3.2)", () => {
         }),
       ProfileError,
     );
+  });
+});
+
+// L-2: the snapshot must be evaluated with the hub's advertised profile, the
+// same one used for updates, not the module default.
+describe("stream hub: supplied profile governs snapshot and update freshness (L-2)", () => {
+  const CUSTOM: SourceProfile = {
+    expected_interval_ms: 500,
+    live_max_age_ms: null,
+    stale_after_ms: 1000,
+    unavailable_after_ms: 5000,
+    clock_tolerance_ms: 1000,
+  };
+
+  function customHub(clock: FakeClock, profile?: SourceProfile) {
+    const store = createObservationStore({ logger: silentLogger, now: () => clock.now() });
+    const hub = createStreamHub({
+      lookup: (b, q) => store.current(b, q),
+      sourceStatus: () => "ok",
+      logger: silentLogger,
+      clock,
+      ...(profile === undefined ? {} : { profile }),
+    });
+    return { hub, store };
+  }
+
+  const usdInr = (values: Array<Record<string, any>>) =>
+    values.find((v) => v.base_currency === "USD" && v.quote_currency === "INR")!;
+
+  function snapshotAndUpdateAt(profile: SourceProfile | undefined, at: number) {
+    const clock = new FakeClock();
+    const { hub, store } = customHub(clock, profile);
+    const t = clock.now();
+    store.ingest(eventAt(t), t);
+    clock.set(t + at);
+    const sink = openSink(hub);
+    hub.publishUpdate("USD", "INR");
+    const [snap, upd] = sink.messages();
+    hub.shutdown();
+    assert.equal(snap!.event, "snapshot");
+    assert.equal(upd!.event, "update");
+    return { snapshot: snap!.data as Record<string, any>, update: upd!.data as Record<string, any> };
+  }
+
+  for (const [at, freshness, age] of [
+    [999, "fresh", 999],
+    [1000, "fresh", 1000],
+    [1001, "stale", 1001],
+    [4999, "stale", 4999],
+    [5000, "stale", 5000],
+    [5001, "unavailable", null],
+  ] as const) {
+    it(`non-default profile: snapshot and update agree at age ${at} (${freshness})`, () => {
+      const { snapshot, update } = snapshotAndUpdateAt(CUSTOM, at);
+      assert.deepEqual(snapshot.profile, CUSTOM, "advertised profile is the supplied one");
+      const s = usdInr(snapshot.values);
+      const u = update.value as Record<string, any>;
+      assert.deepEqual([s.freshness, s.age_ms], [freshness, age], "snapshot");
+      assert.deepEqual([u.freshness, u.age_ms], [freshness, age], "update");
+      assert.deepEqual(s, u, "snapshot and update values are identical at the same server_time");
+      if (age === null) assert.equal(s.event, null, "no event once unavailable");
+      else {
+        assert.ok(Number.isInteger(s.age_ms));
+        assert.equal(freshnessOf(s.age_ms, snapshot.profile), s.freshness, "label agrees with advertised profile");
+      }
+    });
+  }
+
+  for (const [at, freshness, age] of [
+    [6000, "fresh", 6000],
+    [6001, "stale", 6001],
+    [30000, "stale", 30000],
+    [30001, "unavailable", null],
+  ] as const) {
+    it(`default profile unchanged: snapshot and update agree at age ${at} (${freshness})`, () => {
+      const { snapshot, update } = snapshotAndUpdateAt(undefined, at);
+      assert.deepEqual(snapshot.profile, { ...PROFILE });
+      const s = usdInr(snapshot.values);
+      assert.deepEqual([s.freshness, s.age_ms], [freshness, age], "snapshot");
+      assert.deepEqual(s, update.value, "update");
+    });
+  }
+
+  it("evaluateAll uses the default profile when none is given, and the supplied one otherwise", () => {
+    const t = Date.parse("2026-11-24T10:00:00.000Z");
+    const event = eventAt(t) as unknown as FxEnvelope;
+    const lookup = (b: string, q: string) => (b === "USD" && q === "INR" ? event : undefined);
+    assert.equal(usdInr(evaluateAll(lookup, t + 3000) as any).freshness, "fresh");
+    assert.equal(usdInr(evaluateAll(lookup, t + 3000, CUSTOM) as any).freshness, "stale");
+    assert.equal(usdInr(evaluateAll(lookup, t + 5001, CUSTOM) as any).freshness, "unavailable");
+    assert.equal(usdInr(evaluateAll(lookup, t + 5001) as any).freshness, "fresh");
   });
 });
 

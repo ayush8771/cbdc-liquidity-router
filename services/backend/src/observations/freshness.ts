@@ -84,12 +84,13 @@ export function evaluateValue(
   return { base_currency: base, quote_currency: quote, event, age_ms: age, freshness };
 }
 
-/** All four values in the §3.4 order. */
+/** All four values in the §3.4 order, evaluated with `profile` (the one advertised). */
 export function evaluateAll(
   lookup: (base: string, quote: string) => FxEnvelope | undefined,
   serverTimeMs: number,
+  profile: SourceProfile = PROFILE,
 ): ObservationValue[] {
-  return PAIRS.map(([base, quote]) => evaluateValue(base, quote, lookup(base, quote), serverTimeMs));
+  return PAIRS.map(([base, quote]) => evaluateValue(base, quote, lookup(base, quote), serverTimeMs, profile));
 }
 
 /** AD-4 timestamp form of a server time: UTC, three fractional digits, Z. */

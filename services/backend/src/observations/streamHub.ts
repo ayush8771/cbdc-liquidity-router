@@ -142,7 +142,8 @@ export function createStreamHub(options: StreamHubOptions): StreamHub {
     };
     if (type === "snapshot") {
       message.profile = { ...profile };
-      message.values = evaluateAll(lookup, now);
+      // Same profile as the one advertised above and used for updates (L-2).
+      message.values = evaluateAll(lookup, now, profile);
     } else if (type === "update" && pair !== undefined) {
       const [base, quote] = pair.split("/") as [string, string];
       message.value = evaluateValue(base, quote, lookup(base, quote), now, profile);
