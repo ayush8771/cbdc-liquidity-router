@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import { analystToken, signIn, watchBrowser } from "../tests/helpers";
+import { freeStreamSlots, PER_USER_STREAM_LIMIT, trackStreams } from "./streams";
 
 // AD-1 v0.5 section 6 items 2, 8 and 9 and AD-6 T-2, T-3 and T-10, in a real browser against disposable stacks.
 // Lives in e2e/p3/ with its own config (playwright.p3.config.ts), so the Phase 2 `npm test` never collects it. Run by e2e/p3_browser_acceptance.py, which builds one stack per build flavour and selects tests by tag:
@@ -8,7 +9,6 @@ import { analystToken, signIn, watchBrowser } from "../tests/helpers";
 //   @off      web built with VITE_OBSERVATIONS=off (the default build)
 // Nothing here is skipped: a tag that is not selected is simply not run.
 
-const STREAM = "/api/rt/v1/observations/stream";
 const PAIRS = ["EUR/USD", "GBP/PHP", "USD/INR"];
 const PYTHON = process.env.E2E_PYTHON ?? "python";
 const SOAK_SECONDS = Number(process.env.E2E_SOAK_SECONDS ?? 300);
@@ -20,20 +20,6 @@ function fault(scenario: string): void {
   const root = process.env.E2E_STACK_ROOT;
   if (!project || !root) throw new Error("E2E_STACK_PROJECT and E2E_STACK_ROOT are required for the fault tests.");
   execFileSync(PYTHON, [process.env.E2E_P3_STACK ?? "../infra/scripts/p3_stack.py", "fault", "--root", root, "--project", project, "--scenario", scenario], { stdio: "pipe", timeout: 60_000 });
-}
-
-/** Counts stream requests: started, and still open (neither finished nor failed). */
-function trackStreams(page: Page) {
-  const seen = { started: 0, ended: 0, urls: [] as string[], other: [] as string[] };
-  page.on("request", (r) => {
-    const path = new URL(r.url()).pathname;
-    if (path === STREAM) { seen.started++; seen.urls.push(r.url()); }
-    if (path.startsWith("/api/rt/") && path !== STREAM) seen.other.push(path);
-  });
-  const end = (r: { url(): string }) => { if (new URL(r.url()).pathname === STREAM) seen.ended++; };
-  page.on("requestfinished", end);
-  page.on("requestfailed", end);
-  return { ...seen, get started() { return seen.started; }, get open() { return seen.started - seen.ended; }, get urls() { return seen.urls; }, get other() { return seen.other; } };
 }
 
 /** Records every request to the observation path and every transaction or comparison POST. */
@@ -195,6 +181,7 @@ test.describe("@on the observation panel", () => {
 
   test("@on leaving the dashboard closes the stream, and returning opens exactly one", async () => {
     const { page, streams } = session;
+    await expect(status(page)).toContainText("Receiving"); // the precondition: the first stream is up before the baseline is taken
     const started = streams.started;
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "History" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "History" })).toBeVisible();
@@ -205,9 +192,19 @@ test.describe("@on the observation panel", () => {
     await expect(status(page)).toContainText("Receiving");
     expect(streams.started - started).toBe(1);
     expect(streams.open).toBe(1);
-    // A reload also leaves one open stream, not two.
+    // A reload also leaves one open stream, not two. The reload destroys the old document, and the browser does not always report the end of
+    // the stream it cancelled (measured: 1 reload in 30 never did, and the event never came later), so the old requests are forgotten at the
+    // reload and the closing of the old connection is shown on the server: with the page holding one slot, exactly the rest of the per-user
+    // cap still fits. A leaked old connection would leave one slot fewer and the poll would time out; a second new stream fails the counts.
+    const beforeReload = streams.snapshot();
+    const startedBeforeReload = streams.started;
     await page.reload();
+    streams.forget(beforeReload);
     await expect(status(page)).toContainText("Receiving");
+    expect(streams.started - startedBeforeReload, "the reload opened exactly one stream").toBe(1);
+    expect(streams.open, "and it is open").toBe(1);
+    await expect.poll(() => freeStreamSlots(token), { timeout: 5000, message: "the old connection released its slot on the server" }).toBe(PER_USER_STREAM_LIMIT - 1);
+    expect(streams.started - startedBeforeReload, "nothing reconnected meanwhile").toBe(1);
     expect(streams.open).toBe(1);
     expect(streams.urls.every((u) => !u.includes("?") && !u.includes(token)), "the token is never in the stream URL").toBe(true);
   });
