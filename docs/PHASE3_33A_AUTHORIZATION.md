@@ -1,6 +1,13 @@
 # Phase 3.3-A: Implementation Authorization Request (synthetic-only adapter foundation)
 
-**Status: DRAFT v0.2, 26 November 2026. Every decision below is [PROPOSED]. Nothing here is approved, nothing is authorized, and no gate passes.** This document **requests** the approvals that the synthetic-only part of milestone 3.3 needs; it does not record them and must not be cited as if it did. Until §10's sign-offs are complete and recorded, **the work may not begin** (F-1, D-22), and the statement "3.3-A is authorized" is false.
+**Status: DRAFT v0.3, 26 November 2026. Every decision below is [PROPOSED]. Nothing here is approved, nothing is authorized, and no gate passes.** This document **requests** the approvals that the synthetic-only part of milestone 3.3 needs; it does not record them and must not be cited as if it did. Until §10's sign-offs are complete and recorded, **the work may not begin** (F-1, D-22), and the statement "3.3-A is authorized" is false.
+
+**Revision v0.3, 26 November 2026 — still DRAFT.** Records two **process directions from the project owner (Ayush)**, relayed in session and **not quoted; no separate approval document exists**. They decide *how* authorization is to be obtained; they approve **no deliverable, grant no decision of §§3–6 and authorize no implementation.**
+
+- **DB-1 is closed: Route A.** The standard **F-1 and D-22 approval process** applies. **No §2.2.2-style exception is to be created**, and Route B is withdrawn (§10.1). Consequence: **AD-5 and AD-12 must be approved as documents**, and **AD-4's approval must be extended beyond the D-24 slice** before any code begins. §10.3 is the register of exactly what that takes.
+- **DB-2 is closed: the existing `ingestion-unit` job validates the registry.** **No workflow change**, and `check_event_contracts.py` is not extended (§7.4). §8 item 10's exclusion of CI changes therefore stands unamended.
+- **AD-5 v0.6 §8.2b is flagged for Anvesh (Dev B)**, specifically the collision field set against ordinary redelivery (§4.2, §10.2, §12 item 2).
+- Every correction from the three PR #37 reviews is retained unchanged.
 
 **Revision v0.2, 26 November 2026 — still DRAFT.** Applies the three **CHANGES_REQUESTED** reviews of PR #37 — **Varshini (Dev C)** B1–B3, **Nisarga (Dev D)** items 1–7, and **Anvesh (Dev B)** items 1–3 — whose texts are on that pull request, not in the repository. Documentation only. It approves nothing, and it does **not** resolve the two findings that are genuinely the owner's: those are stated as blockers in §13 rather than answered. Changes: the milestone, placement and ownership are stated against AD-1 Part 2 §2.2's component register (§2.1, Varshini B1); the published-status claim is corrected, because ingestion publishes no status at all (§4.3, Varshini B2); the AD8-Q5 claim is withdrawn (§5.4, Varshini B3); C-b's predicate is widened in AD-5 v0.6 §8.2b and reflected here (§4.2, Anvesh 2); the `source_id` containment claim is corrected (§6.1, Anvesh 2); the seed-allocation record, the fixture-origin format, registry packaging and CI coverage are specified (§6.1, §6.2, §7.4, Nisarga 2, 5, 6); AD5-Q11 is answered for the two paths (§4.6, Nisarga 7); the acceptance criteria gain shutdown, plausibility-bound and collision cases and criterion 9 is split (§9, Nisarga 3, 4, Anvesh 3); and §10 sets out the two authorization routes without choosing between them (Nisarga 1, Anvesh 1).
 
@@ -18,7 +25,7 @@
 **It is not:**
 
 - an approval of AD-1 Part 2, AD-5, AD-8 or AD-12 **as documents**;
-- a determination that approving named requirements inside draft documents satisfies **F-1**. That question is the owner's and is stated as **blocker DB-1** (§13);
+- an exercise of any F-1 exception. The owner has directed **Route A**, the standard F-1 and D-22 process (§10.1), so this document's requests take effect **only** through the approval of the deliverables themselves;
 - an authorization of **3.3-L** (one Gate 3-approved provider end to end), or of 3.2, 3.4, 3.5, 3.6 or 3.7;
 - Gate 1, Gate 2, Gate 3 or Gate 4 evidence. **All four gates remain closed;**
 - a change to any text approved for the D-24 slice. Where this document and an approved text could be read as disagreeing, **the approved text wins** and the disagreement is a defect here.
@@ -119,7 +126,17 @@ Adopt AD-5 §8.2's three outcomes, both conflict classes alertable (AD-8 §7.3 Q
 
 **Why the order must be explicit.** The earlier result was correct only because of two contingent facts: a collision differing in payload or subject has a different `idempotency_key`; and for the synthetic transport an equal `event_id` at an equal pair and timestamp forces an equal payload, because `event_id = f(seed, pair, sequence, source_timestamp)` while the payload is `f(seed, pair, sequence)`. **The second argument stops holding if AD4P2-Q1 changes the derivation**, and C-a would then merely keep the first where **AD-2 R-8 requires a rejection**.
 
-**No behaviour changes, and nothing approved moves.** The D-24 slice continues to run on **AD-1 §3.4 as approved**, and it runs one generator configuration per process, so no two of its events can differ in `case_id` or `generator_version` while sharing an `event_id`. **§8.2b's field set needs Dev B's confirmation** as the owner of the P-4 acceptance rules.
+**No behaviour changes, and nothing approved moves.** The D-24 slice continues to run on **AD-1 §3.4 as approved**, and it runs one generator configuration per process, so no two of its events can differ in `case_id` or `generator_version` while sharing an `event_id`.
+
+**§8.2b is flagged for Anvesh (Dev B), and is the one open technical question inside this request.** Dev B owns the P-4 acceptance rules, and the field set has to be right in **both** directions:
+
+| Must be C-b (a collision) | Must stay D (an ordinary redelivery) |
+|---|---|
+| Same `event_id`; same `payload_sha256`; same subject; **different `synthetic.case_id`** | Same `event_id`; same `payload_sha256`; same subject; **different `retrieved_at`** |
+| Same `event_id`; same `payload_sha256`; same subject; **different `synthetic.generator_version`** | Same `event_id`; same `payload_sha256`; same subject; **different `emitted_at`** |
+| Same `event_id`; **different `payload_sha256`**, subject, `source_id` or `event_type` | Same `event_id`; same everything but a **different `instance_id`** (a restarted producer resending) |
+
+**Getting it wrong is costly in either direction.** Too narrow and a changed generator configuration is silently discarded as a duplicate — the C-1 defect, which is why the predicate was widened. Too wide and **every** redelivery becomes a rejected collision, which breaks at-least-once delivery outright (§3.7 **H-1**) and would make the provisional AD5-Q7 direction unimplementable. The left column is also the **first** three rows of acceptance criterion 5, so Dev B's answer changes a test, not only a sentence. **Until Dev B confirms, §8.2b stays `[PROPOSED]` and AD5-Q8 is not decidable.**
 
 ### 4.3 AD5-Q9 — `down` stays internal, and in this scope it is **not published at all** **[PROPOSED]**
 
@@ -303,7 +320,9 @@ Requested as the **complete and exclusive** scope. Everything is additive and in
 
 **How CI actually validates it.** The `ingestion-unit` job runs `python -m pytest -q` in `services/ingestion/` and then `assert_junit_no_skips.py`, so every suite in §9 runs and a skipped or missing test **fails the job**. The schema-versus-record conformance check is therefore a **test in that suite**, not a new workflow step. `phase3-observations.yml` already has `services/ingestion/**` in its path filter, so the workflow triggers.
 
-**What is deliberately *not* requested:** extending `infra/scripts/check_event_contracts.py` or `check_contracts.py` to cover `contracts/events/registry/`. Those scripts are **Dev D's (P-8)**, `check_contracts.py` does not cover `contracts/events/` at all today, and a CI change needs its own authorization. **If the owner or Dev D prefers the schema to be checked by the `contracts` job instead, that is a CI change this document does not authorize and would need adding to §10.**
+**Settled by owner direction (DB-2, v0.3): the `ingestion-unit` job is the validation route, and no workflow changes.** `infra/scripts/check_event_contracts.py` and `check_contracts.py` are **not** extended to cover `contracts/events/registry/`. Those scripts are **Dev D's (P-8)**, and `check_contracts.py` does not cover `contracts/events/` at all today. The registry schema and record are therefore validated **only** by §9 criterion 3, a test in the ingestion suite, under the no-skip check.
+
+**What this makes binding:** §8 item 10's exclusion of every CI, Docker, Compose and packaging change **stands unamended**, and `phase3-observations.yml` is untouched. An implementation that needed a workflow change would be **outside this scope** and would need a fresh authorization. **Dev D still reviews the arrangement** (§10.2), because the obligation lands in a suite Dev D's no-skip check polices.
 
 **Fake-provider exclusion is verified, not assumed.** `infra/testing/fake_provider/` is outside `services/ingestion/`, so it is outside the build context — the same reason `infra/testing/fault_ingestion/` is absent from every runtime image. §9 criterion 11 asserts it mechanically.
 
@@ -356,14 +375,22 @@ The AD-5 §13 obligations are the source. **A-9** runs through the existing D-24
 
 **This document records no approval. Every box is unchecked.**
 
-### 10.1 The authorization route is the owner's to choose (DB-1)
+### 10.1 Route A, by owner direction (DB-1 closed)
 
-F-1 requires a code milestone's **own required 3.1 deliverables** — for milestone 3.3, **AD-4, AD-5 and AD-12** — to be **approved**, as tightened by D-22 for the AD-1 component view. Two routes exist, and **this document does not choose between them**:
+F-1 requires a code milestone's **own required 3.1 deliverables** — for milestone 3.3, **AD-4, AD-5 and AD-12** — to be **approved**, as tightened by D-22 for the AD-1 component view.
 
-- **Route A — the normal path.** Approve AD-5 and AD-12 **as documents**, and extend AD-4's approval beyond the D-24 slice to cover this work (today AD-4 v0.2 is approved for the slice only). F-1 is then satisfied as written, and the decisions requested in §§3–6 are subsumed by those approvals.
-- **Route B — a bounded owner decision.** Record an exception in the form scope **§2.2.2** already uses for D-24, which "waives F-1's requirement for AD-2, AD-3, AD-5, AD-7 to AD-9 and AD-12" for that slice. Such a decision would have to **name which F-1 requirements it replaces**, name the decisions it grants in their place (§§3–6), and state its own boundary, as §2.2.2 does. **D-22 stays mandatory either way**, as it did for D-24.
+**The project owner has directed Route A: the standard F-1 and D-22 approval process, with no special exception.** The direction was relayed in session and is **not quoted**; no separate approval document exists. It is a direction about **process only** and approves no deliverable.
 
-Both routes keep all four gates closed. **Route B is not a shortcut around review:** the §10.2 reviews are required under it too.
+**Route B is withdrawn.** No exception in the form of scope §2.2.2 — which waived F-1 for AD-2, AD-3, AD-5, AD-7 to AD-9 and AD-12 for the D-24 slice — is to be created for this work, and nothing in this document may be read as one.
+
+**What Route A means in practice, and it is stricter than v0.2 contemplated:**
+
+1. **AD-5 and AD-12 must be approved as documents**, not merely consulted for the named decisions of §§4 and §6. Every open question those documents carry must therefore be decided, **including the ones §11 lists as deliberately provisional** — AD5-Q7 may be decided *as* provisional, with its deferral recorded, but it cannot simply be left unanswered.
+2. **AD-4's approval must be extended beyond the D-24 slice.** AD-4 v0.2 is approved **for the D-24 slice only**, and that approval is version-specific. F-1 names AD-4 among milestone 3.3's deliverables, so an extension is mandatory and is the item most easily overlooked (§10.3 item 1).
+3. **D-22 is unaffected and stays mandatory**: the AD-1 component view's §4 placement must be confirmed, with Dev A, Dev B and Dev C reviewing (§3.1).
+4. **The §§3–6 requests do not take effect on their own.** Under Route A they are **inputs to those approvals** — the specific readings this scope depends on — not a parallel grant. If an approval lands with a different reading, §§7–9 must be restated before implementation.
+
+All four gates stay closed. **Route A is longer than Route B would have been, and it is the owner's decision.**
 
 ### 10.2 Reviews
 
@@ -372,16 +399,37 @@ Both routes keep all four gates closed. **Route B is not a shortcut around revie
 - [ ] **AD-8 v0.6 re-review** — **Dev B** (§8.2 shutdown against `lifecycle.ts`), **Dev C** (§4's monotonic age rule and the null-timestamp label), **Dev D** (§4.3's correction and §9's acceptance tests against the existing CI)
 - [ ] **AD-12 review** — **Dev A** (Stage 1E rules, §6.3) and **Dev B** (review-queue persistence), per D-23
 - [ ] **C-3 ownership** — **Dev D**, as AD-1 Part 2 §2.2 assigns the synthetic adapter and harness to Dev D under AD-12 (§2.1)
+- [ ] **AD-5 §8.2b specifically** — **Anvesh (Dev B)**: the collision field set **against ordinary redelivery**, per §4.2's two-column table. Flagged by owner direction (v0.3). It gates **AD5-Q8** and acceptance criterion 5
+- [ ] **§7.4's validation arrangement** — **Dev D**, as the owner of P-8 and of the no-skip check the obligation now rests on (DB-2 closed: in-suite, no workflow change)
 - [ ] **This document** — at least one of Dev B and Dev D, under the **second-reviewer rule (D-20)**
-- [ ] **Project owner** — the route of §10.1, the decisions of §§3–6, and the scope, exclusions and acceptance criteria of §§7–9
+- [ ] **Project owner** — the decisions of §§3–6 and the scope, exclusions and acceptance criteria of §§7–9. **The §10.1 route is already directed; these are not.**
 
-**On completion**, the decisions are recorded in `docs/PHASE3_SCOPE.md` §2 (3.1 plan §5), the F-1 and D-22 position is recorded with them, and the work of §7 may begin. **No gate passes, no provider becomes approved, and 3.3-L stays blocked on Gate 3.**
+### 10.3 Register of what Route A still requires
+
+**Nothing in this table is done.** Under Route A every row must complete before any code begins. "Technical sign-off" is a named reviewer's approval; "owner approval" is the project owner's.
+
+| # | Item | Kind | Who | Current state |
+|---|---|---|---|---|
+| 1 | **Extend AD-4's approval beyond the D-24 slice** to cover milestone 3.3, or approve a 3.3-scoped revision of it | **Owner approval** | Owner | **Not requested anywhere before v0.3.** AD-4 v0.2 is approved for the D-24 slice only, version-specifically. **F-1 names AD-4, so this is mandatory and is the likeliest item to be missed** |
+| 2 | **Confirm the AD-1 component view §4 placement** (scope §12 remaining item 1), satisfying **D-22** for 3.2–3.7 | Technical sign-off, then owner approval | **Dev A, Dev B, Dev C**; then owner | AD-1 Part 2 v0.4 is CHANGES_REQUESTED with **no re-review**. Needs AD1P2-Q1, Q5, Q6 and also **Q2, Q3, Q4, Q7** for the document to be approvable |
+| 3 | **Approve AD-5 as a document** | Technical sign-off, then owner approval | **Dev B** and **Dev D** (AD-5 §16); then owner | v0.6 is CHANGES_REQUESTED with **no re-review of v0.6**. Needs **AD5-Q1 to Q11** decided, Q7 permissibly *as provisional*, and **§8.2b confirmed by Dev B** (row 5) |
+| 4 | **Approve AD-12 as a document** | Technical sign-off, then owner approval | **Dev A** (Stage 1E rules) and **Dev B** (review-queue persistence), per D-23; then owner | v0.3.1 has Dev B's approve-with-conditions on v0.3 and **no re-review**. Part B stays `[PENDING: AD-10, AD-11]`, which must be resolved or explicitly deferred for the document to be approvable |
+| 5 | **Confirm AD-5 §8.2b's collision field set** against ordinary redelivery | Technical sign-off | **Dev B (Anvesh)** | **Open.** Flagged by owner direction. Gates AD5-Q8 and criterion 5 |
+| 6 | **Confirm §7.4's in-suite registry validation** | Technical sign-off | **Dev D** | Open. Route settled by DB-2; the arrangement is not yet reviewed |
+| 7 | **Re-review AD-8 v0.6** and grant the partial approval of §5 | Technical sign-off, then owner approval | **Dev B**, **Dev C**, **Dev D**; then owner | CHANGES_REQUESTED, **no re-review**. **Not** an F-1 deliverable for 3.3 — scope §7.1 names AD-4, AD-5 and AD-12 — but §5's values are needed for the adapter to be configurable at all (AD-5 §14 gap 3) |
+| 8 | **Review this document** under **D-20** | Technical sign-off | At least one of **Dev B**, **Dev D** | Three CHANGES_REQUESTED reviews received; v0.3 not yet re-reviewed |
+| 9 | **Approve §§7–9**: the implementation scope, the twelve exclusions and the eighteen acceptance criteria | **Owner approval** | Owner | Open |
+| 10 | **Record the outcome** in `docs/PHASE3_SCOPE.md` §2 (3.1 plan §5), with the F-1 and D-22 position | **Owner approval** | Owner | Open. A separate documentation change, not this pull request |
+
+**Rows 1 to 4 are the F-1 and D-22 core.** Rows 5, 6 and 8 are technical sign-offs that can proceed now. Row 7 is not F-1 but is a practical precondition. **Row 1 is new in v0.3** and follows directly from Route A.
+
+**On completion of every row**, the work of §7 may begin. **No gate passes, no provider becomes approved, and 3.3-L stays blocked on Gate 3.**
 
 ## 11. What stays provisional, deliberately
 
 | Item | Why it may stay open |
 |---|---|
-| **AD5-Q7 / H-1 to H-6** — delivery semantics | AD-2 and AD-3 are drafts. No H-answer changes AD-5 §3.2's operations (§4.5). **Revisit before 3.4** |
+| **AD5-Q7 / H-1 to H-6** — delivery semantics | AD-2 and AD-3 are drafts. No H-answer changes AD-5 §3.2's operations (§4.5). **Revisit before 3.4.** Under Route A, Q7 must be **decided as provisional** with its deferral recorded, not left blank (§10.1 item 1) |
 | **AD5-Q11** — the keying divergence itself | Only *which rule governs which path* is requested (§4.6); the narrowing question stays open |
 | **AD5-Q2, Q3, Q4, Q5, Q6** | No synthetic source exercises them |
 | **AD1P2-Q2, Q3, Q4, Q7** | Needed for AD-1 Part 2 as a document; they change no adapter code |
@@ -390,12 +438,12 @@ Both routes keep all four gates closed. **Route B is not a shortcut around revie
 | **AD-12 load modes, the general fixture-origin format, Part B** | §6.3; §6.2 proposes a format for this scope's fixtures only; Part B feeds 3.6 |
 | **AD4P2-Q1** — the derivation fix | Changes approved text; belongs to a new generator version |
 | **AD-10, egress, credentials, B-4, Gate 3** | A synthetic adapter acquires no outbound access, credential or volume. **All become hard blockers at 3.3-L and Gate 4** |
-| **Whether the registry schema moves into the `contracts` job** | A CI change, Dev D's to own (§7.4); not authorized here |
+| ~~Whether the registry schema moves into the `contracts` job~~ | **Closed by owner direction (DB-2):** it does not. Validation is in-suite and no workflow changes (§7.4) |
 
 ## 12. Residual risks
 
 1. **The C-1 residual risk is open.** Overlapping runs with the same seed and timestamps but a different `case_id` or `generator_version` produced **40** collisions. §6.1's safeguards are containment; AD-5 §8.2b improves **detection**. **Neither fixes the derivation.**
-2. **§4.2's widened C-b is a draft proposal** and needs Dev B's confirmation of its field set. If the set is wrong in either direction, the cost is a redelivery misread as a collision, or a changed configuration misread as a duplicate.
+2. **§4.2's widened C-b is a draft proposal awaiting Dev B.** If the field set is too wide, **every redelivery becomes a rejected collision** and at-least-once delivery breaks; if too narrow, a changed generator configuration is **silently discarded as a duplicate**, which is the C-1 defect. §4.2's two-column table states both sides, and three rows of acceptance criterion 5 depend on the answer.
 3. **§4.2's formulas in AD-8 are unvalidated.** 30 000 ms is the only one of those figures that has ever run (§5.4).
 4. **No load testing.** Exit criterion 9 stays unmet even after AD-8 is approved: it needs a recorded number **and** load tests against it.
 5. **A-4 is not exercised**, so the 3.3-S exit is not reached (§1.1, §9).
@@ -404,13 +452,15 @@ Both routes keep all four gates closed. **Route B is not a shortcut around revie
 8. **The seed-overlap refusal is local.** It reads a version-controlled file in one process and **cannot detect a second container started independently** against the same consumer. Under the read-only, no-volume posture no runtime-shared ledger is available, so this limit is inherent to the scope rather than an omission (§6.1).
 9. **The deferred Unavailable display (criterion 10a)** means a withdrawn source's stored values have **no verified user-facing behaviour** until the store and the panel exist. Nothing here stores observations, so nothing is currently displayed from a withdrawn source — but the obligation must travel with the milestone that adds the store.
 
-## 13. Genuine decision blockers — for the owner, not resolvable here
+## 13. Decision blockers: both closed by owner direction
 
-These are **not** answered in this document, and must not be read as answered.
-
-| # | Blocker | Who decides | Why it is not resolved here |
+| # | Blocker | Direction (relayed, not quoted; v0.3) | Effect |
 |---|---|---|---|
-| **DB-1** | **Does approving named requirements inside draft architecture documents satisfy F-1 and D-22, or must AD-4, AD-5 and AD-12 be approved as documents?** §10.1 sets out Route A and Route B, including that AD-4 v0.2's approval covers the **D-24 slice only** and so does not cover this work. | **Project owner**, with Dev B and Dev D (both raised it) | F-1 is approved text. Choosing a reading of it, or creating a §2.2.2-style exception, is an owner decision; a deliverable document cannot grant itself one. |
-| **DB-2** | **Does the registry schema's CI coverage need to move into the `contracts` job**, which would authorize a change to Dev D's `check_event_contracts.py` and to `phase3-observations.yml`? §7.4 proposes the in-suite alternative, which needs no CI change. | **Project owner**, with **Dev D** (owner of P-8) | Any CI change needs its own authorization, and §8 item 10 excludes one. If the answer is yes, §10.2 gains a line and §8 item 10 is amended. |
+| **DB-1** | Does approving named requirements inside draft documents satisfy F-1 and D-22, or must AD-4, AD-5 and AD-12 be approved as documents? | **Route A: the standard F-1 and D-22 process. No special exception.** | **CLOSED.** Route B withdrawn. AD-5 and AD-12 must be approved as documents and **AD-4's approval must be extended beyond the D-24 slice** (§10.1, §10.3 row 1) |
+| **DB-2** | Must the registry schema's CI coverage move into the `contracts` job, changing `check_event_contracts.py` and `phase3-observations.yml`? | **No. The existing `ingestion-unit` job validates it. No workflow changes.** | **CLOSED.** Validation is §9 criterion 3 only; §8 item 10 stands unamended; Dev D still reviews the arrangement (§10.3 row 6) |
 
-Nothing else in the three PR #37 reviews was left unresolved: every other finding is applied above or in AD-5 v0.6 and AD-8 v0.6.
+**Both directions are about process and neither approves a deliverable.** What remains is not a decision blocker but **unfinished approval work**, enumerated in §10.3: ten rows, none done, of which rows 1 to 4 are the F-1 and D-22 core.
+
+**One technical question is open inside this request:** AD-5 §8.2b's collision field set, flagged for **Dev B** (§4.2, §10.3 row 5).
+
+Nothing else from the three PR #37 reviews is unresolved: every other finding is applied above or in AD-5 v0.6 and AD-8 v0.6.
