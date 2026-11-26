@@ -725,3 +725,5 @@ Some documents predate the Phase 2 merge. The live repository is the source of t
 ## Licence
 
 The repository does not include a licence file. The raw datasets come from their original publishers and remain subject to those publishers' terms.
+
+<!-- Temporary check of the phase3-acceptance gate. Do not merge. -->
