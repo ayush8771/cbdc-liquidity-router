@@ -170,12 +170,21 @@ class IngestionService:
         of the acceptance or ordering rules needs a real wait.
         """
         applied = 0
+        # **Mutually exclusive, and that is the owner's condition** (the
+        # Phase 3.3-A Option B decision of 27 November 2026). The D-24
+        # generator and the registry-selected adapter share `source_id`
+        # `synthetic.fx`, so only one generator configuration may be active for
+        # it at any time. Selecting a record **replaces** the generator; it does
+        # not run beside it. With no record selected the generator runs exactly
+        # as it does today, which is §7.2's "until a registry record selects the
+        # adapter path".
+        if self._adapters:
+            return self._tick_adapters(now_ms)
         for event in self.generator.due(now_ms):
             if self.store.apply(event):
                 applied += 1
             else:
                 self._log_withheld(event)
-        applied += self._tick_adapters(now_ms)
         return applied
 
     # ----------------------------------------------------------- the adapter path
@@ -192,13 +201,23 @@ class IngestionService:
         Imported here, not at module import, so the default path does not even
         load the adapters package.
         """
-        from .adapters.registry import check_description, load_registry, selected_records
+        from .adapters.registry import (
+            RegistryInvalid, check_description, load_registry, selected_records)
         from .adapters.synthetic_fx import SyntheticFxAdapter
         from .adapters.context import AdapterContext, CancellationSignal, NullMetrics
         from .sink import ServiceSink
 
         registry = load_registry(self._registry_path, self._allocations_path)
         records = selected_records(registry, self.sources)
+        # The owner's Option B condition, enforced rather than trusted: at most
+        # one active generator configuration per `source_id`. Two selected
+        # records sharing one is a **startup failure**, not a warning.
+        chosen = [r.source_id for r in records]
+        if len(set(chosen)) != len(chosen):
+            raise RegistryInvalid(
+                "two selected records share a source_id; only one generator "
+                "configuration may be active for a source_id at a time "
+                "(Phase 3.3-A Option B decision, AD4P2-Q2)")
         self._sink = ServiceSink(self.store)
         for record in records:
             allocation = registry.allocation_for(record.source_id)

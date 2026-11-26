@@ -4,7 +4,7 @@
   "allocations": [
     {
       "seed": 20261127,
-      "source_id": "synthetic.fx.adapter",
+      "source_id": "synthetic.fx",
       "subjects": [
         ["AED", "MXN", "mid"],
         ["EUR", "USD", "mid"],
@@ -13,7 +13,7 @@
       ],
       "period": "2026-11-27/open",
       "active": true,
-      "intent": "The Phase 3.3-A synthetic FX adapter path. Distinct from the D-24 generator's default seed 20261125, which holds no allocation and needs none."
+      "intent": "The Phase 3.3-A synthetic FX adapter path. It shares the D-24 generator's source_id under the owner's Option B decision and is mutually exclusive with it, so only one configuration is ever active for synthetic.fx. The seed is deliberately NOT the generator's default 20261125, which holds no allocation and needs none: a distinct seed keeps the two configurations' event_ids distinct, since the seed is a C-1 derivation input and the source_id is not."
     }
   ]
 }

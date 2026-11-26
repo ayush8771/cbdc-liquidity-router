@@ -23,7 +23,7 @@ import json
 import pytest
 
 from cbdc_ingestion.adapters.faults import FaultClass
-from cbdc_ingestion.adapters.registry import load_registry
+from cbdc_ingestion.adapters.registry import SOURCES_PATH, load_registry
 from cbdc_ingestion.adapters.synthetic_fx import SyntheticFxAdapter
 from cbdc_ingestion.clock import ManualClock
 from cbdc_ingestion.generator import FxGenerator, rate_for
@@ -34,9 +34,9 @@ from cbdc_ingestion.settings import from_environment
 from cbdc_ingestion.sink import CHANNELS, ServiceSink
 
 from .adapter_cases import make_context
-from .conftest import SEED, START_MS
+from .conftest import CONTRACTS, SEED, START_MS
 
-ADAPTER_SOURCE_ID = "synthetic.fx.adapter"
+ADAPTER_SOURCE_ID = "synthetic.fx"
 
 
 # ------------------------------------------- 1. the D-24 default, bit-identical
@@ -103,13 +103,13 @@ def test_a_named_source_starts_its_adapter_and_validates_it():
         service.stop()
 
 
-def test_the_adapter_path_refuses_by_name_rather_than_mislabelling_an_envelope():
-    """The one unresolved item, asserted as a named refusal.
+def test_the_adapter_path_publishes_under_the_shared_source_id():
+    """Option B: the adapter path now runs, under `synthetic.fx`.
 
-    `envelope.py` writes a constant `source.source_id` and is untouched by rule
-    (§7.3), so the adapter path cannot yet emit an envelope carrying its own
-    record's `source_id`. It refuses with a `contract_violation`, which is
-    **permanent**: a configuration fault must not be retried forever.
+    The owner's decision of 27 November 2026 permits the generator and the
+    adapter to share the `source_id` **provided they are mutually exclusive**.
+    `envelope.py` is unchanged, so the envelope's `source.source_id` and the
+    record that selected it agree by construction.
     """
     clock = ManualClock(START_MS)
     service = IngestionService(SEED, clock=clock, start_ms=START_MS,
@@ -117,14 +117,63 @@ def test_the_adapter_path_refuses_by_name_rather_than_mislabelling_an_envelope()
     service.start(run_loop=False)
     try:
         clock.advance_ms(5000)
-        assert service.tick() == 4, "the D-24 generator still produces its four events"
-        adapter, _record, _seed = service._adapters[0]
-        assert adapter.state == "failed_permanent"
-        assert adapter.last_fault.fault_class is FaultClass.CONTRACT_VIOLATION
-        assert adapter.last_fault.reason == SOURCE_ID_UNRESOLVED
-        assert service._sink.counters()["faults"]["total"] >= 1
+        assert service.tick() == 4
+        adapter, record, _seed = service._adapters[0]
+        assert adapter.state == "running"
+        assert adapter.last_fault is None
+        events = service.store.events()
+        assert len(events) == 4
+        for event in events:
+            assert event["source"]["source_id"] == record.source_id == "synthetic.fx"
+            assert event["provenance_class"] == "synthetic"
+            assert event["usage"] == "display_only"
     finally:
         service.stop()
+
+
+def test_the_adapter_path_uses_its_allocated_seed_not_the_generator_s():
+    """The two configurations are told apart by seed, which IS a C-1 input.
+
+    `source_id` is absent from the derivation, so it cannot distinguish them;
+    the allocated seed can, and does.
+    """
+    clock = ManualClock(START_MS)
+    service = IngestionService(SEED, clock=clock, start_ms=START_MS,
+                               sources=(ADAPTER_SOURCE_ID,))
+    service.start(run_loop=False)
+    try:
+        clock.advance_ms(5000)
+        service.tick()
+        allocated = load_registry().allocation_for(ADAPTER_SOURCE_ID).seed
+        for event in service.store.events():
+            assert event["synthetic"]["seed"] == allocated != SEED
+    finally:
+        service.stop()
+
+
+def test_a_record_naming_another_source_id_still_refuses_by_name():
+    """The agreement check survives the decision.
+
+    Option B settled `synthetic.fx`; it did not authorize an `envelope.py`
+    change. A record naming anything else is still a **permanent**
+    `contract_violation`, because the builder cannot write another value.
+    """
+    from cbdc_ingestion.adapters.registry import parse_record
+    from cbdc_ingestion.pipeline import build_envelope
+    from cbdc_ingestion.adapters.faults import AdapterFault
+
+    shipped = json.loads(SOURCES_PATH.read_text(encoding="utf-8"))["sources"][0]
+    record = parse_record({**shipped, "source_id": "synthetic.fx.elsewhere"})
+
+    adapter = SyntheticFxAdapter(record.source_id, 20261127)
+    context = make_context(adapter, clock=ManualClock(START_MS))
+    adapter.start(context)
+    context.clock.advance_ms(2500)
+    observation = adapter.produce()[0]
+    with pytest.raises(AdapterFault) as info:
+        build_envelope(record, observation, seed=20261127, retrieved_at_ms=START_MS)
+    assert info.value.fault_class is FaultClass.CONTRACT_VIOLATION
+    assert info.value.reason == SOURCE_ID_UNRESOLVED
 
 
 def test_a_failed_adapter_does_not_make_the_service_unready():
@@ -135,6 +184,8 @@ def test_a_failed_adapter_does_not_make_the_service_unready():
     generator not running reaches `503 NOT_READY`, which is existing, approved
     D-24 behaviour and is unchanged.
     """
+    from cbdc_ingestion.adapters.faults import AdapterFault
+
     clock = ManualClock(START_MS)
     service = IngestionService(SEED, clock=clock, start_ms=START_MS,
                                sources=(ADAPTER_SOURCE_ID,))
@@ -142,11 +193,92 @@ def test_a_failed_adapter_does_not_make_the_service_unready():
     try:
         clock.advance_ms(5000)
         service.tick()
-        assert service._adapters[0][0].state == "failed_permanent"
+        assert service.latest_response()["events"], "values were served first"
+        adapter = service._adapters[0][0]
+        adapter._record_fault(AdapterFault(FaultClass.AUTH_FAILURE, "injected_unreachable"))
+        assert adapter.state == "failed_permanent"
+        clock.advance_ms(5000)
+        service.tick()
         assert service.ready, "an adapter fault must not make the service unready"
         assert service.latest_response()["events"], "the last-held values are still served"
     finally:
         service.stop()
+
+
+def test_the_adapter_path_conforms_to_the_UNCHANGED_approved_contracts():
+    """The assertion Option B rests on, and the reason no contract moved.
+
+    The `/v1/latest` body pins `source_id` to `{"const": "synthetic.fx"}` and
+    is untouched by rule (§7.3, §4.3). Because the adapter publishes under that
+    same `source_id`, the body validates against the **unchanged** schema, and
+    the envelopes validate against the **unchanged** envelope schema. Had the
+    record kept `synthetic.fx.adapter`, both would have failed — which is what
+    made the alternative a multi-contract change across three owners.
+    """
+    jsonschema = pytest.importorskip("jsonschema")
+    referencing = pytest.importorskip("referencing")
+
+    clock = ManualClock(START_MS)
+    service = IngestionService(SEED, clock=clock, start_ms=START_MS,
+                               sources=(ADAPTER_SOURCE_ID,))
+    service.start(run_loop=False)
+    try:
+        clock.advance_ms(5000)
+        service.tick()
+        body = service.latest_response()
+    finally:
+        service.stop()
+
+    envelope_schema = json.loads(
+        (CONTRACTS / "events" / "event-envelope.v1.schema.json").read_text(encoding="utf-8"))
+    latest_schema = json.loads(
+        (CONTRACTS / "events" / "ingestion-latest.v1.schema.json").read_text(encoding="utf-8"))
+    assert latest_schema["$defs"]["success"]["properties"]["source_id"] == {
+        "const": "synthetic.fx"}, "the wrapper's const is the constraint Option B satisfies"
+
+    registry = referencing.Registry().with_resource(
+        envelope_schema["$id"], referencing.Resource.from_contents(envelope_schema))
+    jsonschema.Draft202012Validator(latest_schema, registry=registry).validate(body)
+
+    # And the component's own strict validator, also unchanged, accepts them.
+    from cbdc_ingestion.validation import validate_fx_envelope
+
+    assert body["events"]
+    for event in body["events"]:
+        validate_fx_envelope(event)
+
+
+# ------------------------------------------- the owner's mutual-exclusivity rule
+def test_selecting_a_record_replaces_the_generator():
+    """Only one generator configuration is active for `synthetic.fx` at a time.
+
+    The events carry the **allocated** seed, never the env-configured one, which
+    is the observable proof that the generator did not also run.
+    """
+    clock = ManualClock(START_MS)
+    service = IngestionService(SEED, clock=clock, start_ms=START_MS,
+                               sources=(ADAPTER_SOURCE_ID,))
+    service.start(run_loop=False)
+    try:
+        clock.advance_ms(5000)
+        service.tick()
+        seeds = {e["synthetic"]["seed"] for e in service.store.events()}
+        assert seeds == {load_registry().allocation_for(ADAPTER_SOURCE_ID).seed}
+        assert SEED not in seeds, "the generator must not run beside the adapter"
+        # The generator's own counters never moved: it was never driven.
+        assert service.generator._next_sequence == {p.key: 1 for p in PAIRS}
+    finally:
+        service.stop()
+
+
+def test_two_selected_records_sharing_a_source_id_are_a_startup_failure():
+    """Enforced, not trusted: the exclusivity rule is a refusal."""
+    from cbdc_ingestion.adapters.registry import RegistryInvalid
+
+    service = IngestionService(SEED, clock=ManualClock(START_MS), start_ms=START_MS,
+                               sources=(ADAPTER_SOURCE_ID, ADAPTER_SOURCE_ID))
+    with pytest.raises(RegistryInvalid, match="one generator configuration"):
+        service.start(run_loop=False)
 
 
 def test_stopping_the_service_stops_its_adapters():

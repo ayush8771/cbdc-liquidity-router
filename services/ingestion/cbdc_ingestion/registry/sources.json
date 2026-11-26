@@ -1,9 +1,9 @@
 {
   "registry_version": "1.0",
-  "note": "Phase 3.3-A: synthetic sources only. No record here selects the adapter path by default; the D-24 generator stays the service default and has NO record (authorization §6.1, §7.2). Every record validates against contracts/events/registry/source-record.v1.schema.json. Adding a real or derived record needs an active Gate 3 decision, which does not exist: all four capability gates are CLOSED.",
+  "note": "Phase 3.3-A: synthetic sources only. No record here selects the adapter path by default; the D-24 generator stays the service default and has NO record and NO allocation entry (authorization §6.1, §7.2). THIS RECORD DOES NOT REGISTER THE D-24 GENERATOR. It shares that generator's source_id by the owner's Option B decision of 27 November 2026, which permits both to use synthetic.fx PROVIDED THEY ARE MUTUALLY EXCLUSIVE: only one generator configuration may be active for that source_id at any time, and selecting this record REPLACES the generator rather than running beside it. The generator remains env-configured (CBDC_INGESTION_SEED), unregistered and exempt. The decision applies to Phase 3.3-A only and authorizes no envelope, schema, backend, frontend or event_id derivation change. Every record validates against contracts/events/registry/source-record.v1.schema.json. Adding a real or derived record needs an active Gate 3 decision, which does not exist: all four capability gates are CLOSED.",
   "sources": [
     {
-      "source_id": "synthetic.fx.adapter",
+      "source_id": "synthetic.fx",
       "display_name": "Synthetic FX (adapter path)",
       "provider_id": null,
       "event_types": ["fx_rate"],

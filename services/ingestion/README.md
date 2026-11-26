@@ -163,6 +163,26 @@ Authorized by `docs/PHASE3_33A_AUTHORIZATION.md` v1.2 §7, with the exclusions o
 empty the registry and allocation files are **not read at all**, the adapters
 package is not imported by the default path, and the events are byte-identical.
 
+### One `source_id`, two mutually exclusive configurations
+
+By the owner's decision of **27 November 2026 (Option B, Phase 3.3-A only)**, the
+D-24 generator and the registry-selected adapter **both** use
+`source_id = synthetic.fx`, **provided they are mutually exclusive**: only one
+generator configuration may be active for that `source_id` at any time.
+Selecting a record **replaces** the generator rather than running beside it, and
+two selected records sharing a `source_id` is a startup failure.
+
+The record **does not register the D-24 generator**, which stays
+env-configured (`CBDC_INGESTION_SEED`), unregistered, without an allocation entry
+and exempt. The two are told apart by their **seed** — a C-1 derivation input —
+and not by their `source_id`, which is not one.
+
+This is why **no contract moved**. `/v1/latest` pins `source_id` to
+`{"const": "synthetic.fx"}`, so the adapter's body and envelopes validate against
+the **unchanged** schemas and the unchanged `validation.py`;
+`test_adapter_integration.py` asserts exactly that. The decision authorizes **no**
+envelope, schema, backend, frontend or `event_id` derivation change.
+
 The generator takes its seed from `CBDC_INGESTION_SEED` and has **no registry
 record and no allocation entry**. It is exempt from the registry and
 seed-allocation checks, and must be: an unscoped refusal would refuse to start
@@ -171,8 +191,8 @@ still starts, and that the default path never loads the registry.
 
 ### What is NOT implemented yet
 
-The adapter path is wired and validated but **not activatable**, and three
-authorized modules are still missing:
+The adapter path runs, but it is **not the complete AD-5 §3.4 path**: three
+authorized modules are still missing, so no suite here stands in for theirs.
 
 | Missing | Criteria |
 |---|---|
@@ -180,13 +200,13 @@ authorized modules are still missing:
 | `status.py` — AD-5 §9.2's internal status machine, in process only | 6 |
 | Plausibility bounds — quarantine, never reject and never clamp | 16 |
 
-**And one unresolved item blocks activation.** `envelope.py` writes a constant
-`source.source_id` of `synthetic.fx` and is **untouched by rule** (§7.3), so the
-adapter path cannot emit an envelope carrying its own record's `source_id`.
-`pipeline.build_envelope` therefore **refuses by name**, with a permanent
-`contract_violation`, rather than emit an envelope that contradicts the record
-that selected it. It needs an owner decision — an authorized `envelope.py` change
-or an agreed `source_id` — and that decision is **not** taken here.
+Until `dedup.py` exists, a redelivery on the adapter path is handled only by the
+existing store's AD-1 §3.4 ordering and duplicate rules, **not** by AD-5 §8.2's
+classifier. That difference is stated, not hidden.
+
+A record naming a `source_id` other than `synthetic.fx` is still a permanent
+`contract_violation` from `pipeline.build_envelope`: Option B settled the shared
+identity, and it authorized no `envelope.py` change.
 
 **Also out of scope, and not claimed:** any real provider or contact with one,
 any outbound network access, any credential, restart-safe deduplication,

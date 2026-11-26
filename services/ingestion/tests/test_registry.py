@@ -220,7 +220,7 @@ def test_a_description_mismatch_is_a_startup_failure():
     from .adapter_cases import adapter_for_record
 
     registry = load_registry()
-    record = registry.record_for("synthetic.fx.adapter")
+    record = registry.record_for("synthetic.fx")
     adapter = adapter_for_record(record)
     check_description(record, adapter.describe())  # the matching case passes
 
@@ -239,7 +239,7 @@ def test_a_timestamp_basis_mismatch_is_a_startup_failure():
     from .adapter_cases import adapter_for_record
 
     registry = load_registry()
-    record = registry.record_for("synthetic.fx.adapter")
+    record = registry.record_for("synthetic.fx")
     description = adapter_for_record(record).describe()
     mismatched = description.__class__(
         adapter_id=description.adapter_id, transports=description.transports,

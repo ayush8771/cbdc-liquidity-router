@@ -23,7 +23,7 @@ from cbdc_ingestion.clock import ManualClock
 from .conftest import SEED, START_MS
 
 PROBE_SOURCE_ID = "synthetic.contract_probe"
-SYNTHETIC_FX_SOURCE_ID = "synthetic.fx.adapter"
+SYNTHETIC_FX_SOURCE_ID = "synthetic.fx"
 PROBE_INTERVAL_MS = 2000
 
 

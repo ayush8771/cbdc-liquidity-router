@@ -24,28 +24,26 @@ says so rather than appearing to be one.
 
 ---
 
-**An unresolved item, surfaced rather than worked around: `SOURCE_ID`.**
+**`source_id`: resolved by the owner's Option B decision, 27 November 2026.**
 
-`envelope.py` writes a constant `source.source_id` of `synthetic.fx`, and
-`envelope.py` is in authorization §7.3's **untouched by rule** list — §7.2's
-changed-files table names only `service.py`, `settings.py` and the README. So
-the adapter path **cannot** emit an envelope whose `source_id` is the registry
-record's own (`synthetic.fx.adapter`), and the registry record cannot be named
-`synthetic.fx` either, because that is the D-24 generator's identity and the
-AD4P2-Q2 rule makes a second generator configuration a **second `source_id`**.
+`envelope.py` writes a constant `source.source_id` of `synthetic.fx` and is in
+authorization §7.3's **untouched by rule** list. The owner decided that the
+D-24 generator and the registry-selected synthetic FX adapter **may both use
+`source_id = synthetic.fx`, provided they are mutually exclusive**: only one
+generator configuration may be active for that `source_id` at any time, the
+generator remains the default, and the adapter is activated **only** through
+explicit registry selection.
 
-The authorization does not resolve this. Rather than emit an envelope whose
-`source.source_id` contradicts the record that selected it — which would make
-the registry's authority a fiction and break AD-4 §6's "an unregistered
-`source_id` is a rejection" — `build_envelope` **refuses, by name**. The
-refusal is a `contract_violation`, which is **permanent**: it is a configuration
-fault, and retrying it forever would hide it.
+So `build_envelope` no longer refuses the shipped record — it **checks
+agreement**, and the envelope's `source.source_id` can never contradict the
+record that selected it. The exclusivity itself is enforced in `service.py`:
+selecting a record **replaces** the generator rather than running beside it,
+and two selected records sharing a `source_id` is a startup failure.
 
-This blocks **activation** of the adapter path only. Nothing else in this scope
-depends on it: no record selects the adapter path by default, the D-24 generator
-path is unchanged and remains the default, and all four capability gates remain
-closed. It needs an owner decision — either an authorized `envelope.py` change
-or an agreed `source_id` — and it is **not** taken here.
+**The decision applies to Phase 3.3-A only.** It authorizes **no** envelope,
+schema, backend, frontend or `event_id` derivation change. `source_id` is
+absent from the C-1 derivation and from `payload_sha256`, so nothing about
+event identity moves. All four capability gates remain **closed**.
 """
 from __future__ import annotations
 
@@ -92,10 +90,13 @@ def build_envelope(record: SourceRecord, observation: NormalizedObservation,
                    *, seed: int, retrieved_at_ms: int) -> dict:
     """One AD-4 envelope for `observation`, built by the **unchanged** builder.
 
-    Refuses, by name, when the record's `source_id` is not the one
-    `envelope.py` can write — see this module's docstring. The refusal is a
-    **permanent** `contract_violation`: a configuration fault that must not be
-    retried.
+    The record's `source_id` must be the one `envelope.py` writes. Under the
+    owner's Option B decision that is `synthetic.fx` for the adapter too, so
+    this is now an **agreement check** rather than the former blanket refusal:
+    the envelope's `source.source_id` can never contradict the record that
+    selected it. A record naming anything else is still a **permanent**
+    `contract_violation` — a configuration fault, which must not be retried —
+    because `envelope.py` is unchanged and cannot write another value.
     """
     if record.source_id != SOURCE_ID:
         raise AdapterFault(

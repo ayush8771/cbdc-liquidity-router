@@ -190,24 +190,35 @@ def test_a_suspended_duplicate_does_not_count_as_a_second_active_configuration()
 
 
 # --------------------------------------------- the D-24 exemption, as a test
-def test_the_d24_generator_has_no_registry_record():
-    """`synthetic.fx` is the D-24 source_id and is deliberately absent."""
+def test_the_shared_source_id_record_is_not_the_d24_generator():
+    """Option B: the record shares `synthetic.fx` but does not register D-24.
+
+    The owner's decision of 27 November 2026 permits both configurations to use
+    `synthetic.fx` **provided they are mutually exclusive**. The record is the
+    adapter's; the generator stays env-configured, unregistered and exempt. The
+    two are told apart by their **seed**, which is a C-1 derivation input, and
+    not by their `source_id`, which is not one.
+    """
     from cbdc_ingestion import SOURCE_ID
 
     registry = load_registry()
-    assert registry.record_for(SOURCE_ID) is None, (
-        f"{SOURCE_ID} must have no registry record: it is the env-configured D-24 "
-        "generator, which is exempt (authorization §6.1)")
+    record = registry.record_for(SOURCE_ID)
+    assert record is not None, "the adapter record uses the shared source_id"
+    assert record.adapter_id == "synthetic_fx", (
+        "the record selects the adapter, not the env-configured generator")
+    allocation = registry.allocation_for(SOURCE_ID)
+    assert allocation is not None and allocation.seed != DEFAULT_SEED
 
 
-def test_the_d24_generator_has_no_allocation_entry():
-    from cbdc_ingestion import SOURCE_ID
+def test_the_d24_generator_seed_holds_no_allocation():
+    """The generator needs no allocation entry, and must not have one.
 
+    An entry for `CBDC_INGESTION_SEED`'s default would imply the generator is
+    registry-selected, which it is not: it is exempt, and an unscoped refusal
+    would refuse to start the approved slice.
+    """
     registry = load_registry()
-    assert registry.allocation_for(SOURCE_ID) is None
-    assert all(a.seed != DEFAULT_SEED for a in registry.allocations), (
-        "the D-24 default seed must hold no allocation: it needs none, and an entry "
-        "would imply the generator is registry-selected")
+    assert all(a.seed != DEFAULT_SEED for a in registry.allocations)
 
 
 def test_the_d24_generator_starts_with_no_record_and_no_allocation(clock):
