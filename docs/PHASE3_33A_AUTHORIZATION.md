@@ -1,6 +1,16 @@
 # Phase 3.3-A: Implementation Authorization Request (synthetic-only adapter foundation)
 
-**Status: DRAFT v0.3, 26 November 2026. Every decision below is [PROPOSED]. Nothing here is approved, nothing is authorized, and no gate passes.** This document **requests** the approvals that the synthetic-only part of milestone 3.3 needs; it does not record them and must not be cited as if it did. Until §10's sign-offs are complete and recorded, **the work may not begin** (F-1, D-22), and the statement "3.3-A is authorized" is false.
+**Status: DRAFT v0.4, 26 November 2026. Every decision below is [PROPOSED]. Nothing here is approved, nothing is authorized, and no gate passes.** This document **requests** the approvals that the synthetic-only part of milestone 3.3 needs; it does not record them and must not be cited as if it did. Until §10's sign-offs are complete and recorded, **the work may not begin** (F-1, D-22), and the statement "3.3-A is authorized" is false.
+
+**Revision v0.4, 26 November 2026 — still DRAFT.** Applies the **PR #37 re-reviews of commit `aeec98a`**: **Anvesh's (Dev B's)** one remaining blocker, **Nisarga's (Dev D's)** four remaining items, and the **non-blocking follow-up** in **Varshini's (Dev C's) approval**. Their texts are on that pull request, not in the repository. Documentation only; it approves nothing and authorizes nothing. **Varshini's approved Dev C corrections of v0.2 and v0.3 — §2.1's milestone and placement, §4.3's published-status correction and §5.4's withdrawal of the AD8-Q5 claim — are preserved unchanged.** Changes:
+
+- **AD-5 §8.2b's identity comparison gains `source_timestamp` and `synthetic.seed`** (Anvesh). Both participate in the approved C-1 derivation: under an equal `event_id` a differing `source_timestamp` matched **neither** conflict nor duplicate, and a differing `synthetic.seed` would have been classified a **duplicate**. §4.2's two-column table and acceptance criterion 5 are extended to every identity-bearing field and every excluded redelivery field, `instance_id` included. The stale rationale that an identity collision necessarily changes the idempotency key is removed from AD-5 §8.2, and C-b is now required to be evaluated against an **`event_id`-keyed index**.
+- **Criterion 13 no longer rests on the injected clock alone** (Nisarga 1). The 2 000 ms shutdown deadline is measured on a **real monotonic clock** with the worker's actual termination asserted.
+- **Criterion 11 states its mechanism** (Nisarga 2): a **static build-context, `.dockerignore` and `COPY` check**, which is what the `ingestion-unit` job can run, and the claim is narrowed to packaging exclusion rather than an image file listing.
+- **AD5-Q11 is split** (Nisarga 3): §4.6's per-path rules are recorded as the explicit resolution of **Q11(a)**, and the narrowing question is identified as **Q11(b), a remaining owner decision**. The D-24 path is unchanged.
+- **Architecture consistency** (Nisarga 4): **AD-5 A-11 is split** into the ingestion-side assertion and the deferred display verification, matching criteria 10 and 10a, and **AD-12 §3.1 and §3.4** now carry the agreed seed-allocation and fixture-origin mechanisms. AD-5 becomes **v0.7** and AD-12 **v0.3.2**.
+- **§4.3 distinguishes the two `/v1/latest` failure modes** (Varshini, non-blocking): a running generator with a stalled adapter answers **200** with the last-held value and ages, while a generator that is not running answers **503 `NOT_READY`**, which Express's poller counts as a poll failure and which therefore *does* drive the published status to `outage`.
+- **Every decision remains `[PROPOSED]` or `[PENDING]`.** No sign-off is recorded, Route A is unchanged, and all four capability gates stay closed.
 
 **Revision v0.3, 26 November 2026 — still DRAFT.** Records two **process directions from the project owner (Ayush)**, relayed in session and **not quoted; no separate approval document exists**. They decide *how* authorization is to be obtained; they approve **no deliverable, grant no decision of §§3–6 and authorize no implementation.**
 
@@ -13,7 +23,7 @@
 
 **Leads:** **Dev A** for the adapter contract inside C-1, **Dev D** for the synthetic adapter and harness (C-3). **Approver:** project owner. **Required reviewers:** §10.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §2.2.2 (the D-24 F-1 exception, as precedent only), §2.3 **F-1**, §7.1 (milestone 3.3), §7.2, §12 remaining item 1; D-20, D-22, D-23.
-**Depends on:** the AD-1 component view v0.5, AD-4 v0.2 and AD-6 v0.2 (each approved **for the D-24 slice only**), and the DRAFT documents AD-1 Part 2 v0.4, AD-4 Part 2 v0.2, AD-5 **v0.6**, AD-6 Part 2 v0.2, AD-8 v0.6, AD-12 v0.3.1.
+**Depends on:** the AD-1 component view v0.5, AD-4 v0.2 and AD-6 v0.2 (each approved **for the D-24 slice only**), and the DRAFT documents AD-1 Part 2 v0.4, AD-4 Part 2 v0.2, AD-5 **v0.7**, AD-6 Part 2 v0.2, AD-8 v0.6, AD-12 **v0.3.2**.
 **Changes no code, no contract, no schema, no OpenAPI file, no Compose file, no CI workflow and no capability gate.**
 
 ---
@@ -42,9 +52,9 @@ Scope §7.1 defines milestone 3.3 with two exits, **3.3-S** (synthetic) and **3.
 | AD-4 **v0.2** | **APPROVED, D-24 slice only.** F-1 names AD-4 among milestone 3.3's required deliverables, and the slice-only approval does **not** cover 3.3 (§13 **DB-1**) |
 | AD-6 **v0.2** | **APPROVED, D-24 slice only**, subject to **D-25**; **B-4 unresolved**; T-5 covers the ingestion side only |
 | AD-1 Part 2 **v0.4** | DRAFT. CHANGES_REQUESTED by Dev D and Dev C; applied; **no re-review**, no owner approval |
-| AD-5 **v0.6** | DRAFT. CHANGES_REQUESTED by Dev D, Dev C, and Dev B on re-review; applied; **no re-review of v0.6**, no owner approval |
+| AD-5 **v0.7** | DRAFT. CHANGES_REQUESTED by Dev D, Dev C, and Dev B across two re-review rounds; all findings applied, including Dev B's §8.2b blocker on `aeec98a`; **no re-review of v0.7**, no owner approval |
 | AD-8 **v0.6** | DRAFT. Same history; **no re-review**, no owner approval. F-5's targets stay provisional; exit criterion 9 unmet |
-| AD-12 **v0.3.1** | DRAFT. Dev B approve-with-conditions on v0.3; applied; **no re-review**, no owner approval |
+| AD-12 **v0.3.2** | DRAFT. Dev B approve-with-conditions on v0.3; applied, and v0.3.2 adds §3.1's seed-allocation mechanism and §3.4's fixture-origin format on Nisarga's architecture-consistency item; **no re-review**, no owner approval |
 | AD-2 v0.2, AD-3 v0.3, AD-7, AD-9, AD-10 v0.2, AD-11 v0.3, AD-13 v0.3 | DRAFT or unwritten; none approved |
 
 **Consequence.** All three documents F-1 names for milestone 3.3 — AD-4, AD-5 and AD-12 — are either approved for the D-24 slice only or still drafts, and D-22 is unsatisfied. The work is therefore **blocked on authorization, not on design**: §7's scope is implementable the day §10 is complete.
@@ -95,7 +105,7 @@ Confirm AD-1 Part 2 §8's deliverable-and-gate mapping **in the same act** as Q1
 
 ## 4. AD-5: the decisions that shape the adapter interface
 
-Requested against `docs/PHASE3_AD5_ADAPTER_CONTRACT.md` **v0.6**. **No event identity changes:** C-1's approved derivation and AD-4 v0.2 are untouched by every item below.
+Requested against `docs/PHASE3_AD5_ADAPTER_CONTRACT.md` **v0.7**. **No event identity changes:** C-1's approved derivation and AD-4 v0.2 are untouched by every item below.
 
 ### 4.1 AD5-Q1 — two keys **[PROPOSED]**
 
@@ -112,7 +122,7 @@ idempotency_key  = (observation_key, payload_sha256)
 
 ### 4.2 AD5-Q8 — three outcomes, their order, and C-b's predicate **[PROPOSED]**
 
-Adopt AD-5 §8.2's three outcomes, both conflict classes alertable (AD-8 §7.3 Q-2), **in the evaluation order C-b, then D, then C-a**, with **C-b's predicate as AD-5 v0.6 §8.2b defines it**:
+Adopt AD-5 §8.2's three outcomes, both conflict classes alertable (AD-8 §7.3 Q-2), **in the evaluation order C-b, then D, then C-a**, with **C-b's predicate as AD-5 v0.7 §8.2b defines it**:
 
 | # | Condition | Outcome | Behaviour |
 |---|---|---|---|
@@ -120,7 +130,18 @@ Adopt AD-5 §8.2's three outcomes, both conflict classes alertable (AD-8 §7.3 Q
 | **D** | Same `idempotency_key` as an event already seen | **Duplicate** | **Discarded**, not rejected and not quarantined; counted |
 | **C-a** | Same `observation_key`, different `payload_sha256`, no validated `supersedes` | **Value conflict** | The **first is kept**; the later event is counted and does not become current |
 
-**"Differing event content" is a named field set** (§8.2b): `payload` / `payload_sha256`, the subject, `source_id`, `event_type`, and the identity-bearing provenance **`synthetic.case_id` and `synthetic.generator_version`**. It **excludes** `retrieved_at`, `emitted_at` and `instance_id`, which differ on every ordinary redelivery — including them would turn each redelivery into a rejected collision and break at-least-once delivery.
+**"Differing event content" is a named field set** (§8.2b, **widened again in AD-5 v0.7**): `payload` / `payload_sha256`, the subject, `source_id`, `event_type`, **`source_timestamp`**, and the identity-bearing provenance **`synthetic.seed`, `synthetic.case_id` and `synthetic.generator_version`**. It **excludes** `retrieved_at`, `emitted_at` and `instance_id`, which differ on every ordinary redelivery — including them would turn each redelivery into a rejected collision and break at-least-once delivery.
+
+**The rule behind the set.** Identity-bearing means: **in the C-1 derivation** (`synthetic.seed`, the pair, the sequence, `source_timestamp`) **or distinguishing the producer or the observed content** (`payload_sha256`, the subject, `source_id`, `event_type`, `synthetic.case_id`, `synthetic.generator_version`). `sequence` is not compared directly — it is not an envelope field, and a differing `sequence` under an equal `event_id` necessarily shows as a differing `payload_sha256` or `source_timestamp`.
+
+**Why `source_timestamp` and `synthetic.seed` had to be added (Anvesh, re-review of `aeec98a`).** Both are in the approved derivation, and without them a collision escapes classification in two different ways:
+
+| Under an equal `event_id` | Keys of §8.1 | Outcome without the field | Outcome with it |
+|---|---|---|---|
+| **Different `source_timestamp`** | `observation_key` **differs**, so `idempotency_key` differs | Matches **neither D nor C-a**: accepted as a new observation **while carrying an already-used identity** | **C-b**, rejected and counted |
+| **Different `synthetic.seed`** | **Both keys equal** | **D**: silently discarded as a duplicate — the C-1 defect | **C-b**, rejected and counted |
+
+**C-b therefore needs its own lookup.** It is evaluated against an index keyed on **`event_id` alone**, not on either key of §8.1, and it is evaluated **first**. AD-5 v0.7 states this, and it **removes v0.5's and v0.6's stale rationale** that an identity collision "necessarily" differs in payload or subject and so carries a different `idempotency_key` — the seed row above is a counter-example.
 
 **Why the widening (Anvesh 2).** `payload_sha256` covers `{event_type, payload}` only, and the `idempotency_key` adds nothing beyond it. So two events from **different generator configurations** sharing a seed, pair, sequence and `source_timestamp` have an identical `event_id`, an identical payload hash and an identical subject, and under the earlier predicate they fell through to **D** and were **silently discarded as duplicates** — the exact C-1 defect. AD-1 §3.4's approved row is keyed on "different **content** or pair", so the wider predicate **aligns** AD-5 with the approved rule.
 
@@ -134,7 +155,9 @@ Adopt AD-5 §8.2's three outcomes, both conflict classes alertable (AD-8 §7.3 Q
 |---|---|
 | Same `event_id`; same `payload_sha256`; same subject; **different `synthetic.case_id`** | Same `event_id`; same `payload_sha256`; same subject; **different `retrieved_at`** |
 | Same `event_id`; same `payload_sha256`; same subject; **different `synthetic.generator_version`** | Same `event_id`; same `payload_sha256`; same subject; **different `emitted_at`** |
-| Same `event_id`; **different `payload_sha256`**, subject, `source_id` or `event_type` | Same `event_id`; same everything but a **different `instance_id`** (a restarted producer resending) |
+| Same `event_id`; same `payload_sha256`; same subject; **different `synthetic.seed`** | Same `event_id`; same everything but a **different `instance_id`** — a restarted producer resending, which AD-12 §3.2 keeps diagnostic |
+| Same `event_id`; same `payload_sha256`; same subject; **different `source_timestamp`** | Same `event_id`; same everything, including all of the left column's fields — a plain redelivery |
+| Same `event_id`; **different `payload_sha256`**, subject, `source_id` or `event_type` | |
 
 **Getting it wrong is costly in either direction.** Too narrow and a changed generator configuration is silently discarded as a duplicate — the C-1 defect, which is why the predicate was widened. Too wide and **every** redelivery becomes a rejected collision, which breaks at-least-once delivery outright (§3.7 **H-1**) and would make the provisional AD5-Q7 direction unimplementable. The left column is also the **first** three rows of acceptance criterion 5, so Dev B's answer changes a test, not only a sentence. **Until Dev B confirms, §8.2b stays `[PROPOSED]` and AD5-Q8 is not decidable.**
 
@@ -147,6 +170,15 @@ Adopt AD-5 §9.3's mapping — the internal state `down` maps to **`outage`**, a
 - **Ingestion publishes no status.** `contracts/events/ingestion-latest.v1.schema.json` requires `protocol_version`, `instance_id`, `source_id`, `generated_at` and `events`, and has **no status field**. `additionalProperties` is false.
 - **The published `source.status` is derived by Express's own poller** (AD-1 §3.2): `starting` until the first successful poll, `ok` after one, and `outage` after 3 consecutive poll failures or 2 s without a success. It is a statement about **Express's poll of ingestion**, not about an adapter.
 - **So how does adapter failure reach a viewer here?** Only indirectly, and that is the correct behaviour: a failed adapter stops producing, `/v1/latest` keeps answering 200 with whatever it last held, Express's poller keeps reporting `ok`, and the **values age through `stale` to `unavailable`** on their own (AD-4 §7; AD-8 §5). No status needs to be delivered for the user-facing outcome to be right, which is exactly what AD-5 §3.7 means by "a value whose updates stop simply ages into `stale` and then `unavailable`".
+
+- **The two `/v1/latest` failure modes are not the same, and `failed_permanent` must say which it is (Varshini, non-blocking follow-up on `aeec98a`).** The existing implementation does **not** always answer 200: `services/ingestion/cbdc_ingestion/http_api.py` returns **`503 NOT_READY`** — "the generator is not running" — whenever the service is not in its running state, and `service.py` records the same. The distinction is therefore:
+
+  | What has failed | `/v1/latest` | Express's poller | Published `source.status` | What the viewer sees |
+  |---|---|---|---|---|
+  | **An adapter** reaches `failed_permanent` while the **service keeps running** | **200**, with the last-held value and its unchanged `source_timestamp` | Polls succeed | Stays **`ok`** | Values **age** through Simulated-`stale` to `unavailable` (AD-4 §7). This is the case §4.3 is about |
+  | The **service or generator** is not running, or is stopping | **503 `NOT_READY`** | Counts a **poll failure** | Reaches **`outage`** after 3 consecutive failures or 2 s without a success (AD-1 §3.2) | An **outage**, as today |
+
+  **Neither path is changed by this scope, and no new path is created.** The second row is existing, approved D-24 behaviour. What this scope adds is the first row, and the point stands: an adapter's `failed_permanent` **does not** by itself produce a 503 and **does not** drive the published status, because the service is still running and still serving. An implementation must therefore **not** make `failed_permanent` fail the HTTP endpoint — doing so would convert a single adapter's permanent fault into a whole-service outage and would change D-24 behaviour. **Acceptance criterion 6 asserts exactly this**, and the existing `test_http_latest.py` continues to pass unchanged.
 - **AD-5 §9.3's mapping therefore binds nothing in this scope.** It governs the full-Phase-3 path where ingestion's status reaches a consumer. Creating such a path would change `ingestion-latest.v1.schema.json`, an approved contract, and is **excluded** (§8 item 11).
 
 **What is requested is narrower than v0.1 asked for:** adopt the mapping as the **general** rule and as the internal machine's shape, and implement the internal machine **in process only**, with the internal state exposed solely as a metric label and a log field (AD-8 §7.1). Acceptance criterion 5 is corrected accordingly (§9).
@@ -165,18 +197,27 @@ Delivery semantics are **not** decided here. Record **at-least-once** as the pro
 
 **What it must not do:** claim restart-safe deduplication, implement an acknowledgement protocol or a replay window, or present the in-memory sink as the distribution mechanism. AD-1 §4 records that the distribution mechanism **replaces** the poll.
 
-### 4.6 AD5-Q11 — which conflict rule governs which path (Nisarga 7) **[PROPOSED]**
+### 4.6 AD5-Q11 — which conflict rule governs which path **[PROPOSED]**
 
-Q11 itself — whether the general rule should be narrowed to the slice's or the slice's widened — **stays open**, as AD-5 §15 proposes. What this document asks the owner to settle is only **which rule applies where**, so the implementation is unambiguous:
+**Q11 is split in AD-5 v0.7 (Nisarga 3), and the two halves have different statuses.** §4.6's per-path table **is** the explicit requested resolution of **Q11(a)**; **Q11(b)** is named as a **remaining owner decision**:
+
+| | Question | Status here |
+|---|---|---|
+| **Q11(a)** | Which conflict rule governs which path? | **[PROPOSED]** — requested now, as the table below. Recorded as Q11(a)'s resolution in AD-5 v0.7 §8.2 and §15 |
+| **Q11(b)** | Should the general rule be narrowed to match the slice, or the slice's rule widened at its next revision? | **[PENDING — owner decision]**. Not requested, not answered, and not needed for §7's work. Decide it when AD-7 or a slice revision next opens AD-1 §3.4 |
+
+**Q11(a), as requested — each path keeps its own rule, so the implementation is unambiguous:**
 
 | Path | Governing rule | Status |
 |---|---|---|
 | The existing D-24 generator path (the default, §7.2) | **AD-1 §3.4 exactly as approved**, keyed on `event_id` inequality | **Unchanged.** No reclassification, no new counter, no behaviour change |
 | The new adapter path, when a registry record selects it | **AD-5 §8.2** with §8.2b's predicate and the C-b → D → C-a order | New code only |
 
+**D-24 is preserved exactly.** The existing path's rule, counters, outcomes and approval are untouched; nothing is reclassified and no behaviour changes, because no registry record selects the adapter path by default.
+
 The two differ in one cell, which AD-5 §8.2 records: two events with the same payload and different `event_id`s are AD-1's **conflict** in the slice and AD-5's **duplicate** in the general rule. That cell is reachable in the slice only through a generator restart that realigns a pair's timestamp at a different sequence — the case **AD-1 §3.4.1 records as "not a defect, for the record"**. The two paths are not run against one consumer in this scope: the adapter path is selected by a registry record, and no record selects it by default.
 
-**Not requested:** AD5-Q2, Q3, Q4, Q5, Q6. No synthetic source exercises them.
+**Not requested:** AD5-Q2, Q3, Q4, Q5, Q6, and **Q11(b)**. No synthetic source exercises them.
 
 ## 5. AD-8: a deliberately partial approval
 
@@ -232,7 +273,7 @@ For the synthetic source the bounds are **the generator's declared range**, neve
 
 ## 6. AD-12: collision safeguards, controlled seeds, fixture provenance
 
-Requested against `docs/PHASE3_AD12_SYNTHETIC_HARNESS.md` **v0.3.1**. Part B (quarantine and review queue) is **not** requested: it is `[PENDING: AD-10, AD-11]` and feeds milestone 3.6.
+Requested against `docs/PHASE3_AD12_SYNTHETIC_HARNESS.md` **v0.3.2**. Part B (quarantine and review queue) is **not** requested: it is `[PENDING: AD-10, AD-11]` and feeds milestone 3.6.
 
 ### 6.1 The C-1 collision safeguards **[PROPOSED]**
 
@@ -240,7 +281,7 @@ Requested against `docs/PHASE3_AD12_SYNTHETIC_HARNESS.md` **v0.3.1**. Part B (qu
 
 **Correction (Anvesh 2).** v0.1 said that making a second generator configuration a second `source_id` means "a collision becomes two distinct observation streams rather than two names for one". That overstated it. `source_id` is **absent from the derivation**, as AD-4 Part 2 §3.4 item 3 itself says ("enters the derivation through nothing"), so two `source_id`s **do not prevent the `event_id` collision**. What they separate is the **lookup keys** — `source_id` is `observation_key`'s first component — so the two streams no longer overwrite each other's dedup state. The collision still occurs and is still detected. **The applicable preventive safeguards are coordinated seed allocation and the start-up overlap refusal**, not the `source_id` rule.
 
-Adopt AD-12 §3.1's three mitigations as **requirements**, with the mechanism specified (Nisarga 5):
+Adopt AD-12 §3.1's three mitigations as **requirements**. **The mechanism is now specified in AD-12 v0.3.2 §3.1 itself** (Nisarga 4, architecture consistency), so this document and AD-12 state the same thing rather than this document alone:
 
 1. **Coordinated seed allocation.** Every synthetic source, load profile and run takes its seed from a **recorded allocation**: a version-controlled file, `services/ingestion/cbdc_ingestion/registry/seed_allocations.json`, listing each allocation's seed, `source_id`, subject set and intended period. **It is read-only at runtime and is never written by the process.** That is required by the container posture — read-only root filesystem, no volume, no published port (`infra/compose.observations.yaml`) — so a runtime-written ledger is impossible here, and a reviewed file in source control is the only form the record can take. Changing an allocation is a reviewed commit, which is the audit trail.
 2. **Disjoint subjects.** Sources registered at the same time use disjoint pair sets, so `pair` never repeats across them. Enforced over the allocation file at start.
@@ -254,7 +295,7 @@ Adopt the operational rule of **AD-5 §8.2 / AD-2 R-8**: load and fault runs mus
 
 ### 6.2 Fixture provenance, with a format **[PROPOSED]**
 
-AD-12 §3.4 leaves the format `[OPEN]`, which makes §9 criterion 8 untestable as written (Nisarga 2, Anvesh 3). The format requested here is the **minimum that makes the check mechanical**, and it is proposed **for this scope's own fixtures**; AD-12 keeps ownership of the general question.
+**AD-12 v0.3.2 §3.4 now carries this format** (Nisarga 4, architecture consistency); v0.3.1 left it `[OPEN]`, which made §9 criterion 9 untestable as written (Nisarga 2, Anvesh 3). The format is the **minimum that makes the check mechanical**, and it is requested here **for this scope's own fixtures only**; AD-12 keeps ownership of the general question — whether it becomes the repository-wide rule, and whether the existing corpus is ever labelled, stay **open** owner decisions there.
 
 **Scope of enforcement: fixtures this work adds**, under `services/ingestion/tests/fixtures/` and `contracts/events/registry/fixtures/`. **Existing fixtures are not touched, re-labelled or moved** — including everything under `contracts/events/fixtures/` and, absolutely, `contracts/test-vectors/event_payload_hash.v1.json`, which is **T-7 protected** and whose only authorized addition is already recorded in `AUTHORIZED_ADDITIONS`. The check **skips** paths it does not own, and §9 criterion 8 asserts that it skips them rather than passing them silently.
 
@@ -324,7 +365,7 @@ Requested as the **complete and exclusive** scope. Everything is additive and in
 
 **What this makes binding:** §8 item 10's exclusion of every CI, Docker, Compose and packaging change **stands unamended**, and `phase3-observations.yml` is untouched. An implementation that needed a workflow change would be **outside this scope** and would need a fresh authorization. **Dev D still reviews the arrangement** (§10.2), because the obligation lands in a suite Dev D's no-skip check polices.
 
-**Fake-provider exclusion is verified, not assumed.** `infra/testing/fake_provider/` is outside `services/ingestion/`, so it is outside the build context — the same reason `infra/testing/fault_ingestion/` is absent from every runtime image. §9 criterion 11 asserts it mechanically.
+**Fake-provider exclusion is verified, not assumed — and the evidence matches the claim (Nisarga 2).** `infra/testing/fake_provider/` is outside `services/ingestion/`, so it is outside the build context — the same reason `infra/testing/fault_ingestion/` is absent from every runtime image. **§9 criterion 11 asserts this statically**: it parses the Dockerfile's `COPY`/`ADD` sources against the declared build context and the `.dockerignore` and shows that no copied path can resolve to the excluded directories, with a negative control. **It requires no Docker build or daemon**, so it runs inside the `ingestion-unit` job with no workflow change, and the acceptance claim is **packaging exclusion**, not an inspection of a built image — which would need the `phase2-docker` job this scope does not touch.
 
 ## 8. Exclusions
 
@@ -353,16 +394,16 @@ The AD-5 §13 obligations are the source. **A-9** runs through the existing D-24
 | 2 | **Registry validation (A-2).** A malformed, inconsistent or incomplete record fails at startup. Negative cases: a `synthetic.` prefix with a non-synthetic class; a transport mismatch; a `real` source with no active Gate 3 reference; a freshness profile breaking AD-4 §7's ordering invariant | `test_registry.py` |
 | 3 | **Registry schema conformance.** Every shipped record validates against `source-record.v1.schema.json`, and a deliberately invalid record fails — so the schema is **exercised**, not merely present (§7.4) | `test_registry_schema.py` |
 | 4 | **Determinism (A-3).** A fixed seed and injected clock reproduce identical payloads, `payload_sha256` values and `event_id`s **across process restarts** | `test_adapter_determinism.py`; the existing `test_restart_identity.py` still passes unchanged |
-| 5 | **Classification (A-5, A-6).** The outcomes are produced in the order **C-b, D, C-a**; a collision is **rejected and counted**, a duplicate **discarded and counted**, a value conflict keeps the first. Cases **must include**: (a) a reused `event_id` with an **identical** payload hash and subject but a **changed `synthetic.case_id`**, and (b) the same with a changed `generator_version` — **both classified C-b, not D** (§4.2); (c) a redelivery differing only in `retrieved_at` and `emitted_at`, classified **D**; and the 300 s window **at, inside and outside** its boundary | `test_idempotency.py` |
-| 6 | **Internal status machine (A-7), in process only.** Both outage criteria independently; recovery on one successful item; `failed_permanent` **never retries**; the internal `down` and `stopped` states map to `outage` per AD-5 §9.3. **And the internal state is never serialized:** `GET /v1/latest` responses still conform to `ingestion-latest.v1.schema.json` with `additionalProperties: false`, so no status field appears, and Express's poller-derived `source.status` is unaffected (§4.3) | `test_status_machine.py`; the existing `test_http_latest.py` and `test_schema_conformance.py` still pass unchanged |
+| 5 | **Classification (A-5, A-6).** The outcomes are produced in the order **C-b, D, C-a**, with **C-b evaluated against an `event_id`-keyed index** and not against either key of AD-5 §8.1; a collision is **rejected and counted**, a duplicate **discarded and counted**, a value conflict keeps the first. **One case per identity-bearing field and one per excluded field, both directions asserted** (§4.2). Under a reused `event_id`, **classified C-b**: (a) changed `synthetic.case_id`; (b) changed `synthetic.generator_version`; (c) changed **`synthetic.seed`** — the case that shares **both** §8.1 keys and must not be discarded as **D**; (d) changed **`source_timestamp`** — the case that matches **neither** D nor C-a and must not be accepted; (e) changed `payload_sha256`; (f) changed subject; (g) changed `source_id`; (h) changed `event_type`. Under a reused `event_id`, **classified D**: (i) differing only in `retrieved_at`; (j) only in `emitted_at`; (k) only in **`instance_id`** — a restarted producer resending (AD-12 §3.2); (l) identical in every field. Plus the 300 s window **at, inside and outside** its boundary | `test_idempotency.py` |
+| 6 | **Internal status machine (A-7), in process only.** Both outage criteria independently; recovery on one successful item; `failed_permanent` **never retries**; the internal `down` and `stopped` states map to `outage` per AD-5 §9.3. **And the internal state is never serialized:** `GET /v1/latest` responses still conform to `ingestion-latest.v1.schema.json` with `additionalProperties: false`, so no status field appears, and Express's poller-derived `source.status` is unaffected (§4.3). **The two failure modes are asserted apart** (§4.3): an adapter in `failed_permanent` while the service runs leaves `/v1/latest` answering **200** with its last-held value, and the existing **`503 NOT_READY`** stays reachable only when the service or generator is not running — an adapter fault must never produce it | `test_status_machine.py`; the existing `test_http_latest.py` and `test_schema_conformance.py` still pass unchanged |
 | 7 | **Normalization (A-8).** Decimal strings survive with trailing zeros; **no float round-trip**; codes map only through the mapping table; a missing required field is a **rejection, not a default** | `test_normalization.py` |
 | 8 | **Seed safeguards (§6.1).** The start-up check **refuses** an overlapping `(seed, pair)` and refuses a record absent from the allocation file; disjoint subject sets are enforced; one active generator configuration per `source_id` is enforced, and a second configuration is a second `source_id`. A positive control starts cleanly | `test_seed_allocation.py` |
 | 9 | **Fixture provenance (§6.2).** Every fixture **this scope adds** carries a valid origin record; a missing record, an unknown `origin` and a field set inconsistent with its `origin` each **fail**. The check **skips paths it does not own** — including `contracts/events/fixtures/` and `contracts/test-vectors/` — and the test asserts that it skips them rather than passing them silently | `test_fixture_origin.py` |
 | 10 | **Gate 3 enforcement, ingestion side (A-11).** With a source's Gate 3 decision reference **absent, inactive or withdrawn**, the adapter **does not start** and the service records the reason. This is a **negative registry and startup assertion** only | `test_gate3_enforcement.py` |
 | 10a | **The Unavailable *display* for a withdrawn source's stored values (AD-4 §8.1 rule 2) is deferred**, not claimed: it needs the observation store (AD-11, C-5) and frontend behaviour (C-8), both excluded here (§8 item 7). It is recorded as an obligation of the milestone that builds them | Deferred — no suite |
-| 11 | **Test-only code stays out of the image.** `infra/testing/fake_provider/` and `services/ingestion/tests/` are absent from the built ingestion image, asserted over the build context and the image's file list | `test_image_contents.py` |
+| 11 | **Test-only code cannot enter the image — asserted statically** (Nisarga 2). The claim is **packaging exclusion**, and the evidence matches it: the test parses `services/ingestion/Dockerfile`, resolves every `COPY`/`ADD` source against the declared build context and the `.dockerignore`, and asserts that **no copied path can resolve to** `infra/testing/fake_provider/` or `services/ingestion/tests/` — the first because it lies outside the build context entirely, the second because no `COPY` names it. **No Docker build, daemon or image listing is required**, so it runs in the existing `ingestion-unit` job with no workflow change (§7.4). A negative control asserts the check **fails** when given a Dockerfile that copies the excluded path. **It does not claim to have inspected a built image:** that would need the `phase2-docker` job, which this scope does not change | `test_image_packaging.py` |
 | 12 | **Boundary (A-9, in part).** `usage: display_only` on every envelope; no adapter emits a bridge-state value, and no such event type exists; the adapter package imports nothing from `src/`, `services/inference/` or any database client | `test_boundary.py`, extended |
-| 13 | **Cooperative shutdown within budget.** `stop()` returns and the worker has **exited** within **2 000 ms**, measured on the injected clock and asserted on thread liveness, not only on the call returning | `test_shutdown.py` |
+| 13 | **Cooperative shutdown within budget — on a real monotonic deadline** (Nisarga 1). `stop()` returns **and the worker thread has actually terminated** within **2 000 ms**, measured with **`time.monotonic()`** and asserted with a bounded `Thread.join(timeout=…)` followed by `is_alive() is False`. **The injected clock is deliberately not used for this criterion:** an injected clock can prove only that the adapter observed its deadline, never that a real thread exited, so the budget is asserted against wall-clock-independent real elapsed time. The adapter's own internal timing stays on the injected clock, which criteria 4 and 14 cover. The worker does **no** unbounded blocking call, so the measurement is deterministic rather than load-dependent; a run that exceeds the deadline **fails**, and is not retried or marked flaky | `test_shutdown.py` |
 | 14 | **Shutdown during startup and during active work.** Cancellation delivered mid-`start` leaves nothing acquired and the adapter `stopped`; cancellation while an item is being produced loses no accounting — the event is either published or counted, never both and never neither | `test_shutdown.py` |
 | 15 | **Repeated and out-of-state `stop()`.** `stop()` is idempotent: calling it twice, calling it on a `created` adapter, and calling it after `failed_permanent` all succeed and change nothing | `test_shutdown.py` |
 | 16 | **Plausibility bounds (§5.5).** A value outside the generator's declared range is **quarantined** with its reason, not rejected and not clamped; a relative jump **above** 20% within one interval is quarantined; **at exactly 20%** and at exactly the range endpoints it is **accepted** — the boundary is asserted on both sides | `test_plausibility.py` |
@@ -395,13 +436,14 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 ### 10.2 Reviews
 
 - [ ] **AD-1 Part 2 re-review and the D-22 placement confirmation** — **Dev A, Dev B and Dev C** (D-22's named reviewers, retained in full), with **Dev D** on §7.3.1
-- [ ] **AD-5 v0.6 re-review** — **Dev B** (§3.6 sink; §3.7 pending semantics; §7 fault classes; **§8.1's keys, §8.2's outcomes and order, and §8.2b's field set, against the P-4 acceptance rules Dev B owns**; §8.4; §8.5; §9; §12) and **Dev D** (§2 registry as configuration; §12.1 posture and egress; §13 CI obligations, fixture origin, the test-only fake provider)
+- [ ] **AD-5 v0.7 re-review** — **Dev B** (§3.6 sink; §3.7 pending semantics; §7 fault classes; **§8.1's keys, §8.2's outcomes and order, and §8.2b's field set, against the P-4 acceptance rules Dev B owns**; §8.4; §8.5; §9; §12) and **Dev D** (§2 registry as configuration; §12.1 posture and egress; §13 CI obligations, fixture origin, the test-only fake provider)
 - [ ] **AD-8 v0.6 re-review** — **Dev B** (§8.2 shutdown against `lifecycle.ts`), **Dev C** (§4's monotonic age rule and the null-timestamp label), **Dev D** (§4.3's correction and §9's acceptance tests against the existing CI)
-- [ ] **AD-12 review** — **Dev A** (Stage 1E rules, §6.3) and **Dev B** (review-queue persistence), per D-23
+- [ ] **AD-12 v0.3.2 review** — **Dev A** (Stage 1E rules, §6.3) and **Dev B** (review-queue persistence), per D-23
 - [ ] **C-3 ownership** — **Dev D**, as AD-1 Part 2 §2.2 assigns the synthetic adapter and harness to Dev D under AD-12 (§2.1)
-- [ ] **AD-5 §8.2b specifically** — **Anvesh (Dev B)**: the collision field set **against ordinary redelivery**, per §4.2's two-column table. Flagged by owner direction (v0.3). It gates **AD5-Q8** and acceptance criterion 5
+- [ ] **AD-5 §8.2b specifically** — **Anvesh (Dev B)**: the **v0.7** collision field set **against ordinary redelivery**, per §4.2's two-column table. Flagged by owner direction (v0.3); Dev B's re-review of `aeec98a` required `source_timestamp` and `synthetic.seed`, which v0.7 adds, so **this remains open pending Dev B's confirmation of the widened set**. It gates **AD5-Q8** and acceptance criterion 5
 - [ ] **§7.4's validation arrangement** — **Dev D**, as the owner of P-8 and of the no-skip check the obligation now rests on (DB-2 closed: in-suite, no workflow change)
-- [ ] **This document** — at least one of Dev B and Dev D, under the **second-reviewer rule (D-20)**
+- [ ] **This document** — at least one of Dev B and Dev D, under the **second-reviewer rule (D-20)**. **Not yet satisfied:** Dev B and Dev D both hold **CHANGES_REQUESTED** on `aeec98a`, and v0.4 is not yet re-reviewed
+- [x] **Dev C frontend compatibility** — **Varshini approved `aeec98a`** on 26 November 2026, **limited to the Dev C frontend review**. It approves no other owner's decision, authorizes no implementation and opens no gate. Her corrections are preserved in §2.1, §4.3 and §5.4, and her non-blocking `/v1/latest` follow-up is applied in §4.3 and criterion 6
 - [ ] **Project owner** — the decisions of §§3–6 and the scope, exclusions and acceptance criteria of §§7–9. **The §10.1 route is already directed; these are not.**
 
 ### 10.3 Register of what Route A still requires
@@ -412,16 +454,17 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 |---|---|---|---|---|
 | 1 | **Extend AD-4's approval beyond the D-24 slice** to cover milestone 3.3, or approve a 3.3-scoped revision of it | **Owner approval** | Owner | **Not requested anywhere before v0.3.** AD-4 v0.2 is approved for the D-24 slice only, version-specifically. **F-1 names AD-4, so this is mandatory and is the likeliest item to be missed** |
 | 2 | **Confirm the AD-1 component view §4 placement** (scope §12 remaining item 1), satisfying **D-22** for 3.2–3.7 | Technical sign-off, then owner approval | **Dev A, Dev B, Dev C**; then owner | AD-1 Part 2 v0.4 is CHANGES_REQUESTED with **no re-review**. Needs AD1P2-Q1, Q5, Q6 and also **Q2, Q3, Q4, Q7** for the document to be approvable |
-| 3 | **Approve AD-5 as a document** | Technical sign-off, then owner approval | **Dev B** and **Dev D** (AD-5 §16); then owner | v0.6 is CHANGES_REQUESTED with **no re-review of v0.6**. Needs **AD5-Q1 to Q11** decided, Q7 permissibly *as provisional*, and **§8.2b confirmed by Dev B** (row 5) |
-| 4 | **Approve AD-12 as a document** | Technical sign-off, then owner approval | **Dev A** (Stage 1E rules) and **Dev B** (review-queue persistence), per D-23; then owner | v0.3.1 has Dev B's approve-with-conditions on v0.3 and **no re-review**. Part B stays `[PENDING: AD-10, AD-11]`, which must be resolved or explicitly deferred for the document to be approvable |
+| 3 | **Approve AD-5 as a document** | Technical sign-off, then owner approval | **Dev B** and **Dev D** (AD-5 §16); then owner | **v0.7** is not re-reviewed; Dev B's CHANGES_REQUESTED on `aeec98a` stands until the widened §8.2b is confirmed. Needs **AD5-Q1 to Q10, Q11(a) and Q11(b)** decided — Q7 permissibly *as provisional*, **Q11(b) still a PENDING owner decision** — and **§8.2b confirmed by Dev B** (row 5) |
+| 4 | **Approve AD-12 as a document** | Technical sign-off, then owner approval | **Dev A** (Stage 1E rules) and **Dev B** (review-queue persistence), per D-23; then owner | **v0.3.2** carries §3.1's seed-allocation mechanism and §3.4's fixture-origin format and is **not re-reviewed**. Part B stays `[PENDING: AD-10, AD-11]`, which must be resolved or explicitly deferred for the document to be approvable |
 | 5 | **Confirm AD-5 §8.2b's collision field set** against ordinary redelivery | Technical sign-off | **Dev B (Anvesh)** | **Open.** Flagged by owner direction. Gates AD5-Q8 and criterion 5 |
 | 6 | **Confirm §7.4's in-suite registry validation** | Technical sign-off | **Dev D** | Open. Route settled by DB-2; the arrangement is not yet reviewed |
 | 7 | **Re-review AD-8 v0.6** and grant the partial approval of §5 | Technical sign-off, then owner approval | **Dev B**, **Dev C**, **Dev D**; then owner | CHANGES_REQUESTED, **no re-review**. **Not** an F-1 deliverable for 3.3 — scope §7.1 names AD-4, AD-5 and AD-12 — but §5's values are needed for the adapter to be configurable at all (AD-5 §14 gap 3) |
-| 8 | **Review this document** under **D-20** | Technical sign-off | At least one of **Dev B**, **Dev D** | Three CHANGES_REQUESTED reviews received; v0.3 not yet re-reviewed |
-| 9 | **Approve §§7–9**: the implementation scope, the twelve exclusions and the eighteen acceptance criteria | **Owner approval** | Owner | Open |
+| 8 | **Review this document** under **D-20** | Technical sign-off | At least one of **Dev B**, **Dev D** | **Open.** Dev C (Varshini) **approved** `aeec98a` within her frontend scope, which does **not** satisfy D-20 — the rule names Dev B or Dev D. Both hold CHANGES_REQUESTED on `aeec98a`; **v0.4 is not yet re-reviewed** |
+| 11 | **Decide AD5-Q11(b)**, the keying divergence itself | **Owner approval** | Owner, with Dev B and Dev D | **PENDING.** Not requested here and not needed for §7's work; §4.6 requests only **Q11(a)**. Under Route A it must be decided — permissibly as a deferral — for AD-5 to be approvable as a document (row 3) |
+| 9 | **Approve §§7–9**: the implementation scope, the twelve exclusions and the eighteen acceptance criteria (plus the deferred 10a) | **Owner approval** | Owner | Open |
 | 10 | **Record the outcome** in `docs/PHASE3_SCOPE.md` §2 (3.1 plan §5), with the F-1 and D-22 position | **Owner approval** | Owner | Open. A separate documentation change, not this pull request |
 
-**Rows 1 to 4 are the F-1 and D-22 core.** Rows 5, 6 and 8 are technical sign-offs that can proceed now. Row 7 is not F-1 but is a practical precondition. **Row 1 is new in v0.3** and follows directly from Route A.
+**Rows 1 to 4 are the F-1 and D-22 core.** Rows 5, 6 and 8 are technical sign-offs that can proceed now. Row 7 is not F-1 but is a practical precondition. **Row 1 is new in v0.3** and follows directly from Route A; **row 11 is new in v0.4**, surfaced by Nisarga 3. **Eleven rows, and the only one with any progress is row 8's Dev C component, which does not satisfy D-20.**
 
 **On completion of every row**, the work of §7 may begin. **No gate passes, no provider becomes approved, and 3.3-L stays blocked on Gate 3.**
 
@@ -430,7 +473,7 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 | Item | Why it may stay open |
 |---|---|
 | **AD5-Q7 / H-1 to H-6** — delivery semantics | AD-2 and AD-3 are drafts. No H-answer changes AD-5 §3.2's operations (§4.5). **Revisit before 3.4.** Under Route A, Q7 must be **decided as provisional** with its deferral recorded, not left blank (§10.1 item 1) |
-| **AD5-Q11** — the keying divergence itself | Only *which rule governs which path* is requested (§4.6); the narrowing question stays open |
+| **AD5-Q11(b)** — the keying divergence itself | **[PENDING — owner decision].** Only **Q11(a)**, which rule governs which path, is requested (§4.6), and AD-5 v0.7 records it as Q11(a)'s resolution. The narrowing question is named, not answered, and §10.3 row 11 tracks it |
 | **AD5-Q2, Q3, Q4, Q5, Q6** | No synthetic source exercises them |
 | **AD1P2-Q2, Q3, Q4, Q7** | Needed for AD-1 Part 2 as a document; they change no adapter code |
 | **AD8-Q5** — the general stale rule | Explicitly **not** decided by the synthetic row (§5.4) |
@@ -443,14 +486,16 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 ## 12. Residual risks
 
 1. **The C-1 residual risk is open.** Overlapping runs with the same seed and timestamps but a different `case_id` or `generator_version` produced **40** collisions. §6.1's safeguards are containment; AD-5 §8.2b improves **detection**. **Neither fixes the derivation.**
-2. **§4.2's widened C-b is a draft proposal awaiting Dev B.** If the field set is too wide, **every redelivery becomes a rejected collision** and at-least-once delivery breaks; if too narrow, a changed generator configuration is **silently discarded as a duplicate**, which is the C-1 defect. §4.2's two-column table states both sides, and three rows of acceptance criterion 5 depend on the answer.
+2. **§4.2's widened C-b is a draft proposal awaiting Dev B.** It has been widened **twice** on Dev B's findings — v0.6 added `synthetic.case_id` and `generator_version`, v0.7 added `source_timestamp` and `synthetic.seed` — and **the fact that two rounds were needed is itself the risk**: the field set is derived by inspecting the current derivation by hand, and a third omission would fail the same way. If the set is too wide, **every redelivery becomes a rejected collision** and at-least-once delivery breaks; if too narrow, a collision is **silently discarded as a duplicate or accepted outright**, which is the C-1 defect. §4.2's two-column table states both sides, and **twelve** cases of acceptance criterion 5 depend on the answer. **The structural fix is AD4P2-Q1**, which would put the distinguishing fields in the identity and make the predicate derivable instead of enumerated; it is not requested here.
 3. **§4.2's formulas in AD-8 are unvalidated.** 30 000 ms is the only one of those figures that has ever run (§5.4).
 4. **No load testing.** Exit criterion 9 stays unmet even after AD-8 is approved: it needs a recorded number **and** load tests against it.
 5. **A-4 is not exercised**, so the 3.3-S exit is not reached (§1.1, §9).
 6. **AD-6 B-4 is unresolved** on the inference side under **D-25, which stays limited to the D-24 slice**. Not Gate 4 evidence; no gate has passed.
 7. **Every document this one depends on is a draft without a re-review.** A re-review may change a cited section, in which case the affected request here must be re-stated before it is granted.
 8. **The seed-overlap refusal is local.** It reads a version-controlled file in one process and **cannot detect a second container started independently** against the same consumer. Under the read-only, no-volume posture no runtime-shared ledger is available, so this limit is inherent to the scope rather than an omission (§6.1).
-9. **The deferred Unavailable display (criterion 10a)** means a withdrawn source's stored values have **no verified user-facing behaviour** until the store and the panel exist. Nothing here stores observations, so nothing is currently displayed from a withdrawn source — but the obligation must travel with the milestone that adds the store.
+9. **The deferred Unavailable display (criterion 10a)** means a withdrawn source's stored values have **no verified user-facing behaviour** until the store and the panel exist. Nothing here stores observations, so nothing is currently displayed from a withdrawn source — but the obligation must travel with the milestone that adds the store. **AD-5 v0.7 splits A-11 into (a) and (b) to make this impossible to lose**: a milestone implementing only (a) may not claim A-11.
+10. **Criterion 11 proves packaging exclusion, not image contents.** A static Dockerfile, build-context and `.dockerignore` check cannot detect a path that enters an image by some other route — a changed build context, a new build stage, or a `COPY --from`. The check reads the Dockerfile it is given, so a future Dockerfile change could invalidate the conclusion without failing the test unless the test is maintained with it. Inspecting a built image needs the `phase2-docker` job, which this scope does not touch (§8 item 10).
+11. **Criterion 13's real-clock deadline makes one test time-sensitive.** Asserting a 2 000 ms budget on `time.monotonic()` in CI introduces a run-dependent assertion where every other criterion is deterministic. It is accepted deliberately: an injected clock cannot establish that a thread exited (Nisarga 1). The budget is generous against a cooperative worker that performs no unbounded blocking call, and a breach **fails** rather than being retried — but a heavily contended runner is a plausible source of a flake, and if one occurs the correct response is to diagnose it, never to loosen the budget or mark the test flaky.
 
 ## 13. Decision blockers: both closed by owner direction
 
@@ -461,6 +506,19 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 
 **Both directions are about process and neither approves a deliverable.** What remains is not a decision blocker but **unfinished approval work**, enumerated in §10.3: ten rows, none done, of which rows 1 to 4 are the F-1 and D-22 core.
 
-**One technical question is open inside this request:** AD-5 §8.2b's collision field set, flagged for **Dev B** (§4.2, §10.3 row 5).
+**One technical question is open inside this request:** AD-5 **v0.7** §8.2b's collision field set, flagged for **Dev B** (§4.2, §10.3 row 5). **One further owner decision is PENDING and is not requested here:** AD5-Q11(b) (§4.6, §10.3 row 11).
 
-Nothing else from the three PR #37 reviews is unresolved: every other finding is applied above or in AD-5 v0.6 and AD-8 v0.6.
+**Status against the PR #37 re-reviews of `aeec98a`.** Every finding is applied in v0.4, AD-5 v0.7 or AD-12 v0.3.2:
+
+| Reviewer | Finding | Where applied |
+|---|---|---|
+| **Anvesh (Dev B)** | §8.2b omits `source_timestamp` and `synthetic.seed` | AD-5 v0.7 §8.2b; §4.2 |
+| **Anvesh** | Remove §8.2's stale idempotency-key rationale | AD-5 v0.7 §8.2 |
+| **Anvesh** | Extend criterion 5 to all identity-bearing and excluded fields, `instance_id` included | §9 criterion 5, twelve cases |
+| **Nisarga (Dev D)** 1 | Criterion 13 needs a real monotonic deadline and actual thread termination | §9 criterion 13 |
+| **Nisarga** 2 | Criterion 11 needs an executable mechanism whose claim matches its evidence | §9 criterion 11; §7.4 |
+| **Nisarga** 3 | Record §4.6 as Q11's resolution, or name Q11 an owner decision | Both: **Q11(a)** resolved, **Q11(b) PENDING** (§4.6, §10.3 row 11, §11) |
+| **Nisarga** 4 | Align AD-5 A-11; update AD-12 §3.1 and §3.4 | AD-5 v0.7 A-11; AD-12 v0.3.2 §3.1, §3.4, §8 |
+| **Varshini (Dev C)** | Non-blocking: distinguish `/v1/latest` 200 from `503 NOT_READY` under `failed_permanent` | §4.3; §9 criterion 6 |
+
+**None of this is an approval.** Applying a reviewer's finding is not that reviewer's sign-off, and **§10.3's eleven rows remain the gate**. Dev B and Dev D must re-review; the owner must still decide §§3–6 and approve §§7–9.

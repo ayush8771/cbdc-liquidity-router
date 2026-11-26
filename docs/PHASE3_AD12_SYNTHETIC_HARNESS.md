@@ -1,6 +1,6 @@
 # AD-12: Synthetic Event Harness and Review-Queue Specification
 
-**Status:** **DRAFT v0.3.1 for review. Not approved.** 26 November 2026. **v0.3.1 (documentation only) refreshes references and review status after the merge of PRs #30 to #35, and applies the owner's review of PR #36; see the reference-update note below.** v0.3 answers Dev B's technical review of PR #31 at `d96aabe` (approve with conditions): the synthetic identity collision risk and its provisional mitigations (§3.1), reviewer authorization and separation of duties (§6.2), the open release workflow for quarantined FX observations (§6.2), and the status of referenced documents (§1.1). v0.2 adds synthetic load modes (§3.3), persistence and replay fault cases (§4), Dev B's provisional AD-11 proposals (§6.2), and fixture-origin and fake-provider obligations from the PR #30 drafts. **Lead:** Dev D. **Reviewers:** Dev A (Stage 1E rules), Dev B (review-queue persistence), per D-23. **Approver:** project owner.
+**Status:** **DRAFT v0.3.2 for review. Not approved.** 26 November 2026. **v0.3.2 (documentation only) applies the architecture-consistency item of Nisarga's PR #37 re-review of commit `aeec98a`: §3.1's seed-allocation mitigations now name their mechanism — a version-controlled, runtime-read-only allocation file and a start-up refusal, with the locality limit stated — and §3.4's fixture-origin format is specified in place of `[OPEN]`, scoped to the fixtures a milestone declares, with existing and T-7-protected fixtures untouched. Two limitations are added in §8. No requirement, decision, contract, C-1 text, load mode, Part B item or approval of AD-12 changed, and nothing here is approved.** **v0.3.1 (documentation only) refreshes references and review status after the merge of PRs #30 to #35, and applies the owner's review of PR #36; see the reference-update note below.** v0.3 answers Dev B's technical review of PR #31 at `d96aabe` (approve with conditions): the synthetic identity collision risk and its provisional mitigations (§3.1), reviewer authorization and separation of duties (§6.2), the open release workflow for quarantined FX observations (§6.2), and the status of referenced documents (§1.1). v0.2 adds synthetic load modes (§3.3), persistence and replay fault cases (§4), Dev B's provisional AD-11 proposals (§6.2), and fixture-origin and fake-provider obligations from the PR #30 drafts. **Lead:** Dev D. **Reviewers:** Dev A (Stage 1E rules), Dev B (review-queue persistence), per D-23. **Approver:** project owner.
 **Reference update, v0.3.1 (documentation only, after the merge of PR #30 and the owner's review of PR #36):** references now cite the merged **AD-5 v0.4**, **AD-8 v0.5**, **AD-4 Part 2 v0.2** and **AD-6 Part 2 v0.2** (all DRAFT, not approved), and §1.1 states the status of AD-2, AD-10 and AD-11. The shared-seed collision rule is attributed to AD-5 v0.4 §8.2 (§3.1). The outage reference in §4 is corrected to AD-8 §3.5. No requirement, decision, contract, C-1 text or approval of AD-12 changed.
 **Inputs:** AD-4 (v0.2, approved for the D-24 slice only), AD-5 (DRAFT v0.4, in `docs/`, not approved; see §1.1). **Feeds:** milestones 3.3, 3.4, 3.6. **Scope source:** `docs/PHASE3_SCOPE.md` §3 Workstreams A and C, §6, §7.3.
 
@@ -54,10 +54,13 @@ Draft-documentation approval (a document may be merged and cited as a draft) is 
 
 **Second gap: the derivation has no source identity.** The approved C-1 derivation is `UUIDv5(EVENT_ID_NAMESPACE, "seed|pair|sequence|source_timestamp")`; checked in `services/ingestion/cbdc_ingestion/envelope.py`, it uses one fixed namespace and never `source_id`. Two synthetic sources, or a slice run and a load run, that use the same seed, pair, sequence and `source_timestamp` would therefore produce the same `event_id`. Under AD-1 §3.4 an event whose `event_id` matches a current event with different content or pair is a conflict, rejected and counted with the first kept, so the second source's values could be rejected for a whole run, as in C-1's own defect.
 
-**Provisional mitigations, harness rules only, the derivation unchanged** `[PROPOSED]`:
-1. **Coordinated seed allocation.** Each synthetic source, load profile and run takes its seed from a recorded allocation, and no two that overlap in time or subjects share one.
-2. **Disjoint subjects.** Sources registered at the same time use disjoint pair sets, so `pair` never repeats across them.
-3. **A start-up check.** The harness refuses to start a synthetic source whose (seed, pair) overlaps one already running or recorded for the same period.
+**Provisional mitigations, harness rules only, the derivation unchanged** `[PROPOSED]`. **The mechanism of each is specified in v0.3.2**, because without one the start-up check is not testable:
+
+1. **Coordinated seed allocation, as a version-controlled record.** Each synthetic source, load profile and run takes its seed from a recorded allocation, and no two that overlap in time or subjects share one. The record is a file in source control — `services/ingestion/cbdc_ingestion/registry/seed_allocations.json` — listing for each allocation its `seed`, `source_id`, subject set and intended period. **It is read-only at runtime and never written by the process.** That is forced by the container posture of `infra/compose.observations.yaml`: a read-only root filesystem, no volume and no published port, so no runtime-written ledger is possible. Changing an allocation is therefore a reviewed commit, and the commit history is the audit trail.
+2. **Disjoint subjects.** Sources registered at the same time use disjoint pair sets, so `pair` never repeats across them. Enforced over the allocation record at start-up.
+3. **A start-up refusal.** The harness **refuses to start** a synthetic source whose `(seed, pair)` overlaps another allocation marked active for the same period, **or whose record is absent from the allocation file**. Refusal, not a warning.
+
+**The limit of mitigation 3, stated rather than papered over.** The check is **in-process and local**: it reads the allocation file and the records the process is starting. It **cannot** detect a second container started independently against the same consumer, because under the read-only, no-volume posture there is no shared runtime ledger to consult. That limit is inherent to the posture, and it is recorded in §8.
 
 None of these replaces a derivation fix. Whether a future generator version adds `source_id`, `generator_version` or `case_id` is the owner's decision in §3.4 and AD4P2-Q1 of `PHASE3_AD4_ENVELOPE_PART2.md` (now in `docs/`, a draft), because C-1 is approved text. AD-4 Part 2 §3.4 item 3 records a further containment that changes no derivation: **one active generator configuration per `source_id`**, a second configuration being a second `source_id`, which enters the idempotency key (AD-5 §8.1). It is proposed, not approved. **Shared-seed collision rule (AD-5 v0.4 §8.2, adopting AD-2 R-8; also AD-5's revision note):** a second arrival of a C-1-style collision is a **conflict, not a duplicate**. Load and fault runs must not overlap with a shared seed until AD-5 and AD-12 resolve the residual risk, and a run that does is invalid as a performance result and may be excluded from throughput and latency figures. Exclusion applies to the result only: the collisions are still **detected, rejected, counted and recorded** exactly as in any other run. Provisional; AD-5 is a draft. **The broader C-1 residual risk stays open.**
 
@@ -88,7 +91,26 @@ Rules:
 
 ### 3.4 Fixture origin
 
-Every generated or hand-written fixture carries an origin: `synthetic`, the seed and generator version, or `hand-written`. CI can then show that no fixture came from a provider (AD-5 v0.4 §13 A-10; AD-8 v0.5 §9 N-12; D-17). The format is `[OPEN]`; the envelope's `synthetic` block already carries seed and generator version (AD-4 §3.2) and is not changed.
+Every generated or hand-written fixture carries an origin: `synthetic`, the seed and generator version, or `hand-written`. CI can then show that no fixture came from a provider (AD-5 v0.4 §13 A-10; AD-8 v0.5 §9 N-12; D-17). The envelope's `synthetic` block already carries seed and generator version (AD-4 §3.2) and is **not** changed.
+
+**Format (specified in v0.3.2, `[PROPOSED]`).** A sibling `*.origin.json` for each fixture, or an `_origin.json` manifest per directory, with exactly:
+
+```json
+{
+  "origin": "synthetic",
+  "seed": 20261126,
+  "generator_version": "1.0.0",
+  "case_id": "normal",
+  "created": "2026-11-26",
+  "note": "optional, one line"
+}
+```
+
+`origin` is **`synthetic`** — then `seed`, `generator_version` and `case_id` are **required** — or **`hand-written`**, then all three must be **absent**. **No other value is accepted**, and that is the point: a fixture recorded from a provider has no legal `origin`, so it cannot be added without declaring an illegal one. A fixture with no origin record, an unknown `origin`, or a field set inconsistent with its `origin` **fails CI**.
+
+**Scope of enforcement.** The check applies to **fixtures added under the enforcement roots a milestone declares**, and it **skips paths it does not own**, asserting that it skips them rather than passing them silently. **Existing fixtures are not touched, re-labelled or moved** — including everything under `contracts/events/fixtures/` and, absolutely, `contracts/test-vectors/event_payload_hash.v1.json`, which is **T-7 protected** and whose only authorized addition is already recorded in `AUTHORIZED_ADDITIONS`. Retro-labelling the existing corpus is **not** proposed here and would need its own authorization.
+
+**What stays `[OPEN]`.** Whether this format becomes the repository-wide rule, and whether the existing corpus is ever labelled, are owner decisions. Milestone 3.3-A requests the format **for its own fixtures only** (`docs/PHASE3_33A_AUTHORIZATION.md` §6.2).
 
 ## 4. Fault-injection catalogue
 
@@ -185,6 +207,8 @@ Seed reproducibility; hash vectors; the same verdict per event fixture in both l
 4. The review flow is a specification with its key parts pending; nothing in it is implemented or tested.
 5. Gap-detection, handoff, persistence and replay fault cases (§4) are proposed, not run.
 6. Load modes (§3.3) are specified only. The built generator tops out at 2 events/s, and the peak profiles conflict (AD-3 §10, X-1).
+7. **The §3.1 start-up refusal is local.** It reads a version-controlled allocation file in one process and cannot detect a second container started independently against the same consumer. Under the read-only, no-volume posture no shared runtime ledger exists, so this is inherent to the posture rather than an omission.
+8. **The §3.4 fixture-origin format is enforced only on the fixtures a milestone declares.** The existing fixture corpus is unlabelled and is not re-labelled; whether it ever is remains an owner decision.
 
 ## 9. Open items and dependencies
 
