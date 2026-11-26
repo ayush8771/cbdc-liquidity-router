@@ -1,6 +1,6 @@
 # AD-1 Part 2: Full Phase 3 Component and Deployment Architecture
 
-**Status:** **DRAFT v0.3**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists.
+**Status:** **DRAFT v0.4**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists.
 **Relationship to the approved component view:** this is an **additive companion** to `docs/PHASE3_AD1_COMPONENT_VIEW.md`, which stays **exactly as approved at v0.5**, with corrections **C-1** and clarification **C-2** as recorded there. The v0.5 approval is **for the D-24 slice only** and is **version-specific**: "any later revision needs fresh review and approval". Revising that file would therefore **suspend the authorization of the D-24 work now in progress**, so the full-Phase-3 architecture is written beside it. **Nothing in v0.5 is edited, superseded or weakened here.** Where the two could be read as disagreeing, **v0.5 wins**.
 **What this document is for.** Scope §12 "Remaining during milestone 3.1" item 1 reads: *"Confirm the AD-1 component view §4 placement of later components, which every code milestone 3.2–3.7 waits for (D-22). The D-24-slice approval does not cover it."* This document is the material for that confirmation, in full rather than as the five-row table of v0.5 §4.
 **It is not the final AD-1.** The final AD-1 is a wave-4 deliverable that needs every other AD approved or deferred (3.1 plan §4). AD-2, AD-3, AD-7, AD-9 to AD-13 are unwritten, so §13 lists what the final version must still absorb.
@@ -10,9 +10,14 @@
 - §6 item 1 and §7.4 cross-reference §7.3.1; §6 item 5 now records the pending delivery semantics and the provisional capacity envelope.
 - **AD1P2-Q5** is restated as the §7.3.1 split rather than a blanket overlay rule.
 
+**Revision v0.4, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Varshini's (Dev C's) second CHANGES_REQUESTED review of PR #30**, on commit `40735e5`; its text is on the pull request, not in the repository. Documentation only, and it preserves every earlier correction. Change:
+
+- **Finding 1 fixed — §3.2 row and §3.2.1 rewritten.** v0.3 still said the **engine** resolves `/v1/route`'s `waterfall` default. It does not, in the application path: **the backend resolves both defaults**. Verified in `services/backend/src/validation/transactionRequest.ts` (`DEFAULT_POLICY`; only an absent `policy` defaults, and `policy: null` is a 422) and `services/backend/src/mappers/routeRequest.ts`, which sends `policy` unconditionally and records that it "is always sent, already defaulted, so the engine never applies its own default". The engine's own defaults apply to **direct inference callers** only (contract §2.8, §2.9), which the browser cannot reach. The engine keeps the **experimental gate**, which was the accurate half of Phase 2 arch §2's summary. The table now separates the **fixed** `waterfall` default for `/v1/route` from the **role-dependent** list for `/v1/compare`.
+- **New §3.2.2** documents comparison `skipped` and persistence against contract v0.4 §3.6: who decides, the entry shape with the engine's unchanged message, the two closed codes, that a skipped policy is part of a **201 and not an error**, that a comparison is persisted **only** on a 200 including one where every policy was skipped, that the backend **never substitutes or retries** a policy — how D-10 is enforced at the API layer — and that with every policy skipped the record still exists with a **null** corridor.
+
 **Revision v0.3, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Varshini's (Dev C's) CHANGES_REQUESTED review of PR #30**, whose text is on the pull request, not in the repository. It preserves Nisarga's v0.2 corrections and changes no approved D-24 contract, schema, threshold or ownership: every finding was a **documentation** inaccuracy about the existing implementation, and the corrections describe that implementation rather than proposing a change to it. Unresolved architecture decisions stay **provisional**. Changes:
 
-- **Finding 5 fixed — new §3.2.1** and a corrected §3.2 row: policy defaulting **differs by endpoint**. For `/v1/route` the engine applies the `waterfall` default and the experimental gate; for `/v1/compare` **the backend resolves an omitted `policies` list**, role-dependently, maps aliases in place, and returns `403 FORBIDDEN_POLICY` for a viewer naming `ppoProjected` — so "the engine's own default never applies" (contract v0.4 §3.6, owner decision Q18). v0.2 described only the `/v1/route` half. The subsection also records why it matters to milestones 3.2 and 3.5, and that none of it is reachable from an observation.
+- **Finding 5 — §3.2.1 added, then corrected in v0.4.** v0.3 introduced §3.2.1 but still attributed the `/v1/route` default to the engine; **v0.4 corrects that** (see the v0.4 note above). What v0.3 got right and keeps: `/v1/compare`'s **role-dependent** backend resolution, the alias mapping in place, `403 FORBIDDEN_POLICY` for a viewer naming `ppoProjected`, why it matters to milestones 3.2 and 3.5, and that none of it is reachable from an observation.
 
 **Lead:** Dev D (D-21). **Reviewers:** Dev A, Dev B, Dev C (D-22). **Approver:** project owner.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §1.2, §1.3, §3, §5, §6, §7, §9, §11; D-1 to D-25; F-1 to F-6.
@@ -77,7 +82,7 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 | PostgreSQL via Prisma | Requests, decisions, allocations, audit | **Extended** by AD-11's proposal; no migration until approved |
 | React/Vite dashboard | Routing form, results, comparison | **Extended** with an observation panel and pushed status |
 | API contract v0.4 | The normative API definition | **No.** Not modified in place; real-time interfaces are added **alongside** it (AD-7) |
-| `infra/compose.yaml` | The Phase 2 stack | **No.** Phase 3 adds overlays (§8.3) |
+| `infra/compose.yaml` | The Phase 2 stack | **No** under D-24; Phase 3 adds overlays (§7.3). An **approved** AD-10 change may modify it to close B-4 (§7.3.1) |
 
 ### 2.2 Added by Phase 3
 
@@ -169,7 +174,7 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 |---|---|---|---|---|
 | Feasibility, allocation, execution, metrics | **Yes** | No | **No** | No |
 | Bridge state for a date, scenario or explicit spec | **Yes** | Passes through | **No.** It has no bridge-state event type | Displays with its Phase 2 label |
-| Policy selection and defaulting | **`/v1/route`: applies the `waterfall` default and enforces the experimental gate.** `/v1/compare`: its own default never applies, because the backend always sends a resolved list | **`/v1/route`: passes the choice through after the role check. `/v1/compare`: resolves an omitted `policies` list itself** (§3.2.1) | **No** | Offers the choice, within the role |
+| Policy selection and defaulting | **Neither default applies in the application path.** The engine enforces the experimental gate and alone decides whether `ppo_projected` can run; its own defaults are for **direct inference callers** only | **Both defaults are resolved here** (§3.2.1): a fixed `waterfall` for `/v1/route`, and the role-dependent list for `/v1/compare`. The engine is always sent an explicit policy | **No** | Offers the choice, within the role |
 | Persistence, history, analytics | No | **Yes** | **No** | No |
 | Users, auth, audit | No | **Yes** (C-14, C-15) | **No.** Holds no credential | Holds a session, never a provider credential |
 | Adapter lifecycle, transport, backoff, breaker | No | No | **Yes** (AD-5 §3) | No |
@@ -183,26 +188,49 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 
 **The last row is "No" four times, deliberately.** Knowledge writes need **Gate 2** (D-4), and feasibility comes only from `StaticMemoryProvider` (A-4). No Phase 3 component may write to the knowledge layer until Gate 2 passes, so there is no component to assign it to yet.
 
-#### 3.2.1 Policy defaulting: the two endpoints differ
+#### 3.2.1 Policy defaulting: the backend resolves both, and the engine's own defaults are for direct callers
 
-**[Approved, API contract v0.4 §2.9, §3.6 and owner decision Q18; A-3.]** This subsection **describes the existing contract**; it proposes no change to it. Phase 2 arch §2's one-line summary — inference "applies the default and enforces the experimental gate", Express "passes the choice through after its role check" — is accurate for **`/v1/route`** and incomplete for **`/v1/compare`**, where the defaulting is **role-dependent** and therefore cannot live in a stateless engine that does not know the caller.
+**[Approved, API contract v0.4 §2.8, §2.9, §3.6 and owner decision Q18; A-3. Verified against the implementation.]** This subsection **describes the existing contract and code**; it proposes no change to either.
+
+**Phase 2 arch §2's one-line summary is the source of a misreading.** It says inference "applies the default and enforces the experimental gate" and Express "passes the choice through after its role check". The **gate** half is right. The **default** half is not, for either endpoint on the application path: **the backend resolves the policy before it calls the engine**, so the engine's own defaults never run there.
 
 | | `/v1/route` | `/v1/compare` |
 |---|---|---|
 | Omitted selector | `policy` | `policies` |
-| Who resolves it | **The engine.** An omitted `policy` means `waterfall` | **The backend.** An omitted `policies` means, in order, `waterfall`, `cheapestFeasible`, `ppoProjected` for an **analyst**, and `waterfall`, `cheapestFeasible` for **anyone else** |
-| Does the engine's own default apply? | Yes | **No.** "The backend always sends the resolved list to `/v1/compare`, so the engine's own default never applies" (contract §3.6) |
+| **Who resolves the default** | **The backend**, to a **fixed** `waterfall`. `DEFAULT_POLICY` in `services/backend/src/validation/transactionRequest.ts`; only an **absent** `policy` defaults, and `policy: null` is a `422 VALIDATION_ERROR` | **The backend**, **role-dependently**: `waterfall`, `cheapestFeasible`, `ppoProjected` for an **analyst**; `waterfall`, `cheapestFeasible` for **anyone else** |
+| Is the default role-dependent? | **No.** It is the same for every role | **Yes** |
+| **Does the engine's own default apply?** | **No, not in the application path.** `services/backend/src/mappers/routeRequest.ts` sends `policy` unconditionally, and records that it "is always sent, already defaulted, so the engine never applies its own default" | **No.** "The backend always sends the resolved list to `/v1/compare`, so the engine's own default never applies" (contract §3.6) |
+| Where the engine's default *does* apply | To a **direct inference caller** of `/v1/route`, for which an omitted `policy` means `waterfall` (contract §2.8). Not reachable from the browser: inference is on the internal network only | To a direct caller of `/v1/compare`, for which `policies` defaults to every enabled policy (contract §2.9) |
 | Aliases | None | `baseline` → `waterfall`, `ruleBased` → `cheapestFeasible`, **mapped in place** so the caller's order is kept. Only canonical names reach the engine, the records and the response |
 | Role enforcement | The role check precedes the call | A **viewer** who lists `ppoProjected` gets **`403 FORBIDDEN_POLICY`**, before validation, inference and persistence. No alias names `ppoProjected` |
+| What the engine still decides | **The experimental gate.** It alone decides whether `ppo_projected` can run | The same (§3.2.2) |
 | Recorded | The one policy, after defaulting | The **resolved canonical list**; `results` and `skipped` follow its order, whatever order the engine answers in |
 
-**Why this matters to Phase 3 rather than being a Phase 2 detail.** Milestone 3.5 adds pushed **routing status** for a request the user made (C-9), and milestone 3.2 **replaces the identity provider** (C-14). Both touch the inputs this resolution depends on:
+**Why the distinction is not pedantic.** "The engine defaults it" and "the backend defaults it" put the Gate 1 boundary in different places. Because the backend resolves the policy, **the request that reaches the engine always names one explicitly**, so the engine's refusal of `ppo_projected` is always a refusal of something the backend asked for — never a surprise arising from a default. That is what makes §3.2.2's `skipped` behaviour well defined.
 
-- the resolved list is a function of the **caller's role**, so replacing development authentication changes where that role comes from — and a pushed status message must report the **resolved canonical list**, not the caller's possibly-omitted or aliased request, or two surfaces would disagree about what was compared;
-- `ppoProjected` in that list is **Gate 1**-blocked (D-3, D-10) and `waterfall` stays the default (A-3), so the resolution is also where the gate is felt. **No gate has passed**, and `ppoProjected` reports `enabled: false` today;
+#### 3.2.2 Comparison `skipped` and persistence
+
+**[Approved, contract v0.4 §3.6, owner decision Q18.]** Recorded here because milestone 3.5's pushed routing status (C-9) must report a comparison the same way the stored record does, and a `skipped` policy is **not** an error.
+
+| Rule | Behaviour |
+|---|---|
+| **Who decides** | **The engine alone** decides whether `ppo_projected` can run. The backend makes **no** `/v1/version` call and **no** checkpoint check of its own for a comparison |
+| **Shape** | Each entry is `{"policy", "code", "message"}`, with `policy` mapped to its app name and `message` the **engine's text, unchanged** — so §4's rule that app error messages are the backend's fixed text does not apply to it |
+| **Codes** | `POLICY_DISABLED` and `POLICY_UNAVAILABLE_FOR_STATE`, closed in CI; at run time an undocumented code is passed through and treated generically |
+| **Not an error** | A skipped entry is **part of a 201**. A policy that is disabled or unavailable for the state goes to `skipped`; it does not fail the request |
+| **Persistence** | A comparison is persisted **only** when `/v1/compare` returns 200, **including a 200 in which some or all policies are skipped**. On any error nothing is saved and no `transactionId` is returned. An engine `409 POLICY_DISABLED` for `/v1/compare` breaks §2.9, so the app returns **`502 INFERENCE_ERROR`** |
+| **No substitution** | The backend **never substitutes or retries** a policy. A result for a policy it did not send makes the response invalid (`502 INFERENCE_ERROR`), so **there is no fallback to raw PPO** — which is how D-10 is enforced at the API layer |
+| **Every policy skipped** | The record still exists. `state` is the validated request state, because no result confirms it, and `transaction.corridor` is **null** — it is not derived |
+
+**What this means for Phase 3.** A pushed comparison status (C-9) reports the **resolved canonical list**, with its `results` and `skipped` entries in that list's order, and a comparison in which every policy was skipped is a **successful, persisted** comparison, not a failure. Until **Gate 1** passes, `ppoProjected` is expected in `skipped` with `POLICY_DISABLED` whenever an analyst's default list includes it: `approved_checkpoints.json` is empty and `ppoProjected` reports `enabled: false`.
+
+**Why both subsections matter to Phase 3 rather than being Phase 2 detail.** Milestone 3.5 adds pushed **routing status** for a request the user made (C-9), and milestone 3.2 **replaces the identity provider** (C-14). Both touch what these resolutions depend on:
+
+- the comparison list is a function of the **caller's role**, so replacing development authentication changes where that role comes from — and a pushed status must report the **resolved canonical list**, not the caller's possibly-omitted or aliased request, or two surfaces would disagree about what was compared;
+- `ppoProjected` in that list is **Gate 1**-blocked (D-3, D-10) and `waterfall` stays the default (A-3). **No gate has passed**;
 - **none of it is reachable from an observation.** Choosing a policy because of an event is forbidden (AD-6 §4), and the strict v0.4 request schema (B-2) plus the §5 Z5-to-Z4 boundary keep it that way.
 
-**Nothing here changes contract v0.4**, which is not modified in place (scope §9.2); AD-7's channel contract is added alongside it.
+**Nothing here changes contract v0.4**, which is not modified in place (scope §9.2); AD-7's channel contract is added alongside it. **No Phase 2 code or approved text is proposed for change**, including Phase 2 arch §2's wording, which this document cites rather than edits.
 
 ### 3.3 Why ingestion is a separate service
 

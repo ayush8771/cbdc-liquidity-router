@@ -1,6 +1,6 @@
 # AD-8: Non-Functional Budgets — Latency, Freshness, Monitoring and Recovery
 
-**Status:** **DRAFT v0.3**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
+**Status:** **DRAFT v0.4**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
 **Revision v0.2, 26 November 2026 — still DRAFT.** Applies **Nisarga's CHANGES_REQUESTED review of PR #30**, submitted on v0.1 (`5f78500`); its text is on the pull request, not in the repository. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
 
 - **Blocker 1 fixed:** **new §6.0** separates **G-1 event delivery** (no loss, T1 to T4) from **G-2 browser update coalescing** (convergence, T4 to T6). v0.1 stated one ≥ 99.9% delivery target while §6.3's newest-wins backpressure deliberately discards superseded updates — a contradiction. §6.1's single indicator becomes two, §6.3's backpressure is identified as G-2, and acceptance is split into **N-13** (accounting identity) and **N-14** (coalescing and convergence invariants).
@@ -8,6 +8,11 @@
 - §4 and §8.1 now cross-reference null source timestamps (AD-5 §8.4), restart-safe deduplication (AD-5 §8.5) and the pending delivery semantics (AD-5 §3.7). **New N-15 and N-16** accept those two.
 - §7.1 gains `stream_coalesced_updates_total`, `stream_newest_dropped_total` and `observation_unaccounted_total`; §7.3 gains alerts **G-1** and **G-2**, both of whose defect counters must stay zero.
 - §11 gains **AD8-Q7** (the G-1/G-2 split) and **AD8-Q8** (the reconciliation rule).
+
+**Revision v0.4, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Varshini's (Dev C's) second CHANGES_REQUESTED review of PR #30**, on commit `40735e5`; its text is on the pull request, not in the repository. Documentation only, and it preserves every earlier correction. Changes:
+
+- **Finding 2 fixed — §3.1.** The claim that the p95 target is "already met with margin by the D-24 slice's architecture" is **removed**. The row now states the target is **unmeasured**, because T6 is not instrumented, and that the slice's figure covers a **narrower** interval and is not evidence for this one — consistent with §2.3.1, §2.4's T6 block and gap **1a**.
+- **Finding 3 fixed — §3.4 rewritten, new §3.4.1.** The **attribution is corrected**: AD-1 §3 defines reconnect as "from the moment the backend is reachable through Nginx" and names **no render endpoint**, so the to-render half was this document's proposal, not approved text. §3.4's table now marks every row's measurement status; §3.4.1 tabulates measured against proposed, records that the probe ends at **first snapshot frame arrival** and that the Playwright spec **counts streams started without measuring any duration**, so **no mechanism measures reconnect-to-render**. §3.2 marks the **T5-to-T6 segment unmeasured** in both paths. Gap **1a** is extended to every render-endpoint target and **new gap 1b** records that the **real client's** reconnect behaviour is unmeasured — the probe implements none of its backoff, header-timeout, no-bytes-timeout, single-connection or permanent-stopped behaviour. **N-4** now carries both obligations explicitly, and the "backoff fits the target" reasoning is marked as an argument from the schedule rather than a measurement.
 
 **Revision v0.3, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Varshini's (Dev C's) CHANGES_REQUESTED review of PR #30**, whose text is on the pull request, not in the repository. It preserves Nisarga's v0.2 corrections and changes no approved D-24 contract, schema, threshold or ownership: every finding was a **documentation** inaccuracy about the existing implementation, and the corrections describe that implementation rather than proposing a change to it. Unresolved architecture decisions stay **provisional**. Changes:
 
@@ -136,7 +141,7 @@ In the single-host pilot (F-6), T1 to T5 are on **one** host and one clock, whic
 | Measure | Target | Rationale |
 |---|---|---|
 | p50 | ≤ 250 ms | — |
-| **p95** | **≤ 1000 ms** | **F-5's figure, adopted unchanged.** It is already met with margin by the D-24 slice's architecture, so it is a real target rather than an aspiration |
+| **p95** | **≤ 1000 ms** | **F-5's figure, adopted unchanged.** **Unmeasured:** no measurement of this interval exists, because T6 is not instrumented (§2.4, §2.3.1, gap **1a**). The slice's passing figure is for a **narrower** interval — `emitted_at` to programmatic SSE frame arrival — and is **not** evidence for this one |
 | p99 | ≤ 2000 ms | One slow GC or one backpressure event must not count as a breach |
 | Hard ceiling | 5000 ms | Beyond this the event is **late**, counted as a breach, and still delivered — never dropped. A dropped event would make the panel silently wrong, which is worse than a slow one |
 
@@ -155,6 +160,7 @@ Conditions: the §6.2 event-rate envelope, the §6.3 concurrency limits, one hos
 | Distribution to Express | T3 to T4 | ≤ 300 ms | Dev B |
 | Express to the wire | T4 to T5 | ≤ 100 ms | Dev B |
 | Wire to render | T5 to T6 | ≤ 250 ms | Dev C |
+| **Measurement status** | **T5 to T6 is unmeasured**, in the steady-state path and in the reconnect path alike: no mechanism measures render (§2.4, §3.4.1). Every other segment is measurable on one host's clock today | — | — |
 | **Total** | **T1 to T6** | **≤ 800 ms**, against the 1000 ms budget | — |
 
 **The D-24 slice's own figures are unchanged.** Its poll adds up to one poll interval of its own (500 ms, AD-1 §3), because a poll is not a push; AD-1 §3 states its target as "display p95 ≤ 1 s from `emitted_at`, with both clocks on one host", and calls its numbers "for the slice, not final budgets". When AD-3's mechanism replaces the poll (AD-1 §4), the T2-to-T4 path becomes push-driven and §3.2 applies.
@@ -165,17 +171,36 @@ Conditions: the §6.2 event-rate envelope, the §6.3 concurrency limits, one hos
 
 ### 3.4 Reconnect and resync
 
-**[PROPOSED]** Finalizing F-5's second figure.
+**[PROPOSED]** Finalizing F-5's second figure. **Every target in this section is unmeasured**, for the reasons in §3.4.1.
 
-| Measure | Target | Definition |
-|---|---|---|
-| Reconnect **p95** | **≤ 5000 ms** | **F-5's figure, adopted unchanged.** From the moment the backend is reachable **through the edge proxy** to the moment a valid `snapshot` has been rendered — AD-1 §3's definition for the slice, generalized |
-| First snapshot after connect | p95 ≤ 500 ms | A connection that opens without a snapshot is not a working stream |
-| Resync completeness | 100% | A snapshot replaces all client state, so no subject may be left stale from before the gap (AD-1 §3.3) |
+| Measure | Target | Definition | Measured? |
+|---|---|---|---|
+| Reconnect **p95** | **≤ 5000 ms** | **F-5's figure, adopted unchanged.** From the moment the backend is reachable **through the edge proxy** to the moment a valid `snapshot` has been **rendered** | **No.** The render endpoint is **proposed here**; nothing measures it (§3.4.1) |
+| First snapshot after connect | p95 ≤ 500 ms | A connection that opens without a snapshot is not a working stream. Measured to **arrival**, not render | **No.** The probe asserts a snapshot arrives, not how long it took |
+| Resync completeness | 100% | A snapshot replaces all client state, so no subject may be left stale from before the gap (AD-1 §3.3) | Partly: the probe checks the new stream's frames against the shared checker |
 
 **Excluded from the reconnect target**, as AD-1 §3.3 already excludes them for the slice: permanent stopped states; a 429; a server-requested wait (`Retry-After`); and the hidden-tab and resumption states of AD-1 §3.3.1. Each is a deliberate wait, so counting it as latency would punish correct behaviour.
 
-**Backoff must fit the target.** AD-1 §3.3 lowered the slice's maximum backoff from 4 s to 2 s for exactly this reason — "4 s after a hung 2 s attempt would exceed the 5 s target". The general rule: **the attempt timeout plus the maximum backoff must be under the reconnect p95 target.**
+#### 3.4.1 The render endpoint is proposed, not approved, and is unmeasured
+
+**The attribution in earlier drafts was wrong, and is corrected here.** AD-1 §3 defines the slice's reconnect target as **"reconnect p95 ≤ 5 s from the moment the backend is reachable through Nginx"**. It names **no render endpoint**, so "AD-1 §3's definition, generalized" misattributed the **to-render** half to approved text. The start point is AD-1 §3's; **the end point is this document's proposal**.
+
+| | **Measured today** | **Proposed here** |
+|---|---|---|
+| Start | The backend is reachable through Nginx, from health probes | Same |
+| End | **The new stream's first `snapshot` frame arrives** at `e2e/p3_stream_probe.py`, a programmatic SSE reader | **The snapshot is rendered** in the browser (**T6**) |
+| Reported | `reconnect after restart: [...] ms; p95 ... ms`, against a 5000 ms budget, over a handful of samples | p95 ≤ 5000 ms over a stated sample |
+| Status | **Approved for the slice** (AD-1 §3) | **Proposed, and not instrumented** |
+
+**What the browser does and does not contribute.** The Playwright spec (`e2e/p3/observations.spec.ts`) asserts **how many streams started** — for example that a soak needs no reconnect, that faults needed none, and that a restore starts exactly one. It is a **correctness** check on reconnect *behaviour*, and it measures **no duration**. So:
+
+- **no mechanism measures reconnect-to-render**, in either the probe or the browser spec, and none is implemented;
+- the gap is the same one as §2.4's: it needs **T6 instrumentation**, which does not exist (**AD8-Q9**);
+- consequently the **T5-to-T6 segment** of §3.2 is **unmeasured** too, in the reconnect path as in the steady-state path.
+
+**The real client's own behaviour still needs acceptance testing against this target, separately from instrumenting T6.** The probe is not the product client: it does not implement the client's backoff schedule, its 2 s response-header timeout, its 35 s no-bytes timeout, its single-connection rule or its permanent stopped states (AD-1 §3.3, §3.3.1, §3.3.2). The approved reasoning that the backoff **fits** the target — AD-1 §3.3 lowered the slice's maximum from 4 s to 2 s because "4 s after a hung 2 s attempt would exceed the 5 s target" — is an argument from the schedule, **not a measurement of the client**. **N-4** therefore has two obligations, neither met: measure the real client's reconnect duration from each recoverable cause, and do it to the render endpoint.
+
+**Backoff must fit the target.** The general rule stands as a design constraint: **the attempt timeout plus the maximum backoff must be under the reconnect p95 target.** It is a property of the configured schedule, verifiable by inspection, and it is **not** evidence that the target is met.
 
 ### 3.5 Adapter-side timing values (the numbers AD-5 defers)
 
@@ -496,7 +521,7 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | N-1 | §3.1's p50, p95, p99 and the hard ceiling are met at the §6.2 sustained rate | A ≥ 300 s soak with ≥ 500 events, reporting the window and the sample size with every percentile (§2.4). **Blocked on T6 instrumentation** (§2.4, **AD8-Q9**): until it exists, only §2.3.1's arrival latency can be measured, and N-1 cannot be claimed |
 | N-2 | §3.2's segment budgets are met, and a breach is attributed to a segment | Per-segment histograms from one host's clock |
 | N-3 | §3.1 is met during a §6.2 burst, and recovers within 10 s of its end | Burst injection by the AD-12 harness |
-| N-4 | §3.4's reconnect p95 is met from each recoverable cause, and the excluded states are **not** counted | The AD-1 §3.7 client fault catalogue |
+| N-4 | §3.4's reconnect p95 is met from each recoverable cause, and the excluded states are **not** counted. **Two obligations, neither met** (§3.4.1): (a) measure the **real client**, not the probe — its backoff schedule, 2 s header timeout, 35 s no-bytes timeout, single-connection rule and permanent stopped states; and (b) measure to the **render** endpoint, which needs T6 instrumentation | The AD-1 §3.7 client fault catalogue, extended with a duration measurement. **Blocked on AD8-Q9** for (b); (a) additionally needs a browser-side timing harness, since the current spec counts streams started and measures no duration |
 | N-5 | §4.2's thresholds behave exactly at their boundaries | Fake clocks, as AD-1 §3.7 requires for threshold tests |
 | N-6 | §5.3's invariants hold in the browser at every state | The browser acceptance suite, as in the D-24 slice's own §6 item 8 |
 | N-7 | §6.3's limits hold, with no eviction of an existing stream and no leak | Connection-storm and slow-client tests |
@@ -551,7 +576,8 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | # | Gap | Closed by |
 |---|---|---|
 | 1 | **Every figure here is a design target, not a measurement**, except where it restates an approved slice figure or a measured D-24 runtime. Nothing in §3, §4 or §6 has been load-tested. **§6.2's envelope is provisional and AD-2's requirement is unwritten** (§6.2.1) | §9's tests, in milestones 3.5 and 3.7; **AD-2** for the requirement |
-| 1a | **T6 is not instrumented** (§2.4), so §3.1's end-to-end budget has **no measurement at all**. The only measured latency is §2.3.1's narrower arrival latency, against the slice's own approved target | **AD8-Q9**; Dev C in milestone 3.5; **AD-13** for the harness |
+| 1a | **T6 is not instrumented** (§2.4), so **every target whose endpoint is render is unmeasured**: §3.1's end-to-end p95, §3.2's **T5-to-T6 segment**, and §3.4's **reconnect-to-render** p95 and first-snapshot figure (§3.4.1). What *is* measured is narrower at the end in each case — `emitted_at` to programmatic SSE frame arrival, and reachability to first snapshot **arrival** — against the slice's own approved targets, and it is **not** evidence for the proposed ones | **AD8-Q9**; Dev C in milestone 3.5; **AD-13** for the harness |
+| 1b | **The real client's reconnect behaviour is unmeasured**, separately from T6. The probe is not the product client: it implements none of the client's backoff schedule, 2 s header timeout, 35 s no-bytes timeout, single-connection rule or permanent stopped states, and the browser spec counts streams started without measuring any duration (§3.4.1). The approved "backoff fits the target" reasoning is an argument from the schedule, not a measurement | **N-4**, both obligations; Dev C and Dev D in milestone 3.5 |
 | 2 | **No durability or replay is decided**, so §8.1 has no recovery-point objective for observations, **G-1 has no store to deliver into** (§6.0), and the delivery semantics **H-1 to H-6** are pending (AD-5 §3.7). Today a coalesced update is genuinely gone, because there is no observation store | **AD-2**, **AD-3**; **AD-11** for the store |
 | 3 | **Provider-specific freshness values cannot be finalized**, because no provider is approved and no documentation has been read for one. §4.2 gives category defaults only | **Gate 3**, per provider; then a registry record under AD-5 §2.2 |
 | 4 | **The metric and alert mechanism is unchosen.** §7 specifies names, labels and conditions, not a stack | Milestone 3.7; AD-10 for anything exposed |
