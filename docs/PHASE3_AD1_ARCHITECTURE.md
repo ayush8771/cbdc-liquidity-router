@@ -1,6 +1,6 @@
 # AD-1 Part 2: Full Phase 3 Component and Deployment Architecture
 
-**Status:** **DRAFT v0.5**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists.
+**Status:** **DRAFT v0.6**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied. **Reviewed again on PR #38, on v0.5:** **Dev B (Anvesh) granted the D-22 technical sign-off** — quarantine placement, C-3 prerequisites and Compose boundaries satisfactory; **Dev D (Nisarga) approved** §7.3 and §7.3.1's D-24, D-25, B-4 and Compose-authorization boundaries; **Dev C (Varshini) requested one change**, the §3.2 source-status row against AD-8 v0.7 §5.1, **applied in v0.6**, and offers the Dev C sign-off once it is confirmed. Those texts are on PR #38, **relayed here, not quoted**. **Dev A's review is outstanding, v0.6 is not re-reviewed by anyone, and no owner approval exists**, so **D-22 is unsatisfied and no milestone 3.2–3.7 is authorized**.
 **Relationship to the approved component view:** this is an **additive companion** to `docs/PHASE3_AD1_COMPONENT_VIEW.md`, which stays **exactly as approved at v0.5**, with corrections **C-1** and clarification **C-2** as recorded there. The v0.5 approval is **for the D-24 slice only** and is **version-specific**: "any later revision needs fresh review and approval". Revising that file would therefore **suspend the authorization of the D-24 work now in progress**, so the full-Phase-3 architecture is written beside it. **Nothing in v0.5 is edited, superseded or weakened here.** Where the two could be read as disagreeing, **v0.5 wins**.
 **What this document is for.** Scope §12 "Remaining during milestone 3.1" item 1 reads: *"Confirm the AD-1 component view §4 placement of later components, which every code milestone 3.2–3.7 waits for (D-22). The D-24-slice approval does not cover it."* This document is the material for that confirmation, in full rather than as the five-row table of v0.5 §4.
 **It is not the final AD-1.** The final AD-1 is a wave-4 deliverable that needs every other AD approved or deferred (3.1 plan §4). AD-2, AD-3, AD-7, AD-9 to AD-13 are unwritten, so §13 lists what the final version must still absorb.
@@ -9,6 +9,12 @@
 - **Blocker 2 fixed:** **new §7.3.1** separates the **D-24 conditions** — `infra/compose.yaml` unchanged, `--profile full` unchanged, nothing published, the inference side of B-4 unenforced under **D-25** — from the **architectural rules** that are permanent. v0.1's "overlays, never edits to `compose.yaml`" read as a permanent prohibition would make **B-4 unclosable**, since inference is a Phase 2 service defined in that file. It states what an **approved** AD-10 change may do, and the three conditions that hold regardless: not under D-24, no Phase 1 or Phase 2 behaviour change, and **Gate 4 evidence rather than a gate pass**.
 - §6 item 1 and §7.4 cross-reference §7.3.1; §6 item 5 now records the pending delivery semantics and the provisional capacity envelope.
 - **AD1P2-Q5** is restated as the §7.3.1 split rather than a blanket overlay rule.
+
+**Revision v0.6, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Dev C's (Varshini's) one finding on PR #38**, documentation only. Change:
+
+- **§3.2 — the source-status row gave the published value and the internal adapter status one owner.** It read "Express: relays as **content** / Ingestion: **decides**". **AD-8 v0.7 §5.1** separates them: **Express decides the published `starting`/`ok`/`outage`** from its **own poll** (`services/backend/src/observations/poller.ts`), while **ingestion owns its internal adapter status** (AD-5 §9), which is **never serialized** — `/v1/latest` carries no status field. The row now says both, and a new paragraph states why "as content" is a separate point: the published value travels in the message body, so a source `outage` is shown apart from a disconnected stream.
+
+**No threshold, enum, schema, contract, ownership elsewhere, D-24 behaviour or gate changes, and no published status is added or removed.**
 
 **Revision v0.5, 26 November 2026 — still DRAFT, and not re-reviewed.** Four internal-consistency corrections, **documentation only**. No approved decision, contract, schema, threshold, ownership or gate moves; no reviewer has re-reviewed and no owner has approved this document; **the approved component view v0.5 is not edited**. Changes:
 
@@ -194,13 +200,21 @@ Nothing in the slice writes a quarantined payload anywhere, and C-11 does not ex
 | Adapter lifecycle, transport, backoff, breaker | No | No | **Yes** (AD-5 §3) | No |
 | Envelope assembly, hashing, provenance | No | **Re-validates, never assembles** | **Yes** | **Re-validates, never assembles** |
 | Freshness evaluation and thresholds | No | **Yes**, on the server clock (v0.5 §3.3) | Supplies the profile | Advances age by **monotonic** time only |
-| Source status | No | Relays as **content** | **Decides** (AD-5 §9) | Displays, separately from "disconnected" |
+| Source status | No | **Decides the published value** `starting`/`ok`/`outage` from its **own poll** (AD-8 §5.1; `poller.ts`), and carries it as **content**, never as transport state | **Decides its own internal adapter status** (AD-5 §9), which is **never serialized**: `/v1/latest` has no status field | Displays the published value, separately from "disconnected" |
 | Display labels | No | Supplies the inputs | No | **Applies AD-4 §8.1**, first match wins |
 | Channel termination and authentication | No | **Yes** (F-3) | **No** | Client |
 | Observation storage and retention | No | **Yes** (C-5, AD-11) | **No** | No |
 | Knowledge-layer writes | No | No | **No** | No |
 
 **The last row is "No" four times, deliberately.** Knowledge writes need **Gate 2** (D-4), and feasibility comes only from `StaticMemoryProvider` (A-4). No Phase 3 component may write to the knowledge layer until Gate 2 passes, so there is no component to assign it to yet.
+
+**The two source statuses have different owners, and v0.5 said so loosely (Dev C, PR #38).** v0.4's row read "Express: relays as content / Ingestion: decides", which gave the **published** value and the **internal** adapter state one owner. **AD-8 v0.7 §5.1** separates them, and this row now matches it:
+
+- **The published `source.status` is Express's.** It is derived from the outcome of **Express's own poll** — `starting` / `ok` / `outage`, the approved closed enum (AD-1 v0.5 §3.1, §3.2; `stream-message.v1.schema.json`), set in `services/backend/src/observations/poller.ts` with the enum in `constants.ts`. It is a statement about **Express's view of the source**.
+- **The internal adapter status is ingestion's** (AD-5 §9), and it **reaches the browser through no field**: `GET /v1/latest` conforms to `ingestion-latest.v1.schema.json` with `additionalProperties: false` and carries **no status**, so `down` is never a fourth wire value (AD-8 §5.1; AD-5 §9.3).
+- **"As content" still holds, and is a separate point:** whichever value is published travels in the message body, not in the transport state, so a source `outage` is shown **separately from a disconnected stream** (AD-1 v0.5 §3.3).
+
+**Nothing moves with this correction:** the enum, the schemas, the poller's thresholds, AD-5 §9's internal states and every ownership elsewhere are unchanged, and no published status is added or removed.
 
 #### 3.2.1 Policy defaulting: the backend resolves both, and the engine's own defaults are for direct callers
 
