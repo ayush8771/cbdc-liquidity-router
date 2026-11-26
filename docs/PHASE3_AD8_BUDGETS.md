@@ -1,6 +1,11 @@
 # AD-8: Non-Functional Budgets — Latency, Freshness, Monitoring and Recovery
 
-**Status:** **DRAFT v0.6**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
+**Status:** **DRAFT v0.7**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
+**Revision v0.7, 26 November 2026 — still DRAFT, and not re-reviewed.** Two clarifications, **documentation only**. **No threshold, enum, schema, contract, ownership, runtime, Compose file, CI workflow or code changes, and nothing is authorized.** Changes:
+
+- **§8.2 — the 10 s shutdown budget is the whole Docker grace period, not a figure below one.** v0.6 said 10 s was "below the Compose and orchestrator default kill timeout"; Docker's default stop grace period **is** 10 s, so the margin is **zero** and an overrun is a **SIGKILL with a non-zero exit**, failing **R-6** and AD-1 §6 item 4. The budget is restated with that cliff named, and **no Compose or `stop_grace_period` change is proposed or authorized**.
+- **§5.1 — Express owns the published `source.status`.** v0.6 attributed it to ingestion. Ingestion publishes **no** status field (`ingestion-latest.v1.schema.json`, `additionalProperties: false`) and its internal state is never serialized; Express derives the published `starting`/`ok`/`outage` from its **own** poll (`services/backend/src/observations/poller.ts`). Ingestion keeps the **internal** adapter status (AD-5 §9), which reaches the browser through no field today.
+
 **Revision vv0.5, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Anvesh's (Dev B's) CHANGES_REQUESTED re-review of PR #30** on commit `e457bcf`, together with the conditions in **Nisarga's** re-review that fall in the same sections. Both texts are on the pull request, not in the repository. Documentation only; it preserves every correction from **Varshini's** and Nisarga's earlier rounds, and changes no approved D-24 contract, schema, threshold, ownership or implementation. Cross-AD decisions stay **provisional**: AD-2 is itself a draft (PR #32), and nothing here approves it or is approved by it. Changes:
 
 - **Blocker 3 (H6) fixed — §6.2.1 rewritten and extended beyond event rates.** A dimension-by-dimension table now covers **burst rate and duration** (AD-8 100/s for 10 s versus **AD-2 R-3** 200/s for 60 s, 12× the events), **browser stream concurrency** (20 total versus **R-11** 60, 3×), **server-side consumers** (**R-11** ≤ 3, AD-8 silent), **distinct subjects**, **producer retention before acceptance** (**R-7** 12,000 events / 32 MiB / 10 min, AD-8 silent), **consumer replay** (**R-9** 24 h, AD-8 silent), **browser replay**, **durability**, **overload** and **latency**. The reconciliation rule now applies **per dimension**, and adds a case for dimensions AD-8 leaves silent: AD-8 **adopts** AD-2's approved figure without re-measuring a bound it never claimed. §8.1 records where a recovery objective would come from.
@@ -315,8 +320,16 @@ For the synthetic source the bounds are the generator's declared range, so a gen
 |---|---|---|---|
 | Is the value old? | `fresh` / `stale` | **Express**, on the server clock, at evaluation | Age against `stale_after_ms` (AD-4 §7) |
 | Is the value too old to show? | `unavailable` | **Express**, and the browser as age advances | Age against `unavailable_after_ms` |
-| Is the source connected? | **Published:** `starting` / `ok` / `outage` — the approved closed enum (AD-1 §3.1, §3.2; `stream-message.v1.schema.json`). **Internally** ingestion also distinguishes `down`, a permanent fault, which publishes as `outage` (AD-5 §9.3) | **Ingestion** (AD-5 §9) | §3.5's outage criteria |
+| Is the source connected? | **Published:** `starting` / `ok` / `outage` — the approved closed enum (AD-1 §3.1, §3.2; `stream-message.v1.schema.json`). **Internally** ingestion also distinguishes `down`, a permanent fault, which would publish as `outage` (AD-5 §9.3) | **Published value: Express** (see below). **Internal adapter status: ingestion** (AD-5 §9) | Express: its poller's own result. Ingestion: §3.5's outage criteria |
 | What does the user see? | The label | **AD-4 §8.1**, first match wins | The above, plus class, transport and Gate 3 status |
+
+**Who owns the published `source.status`, clarified (v0.7): Express does.** v0.6's row said "Decided by **Ingestion**", which is right about the internal adapter status and wrong about the value on the wire. In the approved slice:
+
+- **ingestion publishes no status at all.** `GET /v1/latest` conforms to `ingestion-latest.v1.schema.json` with `additionalProperties: false` and has **no status field**; the internal state is **never serialized** (AD-5 §9.3; `docs/PHASE3_33A_AUTHORIZATION.md` §9 criterion 6);
+- **Express derives the published value** from the outcome of its **own poll** — `starting` / `ok` / `outage`, set in `services/backend/src/observations/poller.ts` from its consecutive-failure and silence criteria (AD-1 §3.1, §3.2), with the enum in `services/backend/src/observations/constants.ts`. It is a statement about **Express's view of the source**, which is why a `failed_permanent` adapter still leaves `/v1/latest` answering **200** with its last-held value;
+- **ingestion owns the internal status**, which AD-5 §9 specifies and §7.1 labels metrics with. It reaches the browser through **no field today**.
+
+**So §3.5's adapter-side outage criteria govern ingestion's internal status, and Express's own criteria govern what the browser is told.** Carrying the internal state onto the wire would need an **AD-7** protocol change and an **AD-9** display decision, and **none is proposed**: the enum, the schemas, the poller's thresholds and ownership are **unchanged by this clarification**.
 
 **Freshness and source status are separate** (AD-5 §9.1), and the display shows both: AD-1 §3.3 requires source `outage` to be shown separately from a disconnected stream.
 
@@ -595,7 +608,15 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 
 ### 8.2 Graceful shutdown
 
-**[PROPOSED]** Generalizing AD-1 §3.5, which is approved for the slice: refuse new streams with `503` and `Retry-After: 1`; stop polling and abort the request in flight; end all streams, destroying any left after 1 s; then close the server and disconnect the database. **The process exits 0** — AD-1 §6 item 4 makes "a shutdown with open streams exits 0" an acceptance item, and the D-24 harness asserts `sigterm: the backend exits 0` (`docs/PHASE3_D24_ACCEPTANCE.md` §1). Total shutdown budget: **10 s**, below the Compose and orchestrator default kill timeout.
+**[PROPOSED]** Generalizing AD-1 §3.5, which is approved for the slice: refuse new streams with `503` and `Retry-After: 1`; stop polling and abort the request in flight; end all streams, destroying any left after 1 s; then close the server and disconnect the database. **The process exits 0** — AD-1 §6 item 4 makes "a shutdown with open streams exits 0" an acceptance item, and the D-24 harness asserts `sigterm: the backend exits 0` (`docs/PHASE3_D24_ACCEPTANCE.md` §1). Total shutdown budget: **10 s**.
+
+**The 10 s, clarified (v0.7): it is the whole grace period, not a figure below one.** v0.6 called 10 s "below the Compose and orchestrator default kill timeout". It is not below it — **Docker's default stop grace period *is* 10 s** (`docker stop` and Compose's default `stop_grace_period`), after which the container is **SIGKILLed**. So:
+
+- the **budget and the deadline are the same number**, and the margin is **zero**. The whole sequence — refuse new streams, stop polling, abort the poll in flight, end streams and destroy any left after 1 s, close the server, disconnect the database — must complete **strictly inside** 10 s;
+- **overrunning it is not a slow clean exit but a kill**: the process is terminated, the exit code is **not 0**, and the §9 **R-6** evidence and AD-1 §6 item 4 both fail. AD-1 §3.5 records the same cliff from the other side — without the additive pre-close hook, open streams hold `server.close` until "the 10 s forced exit with code 1";
+- the shutdown work is therefore budgeted **well inside** the grace period, and **R-6 is measured under full load**, where it is tightest, rather than idle.
+
+**No change to any Compose file, `stop_grace_period`, runtime or code is proposed or authorized here.** Raising the grace period explicitly would be a change to `infra/compose.yaml`, which **D-24 forbids for the slice** (AD-1 Part 2 §7.3.1); if measurement ever shows 10 s too tight, that is a separate, **approved** change, and this clarification neither requests nor pre-authorizes one. **This paragraph records what the existing deadline is; it moves no threshold.**
 
 ### 8.3 Drills
 

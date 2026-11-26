@@ -670,6 +670,10 @@ Rationale:
 - exit criteria 7–12;
 - acceptance of v0.3 as the milestone 3.0 decision record.
 
+**Recorded (project owner, 26 November 2026):**
+
+- the **extension of AD-4 v0.2's approval beyond the D-24 slice to cover milestone 3.3**, which satisfies the **AD-4** part of **F-1** for milestone 3.3 (§7.1 row 3.3). **No AD-4 text change is authorized**, **AD4P2-Q1 stays unapproved**, and the **C-1 `event_id` derivation is unchanged**. It extends **no other deliverable**: the AD-1 component view's §4 placement (**D-22**), **AD-5** and **AD-12** are still not approved for milestone 3.3, so **F-1 and D-22 are not yet satisfied and no code milestone may begin**. **It passes no gate; all four capability gates remain closed.**
+
 **Recorded (project owner, 25 November 2026):**
 
 - D-25;
@@ -677,9 +681,10 @@ Rationale:
 
 **Remaining during milestone 3.1:**
 
-1. Confirm the AD-1 component view **§4 placement of later components**, which every code milestone 3.2–3.7 waits for (D-22). The D-24-slice approval does not cover it.
-2. Approve AD-1 to AD-13 as they are delivered. These include the streaming mechanism (AD-3), the WebSocket or SSE choice (AD-7), and the final budgets and measurement points (AD-8).
-3. Confirm or reject the items still [PROPOSED] (§2.4).
+1. Confirm the AD-1 component view **§4 placement of later components**, which every code milestone 3.2–3.7 waits for (D-22). The D-24-slice approval does not cover it. **Still open.**
+2. **Approve AD-5 and AD-12** for milestone 3.3 (F-1, §7.1 row 3.3). **Still open.** **AD-4's milestone 3.3 extension is recorded (26 November 2026, above); AD-5 and AD-12 are not.**
+3. Approve AD-1 to AD-13 as they are delivered. These include the streaming mechanism (AD-3), the WebSocket or SSE choice (AD-7), and the final budgets and measurement points (AD-8).
+4. Confirm or reject the items still [PROPOSED] (§2.4).
 
 **Later, at each gate** (the project owner approves; none has passed):
 
