@@ -5,15 +5,15 @@
 **Lead:** Dev C. **Reviewers:** Dev A, Dev B. **Approver:** project owner (`docs/PHASE3_MILESTONE_3_1_PLAN.md` §3).
 **Scope source:** `docs/PHASE3_SCOPE.md` §3 Workstream D and §7.3 (AD-9 row); D-9, D-15, D-21, D-24; F-5.
 **Relies on:** `docs/PHASE3_AD1_COMPONENT_VIEW.md` v0.5 (§3.2, §3.3 to §3.3.5, §3.5), `docs/PHASE3_AD4_EVENT_ENVELOPE.md` v0.2 (§7, §8), `docs/PHASE3_AD6_ENGINE_BOUNDARY.md` v0.2 (§1, §6), `docs/PHASE2_API_CONTRACT.md` v0.4 (§3.2, §3.9, §4). AD-1, AD-4 and AD-6 are approved **for the D-24 slice only**.
-**Review state:** **REQUEST CHANGES** from Dev B (Anvesh) on PR #29, relayed, not quoted. The core boundaries were found correct; the requested corrections are applied in this revision, which is **still v0.1** and has **not been re-reviewed**.
-**Depends on, not yet written:**
+**Review state:** **REQUEST CHANGES** from Dev B (Anvesh) on PR #29, relayed, not quoted; applied in commit `5e98d5a`. The project owner's review of `5e98d5a` on PR #29 (26 November 2026, `CHANGES_REQUESTED`) found the overall specification sound and asked for two corrections (§4.1 `POLICY_UNAVAILABLE_FOR_STATE`; §5 O-1 and the fallback decision) and two minor ones (the AD-8 reference; the "if visible" condition for offline recovery). All four are applied in this revision, which is **still v0.1** and has **not been re-reviewed**.
+**Depends on (not approved: AD-8 is drafted in PR #30; the others are not written):**
 - **AD-2** (streaming requirements) owns the replay window and durability.
 - **AD-7** (real-time channel contract) owns channel authentication, reconnect and resync.
-- **AD-8** (non-functional budgets and monitoring) owns the final thresholds, targets and monitoring.
+- **AD-8** (non-functional budgets and monitoring) owns the final thresholds, targets and monitoring. **It is drafted in PR #30 (DRAFT v0.1) and is not yet approved or merged**, so the thresholds in §3.1 stay provisional.
 - **AD-10** (threat model, authentication and exposure plan) owns authentication and exposure.
 - **AD-11** (audit trail and persistence) owns observation storage.
 
-None of these documents exists in the repository, so this document names them and links nothing. **AD-1's detection, backoff, reconnect and resynchronization behaviour (AD-1 §3.3) is a D-24-specific stand-in** for the channel behaviour that AD-7 will own. The behaviour that §3.3 of this document summarizes is that stand-in. It must be rechecked against AD-7 when AD-7 is drafted.
+None of these is an approved document. AD-2, AD-7, AD-10 and AD-11 are not written; AD-8 exists only as the unreviewed draft in PR #30, which is not on `feature/phase3-platform`. This document therefore names them and links none of them. **AD-1's detection, backoff, reconnect and resynchronization behaviour (AD-1 §3.3) is a D-24-specific stand-in** for the channel behaviour that AD-7 will own. The behaviour that §3.3 of this document summarizes is that stand-in. It must be rechecked against AD-7 when AD-7 is drafted.
 
 This document specifies what the system does when something fails, and what the user is shown. **Everything here describes behaviour that is already approved elsewhere, or states a boundary that must hold.** It adds no feature and no capability. Where it records a number, the number is owned by the document cited beside it.
 
@@ -25,7 +25,7 @@ AD-9 is the **fallback and degradation specification** of `docs/PHASE3_SCOPE.md`
 |---|---|---|
 | Dashboard architecture, components, panel gating, SSE protocol | **AD-1** (§1, §3.2, §3.3.4) | Cites it. Records only how the dashboard behaves while observations fail (§3.4). |
 | Freshness definition, thresholds, labels | **AD-4** §7, §8 and **AD-1** §3.3 (slice values); final numbers: **AD-8** | Restates the slice values with their source (§3.1). Does not change them. |
-| Monitoring, budgets, measurement points | **AD-8** (not yet written) | Lists which failures must be visible and refers the how to AD-8 (§3.6). |
+| Monitoring, budgets, measurement points | **AD-8** (draft in PR #30, not approved) | Lists which failures must be visible and refers the how to AD-8 (§3.6). |
 | Authentication and exposure | **AD-10** (not yet written); today AD-1 §2, §3.3.4 and Phase 2 development auth | States the failure semantics that must hold (§3.5). Defines no mechanism. |
 | Replay window and durability; channel authentication, reconnect and resync; observation storage | **AD-2**; **AD-7**; **AD-11** (none written) | Names them. D-24 has no replay or storage (AD-1 §3, §3.7), and its reconnect rules are a stand-in (§3.3). |
 | Observation-to-engine boundary | **AD-6** (§1, §6) | Applies it (§2, §4). |
@@ -87,6 +87,7 @@ The slice's profile, sent in every snapshot (AD-1 §3.2), is `expected_interval_
   - A **new `update` or `snapshot`** replaces the value.
   - **Sign-out, unmount, or either flag turning off** removes the panel's state (AD-1 §3.3.1, §3.3.4).
 - AD-4 §8 allows an unavailable value to appear "only as history, with its timestamp". **D-24 shows no such history, and this document does not add one.** Adding it is a frontend change that needs its own approval, and it would need stored observations, which belong to **AD-11**; D-24 stores none (AD-1 §3.7).
+- **No fabricated or carried-forward substitute.** When an observation is unavailable, the panel shows "Unavailable" with no number. It does **not** generate a synthetic stand-in, re-show the last value as if it were current, or reuse another pair's or snapshot's value. A stale value is shown only while it is stale, labelled with its age (above). This follows AD-4 §8 ("Unavailable shows no number"), and it is how D-24 already behaves. Observation failures never block routing (AD6-Q2); the scope's "synthetic snapshot" step is therefore not a fallback for observations (AD9-C1, O-1).
 - No value is ever relabelled to avoid showing "Unavailable".
 
 ### 3.3 Failure scenarios and degradation
@@ -100,7 +101,7 @@ Detection, thresholds, backoff and wire handling belong to AD-1 (§3.1, §3.3.1 
 | **Too many streams** (429 `STREAM_LIMIT`, from either the per-user limit of 3 or the global limit of 20; AD-1 §3.5, `constants.ts:61-62`) | "Too many streams, waiting to retry" | Kept, age on | Automatic after the larger of `Retry-After` and the backoff, at most 30 s |
 | **Backend shutting down** (503) | Disconnected, reconnecting | Kept, age on | Automatic, honouring `Retry-After`, at most 30 s |
 | **Tab hidden** (AD-1 §3.3.1) | "Paused (tab hidden)" | Kept while hidden, age on: a paused tab never shows a frozen number as current | **On return to visible (or a `pageshow` restore), displayed values are dropped at once and return only from the new `snapshot`** (one fresh snapshot) |
-| **Offline** | "Offline" | Kept, age on | One fresh snapshot after `online` |
+| **Offline** | "Offline" | Kept, age on | After `online`, **if the tab is visible** and the state is recoverable (AD-1 §3.3.1), one fresh snapshot. A hidden tab stays paused until it is visible. A permanent stop is never restarted by `online` |
 | **Single protocol fault** (bad JSON, wrong content type, sequence gap, a first message that is not a snapshot) | Disconnected, reconnecting | Kept, age on | Automatic reconnect. Three faults without 60 s of valid streaming stop the stream |
 | **Stopped, three protocol faults** | "Stopped", with "Observations stopped: the stream sent messages that couldn't be read." | Kept, age on, so withdrawn when age passes 30 s | **Retry now only** (AD-1 §3.3.2). Never automatic |
 | **Stopped, unsupported protocol version** | "Stopped", with "Observations unavailable: the stream uses a protocol version this page can't read." | As above | **Retry now only** |
@@ -147,7 +148,7 @@ Monitoring, budgets and measurement points are owned by **AD-8**. AD-9 asks AD-8
 - a client's repeated protocol faults and stopped streams;
 - the freshness distribution of served values, so a source that quietly ages out is visible.
 
-What D-24 provides today, as observed, not required by this document: the backend writes token-redacted logs for source status changes, poll failures and stream opens and closes, and keeps in-memory counters by reason that nothing yet reads; `GET /api/v1/health` reports the database and inference only, not the observation source; the browser writes short reasons to the console only. **AD-9 does not require any of these to change.** Until AD-8 exists, freshness thresholds and the 1 s and 5 s targets stay provisional (scope F-5).
+What D-24 provides today, as observed, not required by this document: the backend writes token-redacted logs for source status changes, poll failures and stream opens and closes, and keeps in-memory counters by reason that nothing yet reads; `GET /api/v1/health` reports the database and inference only, not the observation source; the browser writes short reasons to the console only. **AD-9 does not require any of these to change.** Until AD-8 is approved, freshness thresholds and the 1 s and 5 s targets stay provisional (scope F-5).
 
 ## 4. Routing and inference failures
 
@@ -164,7 +165,7 @@ These are the **routing-relevant subset**, including the cases that matter to re
 | A non-analyst asks for `ppoProjected` | `403 FORBIDDEN_POLICY`, checked before any call to inference |
 | Schema or type error, including an unknown field | `422 VALIDATION_ERROR` |
 | Engine domain errors, including `UNSUPPORTED_CORRIDOR` and `DATE_OUT_OF_RANGE` (also `DATE_IN_GAP_BUFFER`, `UNKNOWN_SCENARIO`, `STATE_VENUE_MISMATCH`, `INVALID_STATE_VALUE`) | `422`, the engine's code passed through |
-| Policy not available for the state (for example `ppo_projected` in explicit mode without `history`) | `422 POLICY_UNAVAILABLE_FOR_STATE` for a transaction; listed in `skipped` for a comparison (§3.6) |
+| Policy not available for the state (for example `ppo_projected` in explicit mode without `history` on every venue): `POLICY_UNAVAILABLE_FOR_STATE` | **Direct (single-policy) requests:** HTTP **422** from inference, passed through by the app for `POST /api/v1/transactions`. **Comparison requests:** **not** a request-level error: the HTTP **201** response lists the unavailable policy under `skipped` with this code, and the comparison is saved (§3.6) |
 | Policy disabled (no approved checkpoint) | `409 POLICY_DISABLED` for a transaction; listed in `skipped` for a comparison (§3.6) |
 | Unexpected failure with no result | `500 INTERNAL_ERROR` |
 | Inference 5xx (other than not-ready, busy or timeout), or an invalid body | `502 INFERENCE_ERROR` |
@@ -212,10 +213,11 @@ Recorded, not resolved here. The identifiers **AD9-C1** and **AD9-C2** belong to
 
 | # | Item | Position |
 |---|---|---|
-| **AD9-C1** | **Scope §3 Workstream D fallback order** ("last known good value, labelled stale; then a synthetic snapshot; then refuse to route") against AD6-Q2 and the owner's decision | The scope sentence is marked **[PROPOSED]** and "Decided in AD-9". Applied here: step 1 holds only while the value is stale and ends when its age passes 30 s (§3.2); step 3 never applies to observations (§4.3). `docs/PHASE3_SCOPE.md` itself is **not edited**. |
+| **AD9-C1** | **Scope §3 Workstream D fallback order** ("last known good value, labelled stale; then a synthetic snapshot; then refuse to route") against AD6-Q2 and the owner's decision | The scope sentence is marked **[PROPOSED]** and "Decided in AD-9". Applied here: step 1 holds only while the value is stale and ends when its age passes 30 s (§3.2); step 2, a synthetic snapshot, is **rejected** as a substitute for an unavailable observation (§3.2, O-1); step 3 never applies to observations (§4.3). `docs/PHASE3_SCOPE.md` itself is **not edited**. |
 | **AD9-C2** | **AD-4 §8** permits an unavailable value to appear as history with its timestamp; D-24 does not show it | D-24 stands (§3.2). Whether a history view is ever added is not decided and not authorized. History would need stored observations, which belong to **AD-11**; D-24 stores none. |
-| **O-1** | **The "synthetic snapshot" step** | Meaningless in D-24, where every value is already synthetic. Whether a later source needs a synthetic stand-in is open and belongs to a later milestone. |
-| **O-2** | **AD-8 is not written.** Thresholds, the 1 s and 5 s targets, measurement points and monitoring signals are provisional | Referenced by name. AD-9 should be re-checked when AD-8 is drafted. Plan §3 lists AD-8 as an AD-9 input. |
+| **O-1** | **The "synthetic snapshot" step** | **CLOSED for D-24 and for the observation display (project owner review of PR #29, 26 November 2026, relayed).** No fabricated or carried-forward substitute is shown for an unavailable observation, consistent with AD-4 §8 ("Unavailable shows no number"); see §3.2. A synthetic *source* is a source labelled Simulated, not a fallback. Observation failures never block routing (AD6-Q2). The only open question is O-11. |
+| **O-11** | **PROVISIONAL, broader pilot only:** whether any later source or pilot would ever want a substitute display for an unavailable observation | **Not decided and not authorized.** AD-4 §8 forbids a number for an unavailable value, so any such display would need an owner decision and a revision of AD-4, and fresh review. D-24 stands. |
+| **O-2** | **AD-8 is drafted in PR #30, not approved.** Thresholds, the 1 s and 5 s targets, measurement points and monitoring signals stay provisional until it is approved | Referenced by name. AD-9 should be re-checked against AD-8 when it is approved. Plan §3 lists AD-8 as an AD-9 input. |
 | **O-3** | **AD-10 is not written.** Replacement of development authentication | Referenced by name (§3.5). B-4 (inference egress) is also AD-10's and stays unresolved (D-25). |
 | **O-4** | **"60 s of valid streaming"** (AD-1 §3.3, §3.3.2) is not defined: whether it is continuous, and how it is measured. The client documents its own reading and calls it open for the AD-1 owner (`observationController.ts`) | Owned by AD-1. Not changed here. |
 | **O-5** | **Retry now when idle or offline.** AD-1 §3.3.2 says it is shown in every state and disabled while an attempt is in flight. The D-24 panel also disables it while idle or offline | Owned by AD-1. Recorded as observed. |
