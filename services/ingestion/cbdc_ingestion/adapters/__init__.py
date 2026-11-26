@@ -37,6 +37,15 @@ from .faults import (
     FaultClass,
     is_permanent,
 )
+from .registry import (
+    Registry,
+    RegistryInvalid,
+    SeedAllocation,
+    SourceRecord,
+    check_description,
+    load_registry,
+    selected_records,
+)
 
 __all__ = [
     "ADAPTER_STATES",
@@ -52,4 +61,11 @@ __all__ = [
     "PERMANENT_FAULTS",
     "RECOVERABLE_FAULTS",
     "is_permanent",
+    "Registry",
+    "RegistryInvalid",
+    "SeedAllocation",
+    "SourceRecord",
+    "check_description",
+    "load_registry",
+    "selected_records",
 ]

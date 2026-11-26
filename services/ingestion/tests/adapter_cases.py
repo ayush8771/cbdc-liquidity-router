@@ -16,11 +16,14 @@ from typing import Sequence
 
 from cbdc_ingestion.adapters.base import Adapter, AdapterDescription, NormalizedObservation
 from cbdc_ingestion.adapters.context import AdapterContext, CancellationSignal, NullMetrics
+from cbdc_ingestion.adapters.registry import load_registry
+from cbdc_ingestion.adapters.synthetic_fx import SyntheticFxAdapter
 from cbdc_ingestion.clock import ManualClock
 
-from .conftest import START_MS
+from .conftest import SEED, START_MS
 
 PROBE_SOURCE_ID = "synthetic.contract_probe"
+SYNTHETIC_FX_SOURCE_ID = "synthetic.fx.adapter"
 PROBE_INTERVAL_MS = 2000
 
 
@@ -91,8 +94,32 @@ def make_context(adapter: Adapter, *, clock: ManualClock = None,
     )
 
 
-# (id, factory). Extended as adapters are added; the registry suite asserts the
-# list is complete against the package's `Adapter` subclasses.
+def adapter_for_record(record) -> SyntheticFxAdapter:
+    """The adapter one validated registry record selects.
+
+    The seed comes from the record's recorded allocation, which is the only
+    authority for one (AD-12 §3.1 mitigation 1); the fallback is used solely by
+    tests that construct a record without loading the allocation file.
+    """
+    registry = load_registry()
+    allocation = registry.allocation_for(record.source_id)
+    return SyntheticFxAdapter.for_record(
+        record, SEED if allocation is None else allocation.seed)
+
+
+def _shipped_synthetic_fx() -> SyntheticFxAdapter:
+    """The shipped adapter, as the shared contract suite instantiates it."""
+    registry = load_registry()
+    record = registry.record_for(SYNTHETIC_FX_SOURCE_ID)
+    assert record is not None, "the shipped registry must carry the synthetic FX record"
+    return adapter_for_record(record)
+
+
+# (id, factory). Extended as adapters are added;
+# `test_registry.py::test_every_adapter_subclass_is_in_the_shared_contract_suite`
+# asserts the list is complete against the package's `Adapter` subclasses, so an
+# adapter cannot be shipped with a suite of its own that quietly tests less.
 ADAPTERS = [
     ("contract_probe", _ContractProbe),
+    ("synthetic_fx", _shipped_synthetic_fx),
 ]

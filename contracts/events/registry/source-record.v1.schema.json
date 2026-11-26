@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cbdc-liquidity-router.local/contracts/events/registry/source-record.v1.schema.json",
+  "title": "Source registry record, v1 (DRAFT)",
+  "description": "One record per source, per AD-5 §2.2. STATUS: DRAFT. Phase 3.3-A ships synthetic records only; the real and derived branches are written so that such a record cannot be added without a Gate 3 reference, and they are UNEXERCISED here (authorization §8 item 1). The runtime validates records with cbdc_ingestion/adapters/registry.py and never by loading this file (authorization §7.4); this schema is a review and test artefact, exercised by services/ingestion/tests/test_registry_schema.py (acceptance criterion 3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_id",
+    "display_name",
+    "provider_id",
+    "event_types",
+    "subjects",
+    "transport",
+    "provenance_class",
+    "endpoint",
+    "egress_allowlist",
+    "credential_ref",
+    "gate3_decision_ref",
+    "freshness_profile",
+    "plausibility",
+    "rate_limits",
+    "schedule",
+    "timestamp_basis",
+    "retention_policy_ref",
+    "redistribution",
+    "status",
+    "adapter_id",
+    "dedup"
+  ],
+  "properties": {
+    "source_id": {
+      "description": "Stable for the life of the project and never reused. Lower-case dotted (AD-5 §2.2).",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$",
+      "maxLength": 200
+    },
+    "display_name": {
+      "description": "What a user sees as the source, shown with every value (AD-4 §8.1).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "provider_id": {
+      "description": "The commercial or institutional provider; null for synthetic and manual sources.",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "event_types": {
+      "description": "The AD-4 types this source may emit. A source emitting an unlisted type is rejected.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "enum": ["fx_rate"]}
+    },
+    "subjects": {
+      "description": "The AD-5 §6.3 subject allowlist, or the string 'open'. A subject is an ordered tuple of components; for fx_rate it is [base, quote, rate_type].",
+      "oneOf": [
+        {"type": "string", "const": "open"},
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "transport": {
+      "description": "Exactly one. The envelope's transport must equal it (AD-4 §6).",
+      "type": "string",
+      "enum": ["websocket", "poll", "scheduled", "manual", "synthetic"]
+    },
+    "provenance_class": {
+      "description": "Must satisfy AD-4 §3's transport pairing.",
+      "type": "string",
+      "enum": ["real", "derived", "synthetic", "assumed"]
+    },
+    "endpoint": {
+      "description": "The base URL, or null. HTTPS for every real source, with no credential, query or fragment (AD-4 §2). Null for every record this scope ships.",
+      "type": ["string", "null"],
+      "pattern": "^https://[^?#]+$"
+    },
+    "egress_allowlist": {
+      "description": "The hosts this adapter may contact. Empty for every record this scope ships: egress does not exist and its enforcement is unspecified (authorization §8 item 2).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "credential_ref": {
+      "description": "A name a secrets mechanism resolves, NEVER a secret. Null for every record this scope ships, and nothing resolves one (authorization §8 item 3).",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "gate3_decision_ref": {
+      "description": "The recorded Gate 3 decision. Required and active for every real and derived source; null for synthetic and assumed.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ref", "status"],
+          "properties": {
+            "ref": {"type": "string", "minLength": 1, "maxLength": 200},
+            "status": {"type": "string", "enum": ["active", "inactive", "withdrawn"]}
+          }
+        }
+      ]
+    },
+    "freshness_profile": {
+      "description": "The AD-4 §7 profile, with values from AD-8 §4.2. The ordering invariant is checked by the runtime validator; it is not expressible here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_interval_ms",
+        "live_max_age_ms",
+        "stale_after_ms",
+        "unavailable_after_ms",
+        "clock_tolerance_ms"
+      ],
+      "properties": {
+        "expected_interval_ms": {"type": "integer", "minimum": 1},
+        "live_max_age_ms": {
+          "description": "Null means never Live. A synthetic value is labelled Simulated by AD-4 §8.1 rule 4, which precedes the Live rule (authorization §5.4).",
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "stale_after_ms": {"type": "integer", "minimum": 1},
+        "unavailable_after_ms": {"type": "integer", "minimum": 1},
+        "clock_tolerance_ms": {"type": "integer", "minimum": 0}
+      }
+    },
+    "plausibility": {
+      "description": "AD-5 §10 bounds. For a synthetic source the range is the GENERATOR'S declared range, never a market range, so a generator defect is caught rather than displayed (authorization §5.5).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_relative_jump", "ranges"],
+      "properties": {
+        "max_relative_jump": {
+          "description": "Relative jump from the subject's current value within one expected_interval_ms. 0.2 is 20%.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "ranges": {
+          "description": "Keyed by the event type and the subject components joined by '/'. Bounds are decimal STRINGS: a float would lose the producer's digits (AD-5 §4).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["min", "max"],
+            "properties": {
+              "min": {"type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$"},
+              "max": {"type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$"}
+            }
+          }
+        }
+      }
+    },
+    "rate_limits": {
+      "description": "Documented provider limits and the self-imposed ceiling (AD-5 §7.4). Null for a synthetic source: there is no provider to limit.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["documented", "self_imposed_ceiling"],
+      "properties": {
+        "documented": {"type": ["string", "null"], "maxLength": 500},
+        "self_imposed_ceiling": {"type": ["string", "null"], "maxLength": 500}
+      }
+    },
+    "schedule": {
+      "description": "Poll interval or cron expression. Required for poll and scheduled, null otherwise.",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "timestamp_basis": {
+      "description": "Must equal what the adapter emits (AD-4 §5); checked against describe() at startup.",
+      "type": "string",
+      "enum": ["observed", "published", "none"]
+    },
+    "retention_policy_ref": {
+      "description": "The storage and retention terms permitted for this source (AD-11; a Gate 3 input).",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "redistribution": {
+      "description": "Whether values may be shown to pilot users, and to whom. A Gate 3 term, enforced at display.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permitted", "audience"],
+      "properties": {
+        "permitted": {"type": "boolean"},
+        "audience": {"type": ["string", "null"], "maxLength": 200}
+      }
+    },
+    "status": {
+      "description": "AD-5 §2.4. Only an active record may start an adapter.",
+      "type": "string",
+      "enum": ["proposed", "active", "suspended", "withdrawn"]
+    },
+    "adapter_id": {
+      "description": "The adapter implementation this record selects. Checked against describe().adapter_id at startup; a mismatch is a startup failure, not a warning (acceptance criterion 1).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "dedup": {
+      "description": "Deduplication scope. 'within_run' only in this scope: restart-safe deduplication is excluded (authorization §8 item 4, §5.3).",
+      "type": "string",
+      "enum": ["within_run"]
+    }
+  },
+  "allOf": [
+    {
+      "title": "A 'synthetic.' prefix if and only if the class is synthetic (AD-4 §3.2, AD-5 §2.2).",
+      "if": {
+        "properties": {"provenance_class": {"const": "synthetic"}},
+        "required": ["provenance_class"]
+      },
+      "then": {"properties": {"source_id": {"pattern": "^synthetic\\."}}},
+      "else": {"properties": {"source_id": {"not": {"pattern": "^synthetic\\."}}}}
+    },
+    {
+      "title": "A synthetic source has the synthetic transport, no provider and no Gate 3 reference.",
+      "if": {
+        "properties": {"provenance_class": {"const": "synthetic"}},
+        "required": ["provenance_class"]
+      },
+      "then": {
+        "properties": {
+          "transport": {"const": "synthetic"},
+          "provider_id": {"type": "null"},
+          "gate3_decision_ref": {"type": "null"}
+        }
+      }
+    },
+    {
+      "title": "Authorization §6.1's synthetic-only assertions: no outbound reach, checkable from the record alone.",
+      "if": {
+        "properties": {"transport": {"const": "synthetic"}},
+        "required": ["transport"]
+      },
+      "then": {
+        "properties": {
+          "endpoint": {"type": "null"},
+          "credential_ref": {"type": "null"},
+          "egress_allowlist": {"maxItems": 0},
+          "schedule": {"type": "null"}
+        }
+      }
+    },
+    {
+      "title": "Every real and derived source carries a Gate 3 decision reference. UNEXERCISED here: no such record exists before Gate 3 (authorization §8 item 1).",
+      "if": {
+        "properties": {"provenance_class": {"enum": ["real", "derived"]}},
+        "required": ["provenance_class"]
+      },
+      "then": {"properties": {"gate3_decision_ref": {"type": "object"}}}
+    },
+    {
+      "title": "The poll and scheduled transports require a schedule.",
+      "if": {
+        "properties": {"transport": {"enum": ["poll", "scheduled"]}},
+        "required": ["transport"]
+      },
+      "then": {"properties": {"schedule": {"type": "string"}}}
+    }
+  ]
+}

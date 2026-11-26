@@ -1,0 +1,48 @@
+{
+  "registry_version": "1.0",
+  "note": "Phase 3.3-A: synthetic sources only. No record here selects the adapter path by default; the D-24 generator stays the service default and has NO record (authorization §6.1, §7.2). Every record validates against contracts/events/registry/source-record.v1.schema.json. Adding a real or derived record needs an active Gate 3 decision, which does not exist: all four capability gates are CLOSED.",
+  "sources": [
+    {
+      "source_id": "synthetic.fx.adapter",
+      "display_name": "Synthetic FX (adapter path)",
+      "provider_id": null,
+      "event_types": ["fx_rate"],
+      "subjects": [
+        ["AED", "MXN", "mid"],
+        ["EUR", "USD", "mid"],
+        ["GBP", "PHP", "mid"],
+        ["USD", "INR", "mid"]
+      ],
+      "transport": "synthetic",
+      "provenance_class": "synthetic",
+      "endpoint": null,
+      "egress_allowlist": [],
+      "credential_ref": null,
+      "gate3_decision_ref": null,
+      "freshness_profile": {
+        "expected_interval_ms": 2000,
+        "live_max_age_ms": null,
+        "stale_after_ms": 6000,
+        "unavailable_after_ms": 30000,
+        "clock_tolerance_ms": 1000
+      },
+      "plausibility": {
+        "max_relative_jump": 0.2,
+        "ranges": {
+          "fx_rate:AED/MXN/mid": {"min": "1.090000", "max": "1.110000"},
+          "fx_rate:EUR/USD/mid": {"min": "2.190000", "max": "2.210000"},
+          "fx_rate:GBP/PHP/mid": {"min": "3.290000", "max": "3.310000"},
+          "fx_rate:USD/INR/mid": {"min": "1.224500", "max": "1.244500"}
+        }
+      },
+      "rate_limits": null,
+      "schedule": null,
+      "timestamp_basis": "observed",
+      "retention_policy_ref": null,
+      "redistribution": {"permitted": false, "audience": null},
+      "status": "active",
+      "adapter_id": "synthetic_fx",
+      "dedup": "within_run"
+    }
+  ]
+}
