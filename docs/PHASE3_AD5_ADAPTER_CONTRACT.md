@@ -1,6 +1,15 @@
 # AD-5: Source Adapter Contract
 
-**Status:** **DRAFT v0.1**, 26 November 2026. **Not reviewed and not approved.** Nothing here authorizes a milestone, a provider, an adapter or a gate.
+**Status:** **DRAFT v0.2**, 26 November 2026. **Not reviewed and not approved.** Nothing here authorizes a milestone, a provider, an adapter or a gate.
+**Revision v0.2, 26 November 2026 — still DRAFT and unreviewed.** Applies Nisarga's review of PR #30. The verdicts and findings are **relayed by the project owner, not quoted**: the repository holds no text of the review. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
+
+- **Blocker 3 fixed:** §8.1 now defines **two keys** — `observation_key` for conflicts and `idempotency_key` for duplicates — removing v0.1's unsatisfiable rule "the same key with a different `payload_sha256`", which cannot occur because the hash is inside the key. §8.2 replaces it with three outcomes: duplicate, value conflict (first kept) and identity collision (rejected). **No event identity changes:** C-1's approved derivation and AD-4 v0.2 are untouched.
+- §8.3's equal-timestamp row now points at §8.2's conflict class instead of reading as a benign tie, matching AD-1 §3.4.
+- **New §3.7:** the pending handoff, acknowledgement and replay semantics (**H-1 to H-6**), with what each answer obliges and what holds regardless.
+- **New §8.4:** sources with a null `source_timestamp` — the four consequences, and the D-24 slice's differing approved rule.
+- **New §8.5:** restart-safe deduplication — which transports are safe and why, what a restart loses, and the requirements it places on AD-8 and AD-3.
+- §15 gains **AD5-Q7** (delivery semantics) and **AD5-Q8** (the three-outcome model); **AD5-Q1** and **AD5-Q4** are restated against the new sections.
+
 **Lead:** Dev A. **Reviewers:** Dev B, Dev D (`docs/PHASE3_SCOPE.md` D-23). **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies: at least one of Dev B and Dev D reviews before the decision.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §3.A, §5 (Gate 3), §6, §7.1 (milestone 3.3), §7.3 (AD-5 row); F-2, F-4, F-5; D-5, D-17.
 **Needs first:** F-2, F-4 and **AD-4** — satisfied for the envelope by AD-4 **v0.2**, approved for the D-24 slice only. This document additionally relies on the full-Phase-3 envelope rules drafted in `docs/PHASE3_AD4_ENVELOPE_PART2.md` (also DRAFT). Where the two disagree, AD-4 v0.2's approved text wins.
@@ -201,8 +210,29 @@ Steps 1 to 3 are the service's, not the adapter's, in every transport. The D-24 
 | `quarantine` | `quarantined` envelopes with their reasons | The quarantine store and review queue (AD-12, Gate 2 for any knowledge write) |
 | `faults` | Rejections and transport faults, as counters plus a bounded log record | Monitoring (AD-8 §7); the audit trail where AD-11 requires it |
 
-The D-24 slice implements the first channel as an in-memory latest-per-pair store served over HTTP (AD-1 §3.1), with no durability and no replay. **That is the slice's choice, not AD-5's**: the sink is where AD-3's mechanism attaches, and the poll it replaces is named as such in AD-1 §4.
+The D-24 slice implements the first channel as an in-memory latest-per-pair store served over HTTP (AD-1 §3.1), with no durability and no replay. **That is the slice's choice, not AD-5's**: the sink is where AD-3's mechanism attaches, and the poll it replaces is named as such in AD-1 §4. The delivery semantics the sink does **not** fix are open, and are enumerated in §3.7.
 
+### 3.7 Handoff, acknowledgement and replay: PENDING
+
+**[PROPOSED, and deliberately unresolved here.]** The sink (§3.6) hides the mechanism, but it cannot hide the **delivery semantics**, which change what the rest of AD-5 has to guarantee. **AD-2 states the requirements and AD-3 chooses the mechanism**; neither is written. AD-5 therefore records what is open, and what each answer would oblige, so that the question is decided rather than defaulted by whatever the first implementation happens to do.
+
+| # | Open question | What each answer obliges |
+|---|---|---|
+| **H-1** | **At-least-once, at-most-once, or effectively-once?** | At-least-once makes **restart-safe deduplication load-bearing** (§8.5) and requires every consumer to be idempotent. At-most-once permits loss, which must then be **counted and displayed**, not silent. Effectively-once needs deduplication at the consumer as well as the producer |
+| **H-2** | **Where is the handoff point** — when does ingestion consider an event delivered? | If it is acceptance by the mechanism, ingestion may drop an event the mechanism later loses. If it is a durable write, ingestion must block or buffer, which puts a bound on the AD-8 §3.2 T2-to-T3 segment |
+| **H-3** | **Is an acknowledgement required, and from whom?** | A consumer acknowledgement implies per-consumer progress tracking, which the current one-consumer design does not have. No acknowledgement implies a fire-and-forget sink, so an outage of Express loses whatever was in flight |
+| **H-4** | **What may be replayed, over what window?** | A replay window implies retention and ordering guarantees in the mechanism (AD-11 for storage). **Replay must preserve the original timestamps**, so that an old event cannot look fresh (AD-4 §5) |
+| **H-5** | **What happens when a consumer is slow?** | Back-pressure onto ingestion, buffering, or dropping. Each has a different failure mode, and only the first can slow a provider adapter |
+| **H-6** | **Are these semantics per channel?** | `observations`, `quarantine` and `faults` (§3.6) have different tolerances: losing a fault counter is an observability gap, losing a quarantined item loses a review obligation |
+
+**What holds regardless of the answer**, so that AD-5 is implementable now:
+
+- **Delivery semantics never reach the engine.** Whatever H-1 to H-6 decide, no observation crosses into the routing path (§11; AD-6 §1), and an outage of any channel never blocks simulation-based routing (**AD6-Q2**).
+- **Replay is not a refresh.** A replayed event keeps all its original timestamps, so freshness and the display label are computed from the observation's own time, never from its redelivery (AD-4 §5, §7).
+- **Loss is never silent.** Whatever is lost is counted and visible in monitoring (AD-8 §7), and a value whose updates stop simply ages into `stale` and then `unavailable` — which is the correct user-facing outcome and needs no delivery guarantee to be true.
+- **Adapters are unaffected.** They publish to the sink and never observe a consumer, so no H-answer changes §3.2's operations.
+
+**What the D-24 slice does today, which is not a decision:** Express **polls** `GET /v1/latest` for the latest validated envelope per pair, held **in memory** (AD-1 §3.1). That is **at-most-once with no durability, no acknowledgement and no replay** — AD-1 §3 states it plainly for the slice: "No broker, durability or replay; a restart may lose state." It is sound for a four-pair panel displaying only current values, and it is **explicitly not** a template: AD-1 §4 records that the distribution mechanism "replaces the poll".
 ---
 
 ## 4. Normalization
@@ -325,29 +355,48 @@ A source's `subjects` allowlist bounds the state an adapter can create, which bo
 
 ## 8. Idempotency, duplicates, late events and ties
 
-### 8.1 The idempotency key
+### 8.1 Two keys, because one key cannot answer both questions
 
-**[PROPOSED]** Scope §3.B proposes a key of (`source_id`, `source_timestamp`, `payload_hash`) and leaves the decision to AD-5. **AD-5 proposes a five-part key:**
+**[PROPOSED]** Scope §3.B proposes a key of (`source_id`, `source_timestamp`, `payload_hash`) and leaves the decision to AD-5. A single key of that shape cannot serve both of the questions deduplication has to answer, so **AD-5 defines two keys over the same fields**:
 
 ```text
-idempotency_key = (source_id, event_type, subject, source_timestamp, payload_sha256)
+observation_key  = (source_id, event_type, subject, source_timestamp)
+idempotency_key  = (observation_key, payload_sha256)
 ```
 
-`event_type` and `subject` are added because the scope's three-part form cannot distinguish subjects of one source: two FX pairs published at the same instant by the same provider share `source_id` and `source_timestamp`, and differ only in a payload whose hash the key already carries — so the three-part key separates them only through the hash, and cannot answer "is this the same observation of the same thing?" without comparing payloads. The same reasoning fixed correction C-1, where the pair was missing from the event name (AD-1 §3.4.1).
+| Key | Answers | Used for |
+|---|---|---|
+| `observation_key` | "Which observation is this, of what, at what time?" | Detecting a **conflict**: the source said two different things about one subject at one instant |
+| `idempotency_key` | "Have I already seen exactly this event?" | Detecting a **duplicate**: discard it |
+
+**Why two.** `payload_sha256` is inside the idempotency key, so two events with different payload hashes have **different** idempotency keys **by construction**. A rule phrased as "the same idempotency key with a different payload hash" is therefore unsatisfiable, and the case it was meant to catch — one subject, one instant, two different values — is a difference in the **payload**, not in the key. It is caught by the `observation_key`, which deliberately excludes the hash.
+
+`event_type` and `subject` are in both keys, because the scope's three-part form cannot distinguish subjects of one source: two FX pairs published at the same instant by the same provider share `source_id` and `source_timestamp`, and differ only in a payload whose hash the key already carries — so the three-part key separates them only through the hash, and cannot answer the first question at all. The same reasoning fixed correction C-1, where the pair was missing from the event name (AD-1 §3.4.1).
+
+**Neither key is an event name.** They are lookup structures inside the deduplication state. **The approved `event_id` derivations are unchanged** — C-1's `UUIDv5(seed, pair, sequence, source_timestamp)` for the D-24 generator, and `docs/PHASE3_AD4_ENVELOPE_PART2.md` §3.2's derivations for the other transports. Nothing in §8 renames an event, changes a hash or alters what the D-24 slice computes.
 
 | Case | Handling |
 |---|---|
-| `source_timestamp` is null | The key uses `retrieved_at` **and** cannot deduplicate across restarts. Such a source is marked `dedup: within_run` in the registry, and the limitation is explicit rather than hidden |
+| `source_timestamp` is null | Both keys use `retrieved_at` in its place, and the source is **not restart-safe**: it is marked `dedup: within_run` (§8.4, §8.5) |
 | `manual` | Not deduplicated. Two identical entries are two acts (§5) |
-| `announcement` | Deduplicated on the key, but **never superseded by recency**: an announcement has no subject (§6.3), so a newer one does not replace an older one |
+| `announcement` | Deduplicated on the `idempotency_key`, but **never superseded by recency**: an announcement has no subject (§6.3), so a newer one does not replace an older one |
 
-### 8.2 Duplicates
+### 8.2 Duplicates and conflicts
 
-**[PROPOSED]** A duplicate — same idempotency key — is **discarded, not rejected and not quarantined** (AD-4 §6), and counted. It is normal and expected for a polled source, where the same value is read repeatedly between updates: AD-1 §3.4 counts it as "duplicate (normal for polling): ignored, no update".
+**[PROPOSED]** Three outcomes, distinguished by which key matches. The first match wins, and the behaviour of each is AD-1 §3.4's, unchanged.
 
-A **conflict** is different and is a fault: the same `event_id` with different content, or the same key with a different `payload_sha256`. It is rejected and counted (AD-1 §3.4). Conflicts must be alertable, because C-1 showed a conflict loop can stall a subject indefinitely.
+| # | Condition | Outcome | Behaviour |
+|---|---|---|---|
+| **D** | Same `idempotency_key` as an event already seen | **Duplicate** | **Discarded**, not rejected and not quarantined (AD-4 §6), and counted. Normal and expected for a polled source: AD-1 §3.4 counts it as "duplicate (normal for polling): ignored, no update" |
+| **C-a** | Same `observation_key`, **different** `payload_sha256` | **Value conflict** | The **first is kept**; the later event is counted as a conflict and does not become current. AD-1 §3.4's row "same `source_timestamp`, different `event_id`: conflict, first kept, counted" is this case |
+| **C-b** | Same `event_id`, different payload or subject | **Identity collision** | **Rejected**, counted; the first is kept (AD-1 §3.4). This is the **C-1 class of defect** |
 
-The dedup window is bounded, not unbounded: the AD-8 `dedup_window` per source, long enough to cover a redelivery and a restart, short enough to bound memory. A duplicate arriving after the window is handled by §8.3's ordering rule, which is safe — it is older, so it is ignored as late.
+- **C-a is a statement about the source.** Two different values for one subject at one instant means the provider contradicted itself, the adapter mis-normalized, or two configurations are writing to one `source_id`. None of them is resolvable by picking a value, so the first is kept and the disagreement is counted rather than hidden.
+- **C-b is a statement about us.** It means two distinct observations were given one name, which is a derivation defect, not a data fault. It is **only possible where the derivation omits the payload hash** — that is, the synthetic transport, whose derivation is fixed by C-1. For the provider transports the hash is in the name (AD-4 Part 2 §3.2), so a differing payload yields a differing `event_id` and the case cannot arise.
+- **Both conflict classes must be alertable** (AD-8 §7.3 **Q-2**), because C-1 showed a conflict loop can stall a subject for an entire run while showing only as a counter.
+- **The C-1 residual risk lives in C-b** and is **open**: overlapping generator runs with the same seed and timestamps but a different `case_id` or `generator_version` produced 40 collisions. §14 item 5 and AD-4 Part 2 §3.4 track it.
+
+The dedup window is bounded, not unbounded: the AD-8 `dedup_window` per source, long enough to cover a redelivery and a restart (§8.5), short enough to bound memory. A duplicate arriving after the window is handled by §8.3's ordering rule, which is safe — it is older, so it is ignored as late.
 
 ### 8.3 Ordering, late events and ties
 
@@ -359,7 +408,7 @@ The dedup window is bounded, not unbounded: the AD-8 `dedup_window` per source, 
 |---|---|
 | Newer `source_timestamp` | Becomes current; one update is published |
 | Older | Ignored; counted as **late**, not as an error |
-| Equal `source_timestamp`, different `event_id` | **First kept**, counted. Provider sequence is not used to break the tie: `source_sequence` is opaque (AD-4 §2) |
+| Equal `source_timestamp`, different `event_id` | **First kept**, counted. This is §8.2's **C-a** value conflict, so it is also alertable, not a benign tie. Provider sequence is not used to break it: `source_sequence` is opaque (AD-4 §2) |
 | `source_timestamp` null for the source | Arrival order, within the run only, and the registry says so |
 | Beyond the AD-8 clock tolerance in the future | **Quarantined** as `FUTURE_SOURCE_TIMESTAMP` (AD-4 §6) and never current, so it cannot block later valid events (AD-1 §3.4) |
 
@@ -367,6 +416,52 @@ The dedup window is bounded, not unbounded: the AD-8 `dedup_window` per source, 
 - A superseded event is never the current value (AD-4 §8.1).
 - **No reordering buffer in v1.** Holding events back to sort them would add latency against AD-8's budget to correct an ordering the timestamp already settles. A late-event window beyond the dedup window is an AD-2 question.
 
+### 8.4 Sources without a source timestamp
+
+**[PROPOSED]** AD-4 §5 permits `source_timestamp: null`, with `source_timestamp_basis: none` exactly then, and forbids filling it from a local clock. A null timestamp weakens four separate things at once, so they are gathered here rather than left to be rediscovered per component.
+
+| Concern | With a source timestamp | With none |
+|---|---|---|
+| **Identity** | Deterministic from observation properties (§5) | Still deterministic for the provider transports, because `retrieved_at` substitutes — but `retrieved_at` is **our** clock, so two ingestion instances observing the same value name it differently |
+| **Both keys** (§8.1) | Over `source_timestamp` | Over `retrieved_at`, so they are **run-local** |
+| **Deduplication** | Restart-safe (§8.5) | **Not restart-safe.** `dedup: within_run` |
+| **Ordering** | Latest `source_timestamp` is current, so a late event is handled correctly (AD-4 §5) | **Arrival order, within the run only.** A late event is indistinguishable from a new one |
+| **Freshness age** | From `source_timestamp` | From `retrieved_at` (AD-4 §7; AD-8 §2.3 decides this as **AD4-Q1**) |
+| **Display** | May be **Live** if it meets AD-4 §8.1 rule 6 | **Never Live.** Rule 6 requires `source_timestamp` to be set, so the best available label is **Delayed** |
+
+**Consequences, stated rather than implied:**
+
+- The registry records `timestamp_basis: none` and `dedup: within_run` **explicitly** (§2.2), so the limitation is a declared property of the source, not a silent behaviour.
+- **Such a source is still displayable**, with age from `retrieved_at` and the label Delayed. **AD5-Q4** (§15) puts this to the owner, because it is a real weakening: the age shown is the age since *we fetched it*, which is a lower bound on the true age.
+- **A `real` source with no source timestamp cannot be given one.** Inventing a time would convert an unknown into a measurement (AD-4 §5; AD-5 §3.5).
+- **A date-only value is not a null timestamp.** It keeps its own date in the payload — `bank_holiday.date`, `economic_indicator.period` — and the envelope's `source_timestamp` is null only if the provider documents no publication time.
+
+**The D-24 slice differs, deliberately.** AD-1 §3.4 **rejects** an event whose `source_timestamp` is null, and AD-1 §3.2 requires every value in the slice to carry a positive `unavailable_after_ms`. The slice's only source is its own generator, which always sets a timestamp, so a null one there means a defect rather than a provider limitation. **That slice rule is approved and unchanged;** §8.4 governs sources the slice does not have, and no §8.4 rule loosens an approved slice rule.
+
+### 8.5 Restart-safe deduplication
+
+**[PROPOSED]** A restart must not cause an already-published observation to be republished as a new one, nor cause a genuinely new one to be discarded as a duplicate. Both are possible, and which one happens depends on properties of the derivation rather than on stored state.
+
+| Transport | Restart-safe? | Why |
+|---|---|---|
+| `websocket`, `poll`, `scheduled`, with a source timestamp | **Yes** | The `event_id` and both keys are functions of observation properties only (§5, §8.1), so a restarted process recomputes exactly the same values. No stored state is required for correctness |
+| `synthetic`, with a fixed seed and injected clock | **Yes within one configuration**, by C-1's derivation. The cross-configuration case is the open C-1 residual risk (§8.2 C-b) | |
+| Any transport with a null source timestamp | **No** — `dedup: within_run` (§8.4) | The keys depend on `retrieved_at`, which a restart changes |
+| `manual` | Not applicable | Not deduplicated (§8.1) |
+
+**What a restart loses, and why that is safe.** The dedup state is a bounded window, not a ledger, so a restart loses it. The consequence is **re-acceptance**, not corruption:
+
+- A redelivered event recomputes the same `event_id` and the same keys, so it is recognized as a duplicate once the window refills — and in the interval it is handled by §8.3's ordering rule, which ignores it as **not newer** than the subject's current value.
+- An event that *is* newer is accepted, which is correct.
+- Nothing is rejected on the strength of state that no longer exists, so a restart cannot stall a subject. That matters because C-1's failure was precisely a stall that outlived a restart (AD-1 §3.4.1).
+
+**Requirements this places on AD-8 and AD-3:**
+
+1. **`dedup_window` must exceed the expected restart time** plus the provider's redelivery window, or a redelivery after a restart is briefly indistinguishable from a new event. AD-8 §3.5 sets it (300 s for the fast transports, 7 days for `scheduled`).
+2. **Dedup state is rebuildable, never authoritative.** It may be warmed from the observation store at start (AD-11) as an optimization; correctness must not depend on it, because the store may be empty or behind.
+3. **Redelivery semantics are undecided** (§3.7). At-least-once delivery makes restart-safe deduplication load-bearing rather than a nicety, so §3.7's open question and this section are decided together.
+
+**The D-24 slice:** a restart may lose state and needs no reset — "a clock moved backwards yields late events, so values age out safely" (AD-1 §3.4), and Dev B's C-1 review measured a live ingestion restart across two `instance_id`s: **29 events accepted, zero rejections, zero `event_id` conflicts, zero hash mismatches** (AD-1 §3.4.1). That is the restart-safety property above, measured on the one transport that exists today.
 ---
 
 ## 9. Source status, staleness and outage
@@ -485,7 +580,7 @@ A provider adapter changes exactly one thing: ingestion acquires **outbound** ac
 | 1 | **AD-6 B-4 is unresolved on the inference side.** D-25 waives it for the D-24 slice only; the exception extends to no later milestone or component, is not Gate 4 evidence, and no gate has passed | **AD-10** (scope §2.2.3, D-25; AD-1 §5 item 1) |
 | 2 | **Outbound egress from ingestion does not exist yet** and its enforcement is unspecified. §12.1 states the requirement only | **AD-10**; milestone 3.2 |
 | 3 | **Every numeric value in this document is deferred.** Intervals, thresholds, tolerances, windows, ceilings, backoff bases, size and timeout limits | **AD-8**. Until AD-8 is approved, F-5's targets stay provisional and exit criterion 9 is unmet |
-| 4 | **The distribution mechanism is open**, so §3.6's sink has one in-memory implementation and no durability or replay | **AD-2**, **AD-3** |
+| 4 | **The distribution mechanism is open**, so §3.6's sink has one in-memory implementation and no durability or replay. **The delivery semantics H-1 to H-6 (§3.7) are pending**: at-least-once versus at-most-once, the handoff point, acknowledgement, the replay window, slow-consumer behaviour, and whether any of it is per channel | **AD-2**, **AD-3**. H-1 and §8.5 are decided together |
 | 5 | **The C-1 residual risk is open:** overlapping generator runs with the same seed and timestamps but a different `case_id` or `generator_version` produced 40 `event_id` conflicts, because the derivation includes neither. Recorded by Dev B's C-1 review and **outside C-1's scope** | `docs/PHASE3_AD4_ENVELOPE_PART2.md` §3.4 proposes a derivation for a future generator version; it needs the owner's approval, because C-1's derivation is approved text |
 | 6 | **The three non-FX payload schemas are minimal** and each is reviewed again before its first adapter (AD-4 §4) | AD-4 at that point; `docs/PHASE3_AD4_ENVELOPE_PART2.md` §7 drafts the refinement |
 | 7 | **Multi-source derivation is deferred beyond envelope v1** (**AD4-Q8**, owner-decided), so §4's inversion case cannot combine two providers | A future AD-4 major version |
@@ -499,12 +594,14 @@ A provider adapter changes exactly one thing: ingestion acquires **outbound** ac
 
 | # | Question | Draft position | Decides |
 |---|---|---|---|
-| AD5-Q1 | Is the §8.1 five-part idempotency key adopted in place of scope §3.B's three-part proposal? | Yes: the three-part key cannot distinguish subjects of one source at one instant | Owner, on this document |
+| AD5-Q1 | Are the **two keys** of §8.1 adopted in place of scope §3.B's single three-part key — `observation_key` for conflicts and `idempotency_key` for duplicates? | Yes. One key cannot answer both questions: a key containing the payload hash cannot detect two different payloads. **No event identity changes** | Owner, on this document |
 | AD5-Q2 | Is the §2.3 onboarding workflow, with O-2 restricted to published documentation, adopted? | Yes. It is what D-17 requires in practice | Owner |
 | AD5-Q3 | Is a provider's native FX direction emitted as published (`real`), or always normalized to quote-per-base (`derived`)? | Emit as published where the provider's direction is declared in the registry; inversion is a derivation | Owner, with Dev B |
-| AD5-Q4 | May a `real` source with no `source_timestamp` be displayed at all, given that it cannot be deduplicated across restarts? | Yes, with `dedup: within_run` recorded and age measured from `retrieved_at` (AD-4 §7) | Owner; interacts with **AD4-Q1**, drafted in AD-8 §2 |
+| AD5-Q4 | May a `real` source with no `source_timestamp` be displayed at all, given §8.4's four consequences — run-local keys, no restart-safe deduplication, arrival-order ordering, and age measured from our own fetch? | Yes, labelled **Delayed** and never Live, with `timestamp_basis: none` and `dedup: within_run` recorded in the registry (§8.4) | Owner; interacts with **AD4-Q1**, decided in AD-8 §2.3 |
 | AD5-Q5 | Who may enter a `manual` observation, and is a second person's confirmation required? | Deferred to AD-10's authorization model | AD-10 |
 | AD5-Q6 | Does a provider's `withdrawn` status ever require deleting stored observations? | Only where its terms require it; §2.4 keeps history by default | Gate 3 terms; AD-11 |
+| AD5-Q7 | Which **delivery semantics** does Phase 3 require (§3.7 **H-1**)? | At-least-once, which makes §8.5's restart-safe deduplication load-bearing and is the semantics the deterministic derivations already support | **AD-2** states the requirement, **AD-3** chooses; the owner approves both |
+| AD5-Q8 | Is **§8.2's three-outcome model** adopted — duplicate, value conflict (first kept), identity collision (rejected) — with both conflict classes alertable? | Yes. Each row's behaviour is AD-1 §3.4's, unchanged | Owner, with Dev B (P-4 owns the acceptance rules) |
 
 ---
 
@@ -512,7 +609,7 @@ A provider adapter changes exactly one thing: ingestion acquires **outbound** ac
 
 **None of these is given. This document is DRAFT v0.1 and has not been reviewed.**
 
-- [ ] **Dev B** — review: §3.6 sink and the Express-side consequences; §7 fault classes and `Retry-After` handling; §8 idempotency, duplicates and ordering; §9 status as content; §12 credentials
+- [ ] **Dev B** — review: §3.6 sink and §3.7's pending delivery semantics; §7 fault classes and `Retry-After` handling; **§8.1's two keys and §8.2's three outcomes against the P-4 acceptance rules Dev B owns**; §8.4 null timestamps; §8.5 restart safety; §9 status as content; §12 credentials
 - [ ] **Dev D** — review: §2 registry as version-controlled configuration; §12.1 container posture and egress; §13 CI obligations, fixture origin and the test-only fake provider
 - [ ] **Second-reviewer rule (D-20)** — satisfied by either review above, since Dev A is both lead and approver
 - [ ] **Project owner** — approval, with §15's questions decided

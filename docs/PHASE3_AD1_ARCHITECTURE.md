@@ -1,9 +1,15 @@
 # AD-1 Part 2: Full Phase 3 Component and Deployment Architecture
 
-**Status:** **DRAFT v0.1**, 26 November 2026. **Not reviewed and not approved.**
+**Status:** **DRAFT v0.2**, 26 November 2026. **Not reviewed and not approved.**
 **Relationship to the approved component view:** this is an **additive companion** to `docs/PHASE3_AD1_COMPONENT_VIEW.md`, which stays **exactly as approved at v0.5**, with corrections **C-1** and clarification **C-2** as recorded there. The v0.5 approval is **for the D-24 slice only** and is **version-specific**: "any later revision needs fresh review and approval". Revising that file would therefore **suspend the authorization of the D-24 work now in progress**, so the full-Phase-3 architecture is written beside it. **Nothing in v0.5 is edited, superseded or weakened here.** Where the two could be read as disagreeing, **v0.5 wins**.
 **What this document is for.** Scope §12 "Remaining during milestone 3.1" item 1 reads: *"Confirm the AD-1 component view §4 placement of later components, which every code milestone 3.2–3.7 waits for (D-22). The D-24-slice approval does not cover it."* This document is the material for that confirmation, in full rather than as the five-row table of v0.5 §4.
 **It is not the final AD-1.** The final AD-1 is a wave-4 deliverable that needs every other AD approved or deferred (3.1 plan §4). AD-2, AD-3, AD-7, AD-9 to AD-13 are unwritten, so §13 lists what the final version must still absorb.
+**Revision v0.2, 26 November 2026 — still DRAFT and unreviewed.** Applies Nisarga's review of PR #30. The verdicts and findings are **relayed by the project owner, not quoted**: the repository holds no text of the review. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
+
+- **Blocker 2 fixed:** **new §7.3.1** separates the **D-24 conditions** — `infra/compose.yaml` unchanged, `--profile full` unchanged, nothing published, the inference side of B-4 unenforced under **D-25** — from the **architectural rules** that are permanent. v0.1's "overlays, never edits to `compose.yaml`" read as a permanent prohibition would make **B-4 unclosable**, since inference is a Phase 2 service defined in that file. It states what an **approved** AD-10 change may do, and the three conditions that hold regardless: not under D-24, no Phase 1 or Phase 2 behaviour change, and **Gate 4 evidence rather than a gate pass**.
+- §6 item 1 and §7.4 cross-reference §7.3.1; §6 item 5 now records the pending delivery semantics and the provisional capacity envelope.
+- **AD1P2-Q5** is restated as the §7.3.1 split rather than a blanket overlay rule.
+
 **Lead:** Dev D (D-21). **Reviewers:** Dev A, Dev B, Dev C (D-22). **Approver:** project owner.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §1.2, §1.3, §3, §5, §6, §7, §9, §11; D-1 to D-25; F-1 to F-6.
 **Extends:** `docs/PHASE2_ARCHITECTURE.md` §2, §3, §5. **Relies on:** AD-4 v0.2, AD-6 v0.2 (both approved for D-24 only), and the drafts `PHASE3_AD4_ENVELOPE_PART2.md`, `PHASE3_AD5_ADAPTER_CONTRACT.md`, `PHASE3_AD6_ISOLATION_PART2.md`, `PHASE3_AD8_BUDGETS.md`.
@@ -303,13 +309,14 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
    - It is **not Gate 4 evidence, and no gate has passed** (D-6, D-18).
    - **T-5 is limited to the ingestion side**; the inference side is **not run and not claimed**, so **AD-6 must not be described as fully enforced**.
    - **A live adapter makes B-4 harder**, because ingestion then acquires outbound access that it does not have today (`PHASE3_AD6_ISOLATION_PART2.md` §3).
+   - **Closing it needs a change the D-24 overlay cannot express**, because inference is a Phase 2 service defined in `infra/compose.yaml`. **§7.3.1** separates the D-24 condition that forbids that change from the architectural rules that do not, so that B-4 is closable once AD-10 is approved.
 
 **[PROPOSED]** The rest, carried forward or added:
 
 2. **Express spans Z2 and Z5**, so it is the single point keeping them apart (v0.5 §5 item 2). B-3's import checks and T-16 are the controls.
 3. **The web API client cannot carry a stream**; `createApiClient` and `ApiClient` are **unchanged**, and the additive `openObservationStream` on `AuthContextValue` is the only new path that sends the token (v0.5 §5 item 3). C-7 must keep that property.
 4. **About 6 HTTP/1.1 connections per origin**, so tabs compete with ordinary requests; the cap of 3 per user limits it (v0.5 §5 item 4; AD-8 §6.3).
-5. **No durability or replay is decided**, so C-4 is a poll today and observations have no recovery-point objective (AD-2, AD-3; AD-8 §8.1).
+5. **No durability or replay is decided**, so C-4 is a poll today and observations have no recovery-point objective (AD-2, AD-3; AD-8 §8.1). The **delivery semantics** are pending — at-least-once versus at-most-once, the handoff point, acknowledgement, the replay window and slow-consumer behaviour (AD-5 §3.7 **H-1 to H-6**) — and **AD-8 §6.2's capacity envelope is provisional**, with AD-2's requirement unwritten and a reconciliation rule in AD-8 §6.2.1.
 6. **No provider is approved**, so C-2 and C-13 cannot be exercised end to end. **Gate 3**, per provider and per site.
 7. **Phase 2 open items remain open** (scope §2.2.1): the OpenAPI files are **DRAFT** with contract v0.4 normative; the inference response-size limit; Q20 the fixture-backed mock mode; F1 the Phase 1 cost-baseline unit; the provisional `AuditLog` values; the remaining fixture coverage.
 8. **No CODEOWNERS file exists**, so ownership is a team agreement and is **not enforced** (3.1 plan §5).
@@ -345,7 +352,7 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 
 ### 7.3 Compose topology
 
-**[PROPOSED]** Overlays, never edits to `compose.yaml` — the pattern `infra/compose.observations.yaml` already establishes, whose header states that `compose.yaml` is **not** changed and that `--profile full` alone never needs ingestion.
+**[PROPOSED]** Additive overlays, following the pattern `infra/compose.observations.yaml` establishes, whose header states that `compose.yaml` is **not** changed and that `--profile full` alone never needs ingestion. §7.3.1 states exactly how far that goes, because the restriction has two different sources and only one of them is permanent.
 
 | File | Adds | Status |
 |---|---|---|
@@ -357,6 +364,32 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 | *(3.7)* operations overlay | C-16 | Proposed |
 
 **Rules, generalizing v0.5 §3.6:** off by default, so nothing is read unless the file is passed; **separate image tags**, so building an overlay never replaces `cbdc-backend:local` or `cbdc-web:local`; **no published port**, no secret, no `env_file`, no volume added by an overlay; and **no `depends_on`** from a Phase 2 service to a Phase 3 one, so the Phase 2 stack starts and passes its checks with every overlay absent.
+
+#### 7.3.1 Where "overlay only" is a D-24 condition and where it is an architectural rule
+
+**This distinction matters because closing AD-6 B-4 will require changing inference's networking, and inference is defined in `compose.yaml`.** Read as a permanent prohibition, the overlay rule would make B-4 unclosable — which is not what any approved decision says.
+
+| Restriction | Source | Permanent? |
+|---|---|---|
+| **`infra/compose.yaml` is not changed**, `--profile full` is unchanged, nothing is published, no secret, `env_file` or volume is added, the feature is off by default | **A D-24 condition.** Scope §2.2.2 requires the slice to change neither "Phase 1 and 2 behaviour, API contract v0.4, the existing Docker stack (`infra/compose.yaml`)" nor Gates 1–4 | **No.** It binds the **D-24 slice** |
+| **The D-24 overlay does not isolate inference**, so B-4's inference side is unenforced | **D-25**, a waiver of enforcement for the D-24 slice only (§6 item 1) | **No**, and it is not a design choice: it is a recorded gap |
+| **A Phase 2 service gains no `depends_on` to a Phase 3 one**; the Phase 2 stack starts and passes its checks with every Phase 3 overlay absent | **An architectural rule** proposed here, so that Phase 3 cannot make Phase 2 unrunnable | **Yes**, unless the owner replaces it |
+| **Phase 3 components are added, not substituted:** no second inference path, no replacement engine pool, API contract or persistence model unless a measured requirement forces it | Scope §11 non-goals | **Yes** |
+| **Nothing is reachable outside the private development environment** | **D-6, D-16, D-18.** A **gate**, not a file convention | **Yes, until Gate 4 passes** |
+
+**What an authorized B-4 change may therefore do.** When **AD-10** is approved and milestone 3.2 is authorized, closing B-4 is expected to require changes the D-24 overlay cannot express, because the services to be constrained are Phase 2's:
+
+1. **Give inference an explicit network** instead of the implicit `default`, so it has no route to distribution, the observation store or the internet. Naming any network removes the implicit `default`, so this is necessarily a change to the inference service's own definition.
+2. **Remove or constrain inference's outbound path**, which today exists because nothing restricts it.
+3. **Add least-privilege database roles** (B-5), which touches Phase 2's connection configuration.
+
+Each of those is a change to `infra/compose.yaml` or to a Phase 2 service's configuration. **That is permitted once, and only once, the change is approved** — by AD-10's approval and the authorization of its milestone — because the restriction forbidding it is **D-24's**, and D-24 governs the slice, not Phase 3. Three conditions hold regardless:
+
+- **It is not done under D-24.** D-25 "extends to no later milestone or component", and the slice's own conditions stay as approved while the slice runs.
+- **It changes no Phase 1 or Phase 2 *behaviour*.** Constraining a network is not a behavioural change to routing; T-1, T-6 and T-7 must pass unchanged across it, and the existing Compose and stack-security checks must pass.
+- **It passes no gate by itself.** It is **Gate 4 evidence**, assembled inside the private development environment and reviewed before any exposure (scope §5; §7.7).
+
+**Until then, B-4 stays unresolved** (§6 item 1), and **AD-6 must not be described as fully enforced**.
 
 ### 7.4 Networks
 
@@ -371,7 +404,7 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 
 - **The backend lists both networks**, because naming any network removes the implicit `default`; **Express forwards nothing between them** (v0.5 §3.6).
 - **Residual, accepted:** ingestion can open the backend's port 4000 on the shared network. It holds no token, so protected routes return 401 (v0.5 §3.6, §5).
-- **Inference joins no observation network, and needs no egress** (§6 item 1).
+- **Inference joins no observation network, and needs no egress** (§6 item 1). Giving it an explicit network, so that B-4's inference side is actually enforced, is an **authorized AD-10 change to `compose.yaml`**, not an overlay (§7.3.1). It is not done under D-24.
 
 ### 7.5 Runtime posture
 
@@ -454,7 +487,7 @@ Until then, **everything runs on a developer's machine, on loopback or a private
 | AD1P2-Q2 | Is the **§5 six-zone trust model** adopted, extending v0.5 §2's three boundaries? | Yes | Owner |
 | AD1P2-Q3 | Is **§3.1's second responsibility rule** adopted — observation logic only in ingestion and the observation module? | Yes. It makes B-3 a rule rather than a lint | Owner, with Dev B |
 | AD1P2-Q4 | Is **§7's deployment architecture** — one host, overlays only, no redundancy, one PostgreSQL server with logical separation — adopted as the target, with §7.1's limitations stated? | Yes (F-6) | Owner, with Dev D |
-| AD1P2-Q5 | Is **§7.3's overlay rule** adopted — Phase 3 never edits `compose.yaml`, and no Phase 2 service gains a `depends_on` to a Phase 3 one? | Yes. It is what the D-24 overlay already does | Owner, with Dev D |
+| AD1P2-Q5 | Is **§7.3.1's split** adopted — that "`compose.yaml` is not changed" is a **D-24 condition**, while "no Phase 2 service gains a `depends_on` to a Phase 3 one" and "components are added, not substituted" are **architectural rules** — so that an **approved** AD-10 change may modify inference's networking to close B-4? | Yes. Read as permanent, the overlay rule would make **B-4 unclosable**, which no approved decision says | Owner, with Dev D |
 | AD1P2-Q6 | Does confirming §2.2 **also** confirm the §8 deliverable and gate mapping, or is that a separate record? | Confirm them together: a placement without its gates could be misread as an authorization | Owner |
 | AD1P2-Q7 | Should **CODEOWNERS** be created, covering `docs/PHASE3_*.md`, `services/ingestion/` and `contracts/events/`? | Recommended by the 3.1 plan §5, and **not part of this document** | Owner, with Dev D |
 

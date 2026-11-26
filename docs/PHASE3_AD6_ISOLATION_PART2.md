@@ -1,8 +1,12 @@
 # AD-6 Part 2: Engine Isolation — Full Phase 3 Enforcement and Verification
 
-**Status:** **DRAFT v0.1**, 26 November 2026. **Not reviewed and not approved.**
+**Status:** **DRAFT v0.2**, 26 November 2026. **Not reviewed and not approved.**
 **Relationship to AD-6 v0.2:** this is an **additive companion** to `docs/PHASE3_AD6_ENGINE_BOUNDARY.md`, which stays **exactly as approved**. AD-6 **v0.2 is approved for the D-24 slice only** (25 November 2026, scope §2.2.3), **subject to D-25**, and that approval is **version-specific**. Revising the approved file would require fresh review and a fresh owner approval before the D-24 slice could continue, so this document is written beside it. **Nothing in AD-6 v0.2 is edited, superseded, weakened or reinterpreted here.** Where the two could be read as disagreeing, **v0.2 wins**.
 **The rule is unchanged:** *no observation may influence an engine request or an engine result* (AD-6 §1; D-9, D-15).
+**Revision v0.2, 26 November 2026 — still DRAFT and unreviewed.** Applies Nisarga's review of PR #30. The verdicts and findings are **relayed by the project owner, not quoted**: the repository holds no text of the review. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
+
+- §3 item 3 now records **what closing B-4 will take**: a change to inference's networking that the D-24 overlay cannot express, permitted only under an approved AD-10 change, per `docs/PHASE3_AD1_ARCHITECTURE.md` §7.3.1. **B-4 stays unresolved**, T-5 stays ingestion-only, and **AD-6 is still not fully enforced**.
+
 **Lead:** Dev A. **Reviewers:** Dev B, Dev C (the AD-6 reviewer set). Dev D is not a listed reviewer, and AD-6 v0.2's closing note recommends consulting Dev D because B-4 to B-6 need Dev D's work; §9 follows that recommendation without changing the approved reviewer list. **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §1.3, §4.2, §7.3; D-1, D-9, D-15, **D-25**; A-3 to A-8; AD6-Q1 to AD6-Q6.
 **Feeds:** AD-9, AD-10, AD-11, AD-13; milestone 3.5.
@@ -84,6 +88,7 @@ AD-6 §4 states the general case: *"the two paths share the browser, Express and
 1. **Every component in §2.1 that needs B-4 is marked, so the gap cannot be lost** as milestones are planned.
 2. **A live adapter makes B-4 materially harder, not easier.** The D-24 posture has ingestion contact nothing at all; a provider adapter gives ingestion outbound access (AD-5 §12.1). B-4's two halves then both need enforcement, and the ingestion half becomes an **allowlist**, not an absence.
 3. **The inference side's requirement is unchanged by any of it:** inference needs no outbound access for any Phase 3 capability. It reads local artefacts and answers Express (Phase 2 arch §2). There is no Phase 3 feature that requires inference egress, so the control is a configuration question, not a design trade-off.
+   **What closing it will take.** Inference is a Phase 2 service defined in `infra/compose.yaml`, so constraining its network is a change the D-24 overlay cannot express — the D-24 conditions forbid touching that file (scope §2.2.2). `docs/PHASE3_AD1_ARCHITECTURE.md` §7.3.1 separates that **D-24 condition** from the architectural rules that are permanent, so that an **approved** AD-10 change may make it. It is not done under D-24, it changes no Phase 1 or Phase 2 behaviour, and it is **Gate 4 evidence rather than a gate pass**.
 4. **T-13 (§6) is the inference-side test**, written here so AD-10 and AD-13 have it ready. **It is not run and not claimed by this document.**
 
 ---
