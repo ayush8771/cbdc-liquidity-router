@@ -358,7 +358,7 @@ An envelope travels inside a channel message unchanged — AD-1 §3.2 requires `
 
 | # | Question | Draft position | Decides |
 |---|---|---|---|
-| AD4P2-Q1 | Should a **future** synthetic generator version add `generator_version` and `case_id` to the `event_id` derivation, closing the C-1 residual risk? | Yes, in a new generator version only, with C-1's derivation untouched for existing events (§3.4) | Owner. It touches approved C-1 text, so it cannot be adopted without the decision |
+| AD4P2-Q1 | Should a **future** synthetic generator version add `generator_version` and `case_id` to the `event_id` derivation, closing the C-1 residual risk? | Yes, in a new generator version only, with C-1's derivation untouched for existing events (§3.4) | Owner. It touches approved C-1 text, so it cannot be adopted without the decision. **STILL UNAPPROVED as of 26 November 2026:** the owner's AD-4 approval extension to milestone 3.3 of that date **explicitly does not grant AD4P2-Q1**, and the C-1 derivation stays unchanged. That extension covers **AD-4 v0.2 only, not this document**, which remains a **DRAFT, not approved** |
 | AD4P2-Q2 | Is the §3.4 item 3 registry rule — **one active generator configuration per `source_id`** — adopted now, as containment? | Yes. It is configuration only and needs no derivation change | Owner, with AD-5 §2.2 |
 | AD4P2-Q3 | Is the §5.1 five-stage model, with **independent V-3 re-validation at every boundary**, adopted? | Yes. It is what AD-4 §3.1 and AD-1 §3.4 already do, named | Owner |
 | AD4P2-Q4 | Is the §5.2 **monotonic restriction** — no component may ever upgrade a validation status — adopted as an invariant? | Yes | Owner |

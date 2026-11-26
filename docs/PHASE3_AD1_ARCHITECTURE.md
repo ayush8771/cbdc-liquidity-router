@@ -1,6 +1,6 @@
 # AD-1 Part 2: Full Phase 3 Component and Deployment Architecture
 
-**Status:** **DRAFT v0.4**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists.
+**Status:** **DRAFT v0.6**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied. **Reviewed again on PR #38, on v0.5:** **Dev B (Anvesh) granted the D-22 technical sign-off** — quarantine placement, C-3 prerequisites and Compose boundaries satisfactory; **Dev D (Nisarga) approved** §7.3 and §7.3.1's D-24, D-25, B-4 and Compose-authorization boundaries; **Dev C (Varshini) requested one change**, the §3.2 source-status row against AD-8 v0.7 §5.1, **applied in v0.6**, and offers the Dev C sign-off once it is confirmed. Those texts are on PR #38, **relayed here, not quoted**. **Dev A's review is outstanding, v0.6 is not re-reviewed by anyone, and no owner approval exists**, so **D-22 is unsatisfied and no milestone 3.2–3.7 is authorized**.
 **Relationship to the approved component view:** this is an **additive companion** to `docs/PHASE3_AD1_COMPONENT_VIEW.md`, which stays **exactly as approved at v0.5**, with corrections **C-1** and clarification **C-2** as recorded there. The v0.5 approval is **for the D-24 slice only** and is **version-specific**: "any later revision needs fresh review and approval". Revising that file would therefore **suspend the authorization of the D-24 work now in progress**, so the full-Phase-3 architecture is written beside it. **Nothing in v0.5 is edited, superseded or weakened here.** Where the two could be read as disagreeing, **v0.5 wins**.
 **What this document is for.** Scope §12 "Remaining during milestone 3.1" item 1 reads: *"Confirm the AD-1 component view §4 placement of later components, which every code milestone 3.2–3.7 waits for (D-22). The D-24-slice approval does not cover it."* This document is the material for that confirmation, in full rather than as the five-row table of v0.5 §4.
 **It is not the final AD-1.** The final AD-1 is a wave-4 deliverable that needs every other AD approved or deferred (3.1 plan §4). AD-2, AD-3, AD-7, AD-9 to AD-13 are unwritten, so §13 lists what the final version must still absorb.
@@ -9,6 +9,19 @@
 - **Blocker 2 fixed:** **new §7.3.1** separates the **D-24 conditions** — `infra/compose.yaml` unchanged, `--profile full` unchanged, nothing published, the inference side of B-4 unenforced under **D-25** — from the **architectural rules** that are permanent. v0.1's "overlays, never edits to `compose.yaml`" read as a permanent prohibition would make **B-4 unclosable**, since inference is a Phase 2 service defined in that file. It states what an **approved** AD-10 change may do, and the three conditions that hold regardless: not under D-24, no Phase 1 or Phase 2 behaviour change, and **Gate 4 evidence rather than a gate pass**.
 - §6 item 1 and §7.4 cross-reference §7.3.1; §6 item 5 now records the pending delivery semantics and the provisional capacity envelope.
 - **AD1P2-Q5** is restated as the §7.3.1 split rather than a blanket overlay rule.
+
+**Revision v0.6, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Dev C's (Varshini's) one finding on PR #38**, documentation only. Change:
+
+- **§3.2 — the source-status row gave the published value and the internal adapter status one owner.** It read "Express: relays as **content** / Ingestion: **decides**". **AD-8 v0.7 §5.1** separates them: **Express decides the published `starting`/`ok`/`outage`** from its **own poll** (`services/backend/src/observations/poller.ts`), while **ingestion owns its internal adapter status** (AD-5 §9), which is **never serialized** — `/v1/latest` carries no status field. The row now says both, and a new paragraph states why "as content" is a separate point: the published value travels in the message body, so a source `outage` is shown apart from a disconnected stream.
+
+**No threshold, enum, schema, contract, ownership elsewhere, D-24 behaviour or gate changes, and no published status is added or removed.**
+
+**Revision v0.5, 26 November 2026 — still DRAFT, and not re-reviewed.** Four internal-consistency corrections, **documentation only**. No approved decision, contract, schema, threshold, ownership or gate moves; no reviewer has re-reviewed and no owner has approved this document; **the approved component view v0.5 is not edited**. Changes:
+
+- **§2.3 and §2.2 — quarantine placement.** The diagram drew `quarantine (C-11)` in **both** Z3 and Z5. The duplicate Z5 box is removed and the two things are named apart: **C-1's in-memory withholding** (counters and rate-limited logs only, no payload stored, no review queue — v0.5 §3.4) in Z5, and the **durable C-11 quarantine store** (milestone 3.6, Z3, AD-11 persistence) in Z3. C-1's and C-11's §2.2 rows say the same.
+- **§8 C-3 prerequisites corrected** to **AD-4, AD-5, AD-12**. v0.4 listed AD-12 alone, while scope §7.1 makes milestone **3.3** — 3.3-S included — depend on all three; a synthetic adapter emits AD-4 envelopes and implements the AD-5 interface and registry record.
+- **§8 attribution corrected.** The deliverables column was headed "(scope §7.1)", attributing every entry to approved scope text. Scope §7.1 states dependencies **per milestone**; entries this document adds (C-5's and C-16's AD-11 among them) are now marked **[PROPOSED]** and the approved ones **(§7.1)**.
+- **§7.3 D-24 Compose wording corrected.** The `infra/compose.yaml` row read "**Unchanged by Phase 3**", which contradicts **§7.3.1**: the restriction is a **D-24 condition**, and an **approved** AD-10 change may modify that file to close **B-4**. The row now says so. **Nothing here authorizes such a change, and none is made.**
 
 **Revision v0.4, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Varshini's (Dev C's) second CHANGES_REQUESTED review of PR #30**, on commit `40735e5`; its text is on the pull request, not in the repository. Documentation only, and it preserves every earlier correction. Change:
 
@@ -90,7 +103,7 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 
 | # | Component | Responsibility | Owner | Milestone | Gate | Must not |
 |---|---|---|---|---|---|---|
-| C-1 | **Ingestion service** (`services/ingestion/`) | Hosts the adapters; assembles, hashes and validates envelopes; publishes to the sink | Dev A (F-2) | Exists (D-24, synthetic) | — | Reach inference, the engine, PostgreSQL or the knowledge base; hold an engine or database credential |
+| C-1 | **Ingestion service** (`services/ingestion/`) | Hosts the adapters; assembles, hashes and validates envelopes; publishes to the sink; **withholds quarantined events in memory, counters and logs only, no payload stored** (v0.5 §3.4) | Dev A (F-2) | Exists (D-24, synthetic) | — | Reach inference, the engine, PostgreSQL or the knowledge base; hold an engine or database credential |
 | C-2 | **Provider adapters** (inside C-1) | One per Gate 3-approved provider; transport, normalization, provenance | Dev A | 3.3-L | **Gate 3**, per provider | Contact any host outside its egress allowlist |
 | C-3 | **Synthetic adapter and harness** | Seeded generator; fault injection; labelling | Dev D (AD-12) | 3.3-S | — | Be used to train, tune or select a policy |
 | C-4 | **Event distribution** | Carries events from C-1 to consumers; validation, ordering, duplicates, late events, idempotency, replay | Dev B / Dev D | 3.4 | — | Interpret an envelope's meaning; reach inference |
@@ -100,7 +113,7 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 | C-8 | **Observation panel** (React) | Values, labels, age, source; visually distinct from results | Dev C | Exists (D-24) | — | Share state with any form or routing request |
 | C-9 | **Routing status push** | Status of a routing request **the user made** | Dev B, Dev C | 3.5 | Gate 1 for `ppo_projected` | Be triggered by an observation (**AD6-Q1**) |
 | C-10 | **Displayed-context recorder** | What was displayed when a request was submitted (AD-6 §6.1) | Dev B | 3.5 | — | Enter an engine request, the `decision_id` document, `clientReference`, a cache key or an engine input log |
-| C-11 | **Quarantine store** | Valid envelopes withheld pending review or plausibility | Dev D (AD-12) | 3.6 | — | Have an automatic path to the knowledge layer |
+| C-11 | **Quarantine store** (**durable**, in Z3) | Valid envelopes withheld pending review or plausibility, **persisted** — distinct from C-1's in-memory withholding, which stores no payload (§2.3) | Dev D (AD-12) | 3.6 | — | Have an automatic path to the knowledge layer |
 | C-12 | **Human review queue** | A named reviewer and a cited source for every item | Dev D, Dev B | 3.6 | **Gate 2** for any write | Write to the knowledge layer without Gate 2 |
 | C-13 | **Extraction component** | ScrapeGraphAI or equivalent, if approved | Dev D | 3.6 | **Gate 3**, per site | Be an authoritative source or a compliance decision-maker |
 | C-14 | **Identity provider integration** | Replaces development auth; httpOnly cookies, strict CSP | Dev B (AD-10) | 3.2 | Produces Gate 4 evidence | Leave dev mode available |
@@ -139,7 +152,7 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
    | audit(C15)|   |      |           |     |      | sink                    |
    | obs store |   |      v read-only |     | ingestion (C-1)                |
    | (C-5)     |   | Phase 1 artefacts|     |  adapters (C-2) | synthetic(C-3)|
-   | quarantine|   | (frozen)         |     |  quarantine (C-11)             |
+   | quarantine|   | (frozen)         |     |  in-memory withholding (C-1)   |
    | (C-11)    |   +------------------+     +--------------------------------+
    +-----------+                                     |  egress allowlist only
                                                      v
@@ -150,6 +163,13 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 ```
 
 **Two things this picture is meant to make obvious.** First, **Z4 has no inbound arrow from Z5**: that is AD-6's rule as a shape, not a convention. Second, **Express spans the divide**, holding modules in both paths, which is why it is "the single point that keeps them apart" (v0.5 §5 item 2) and why B-3's import checks are load-bearing rather than stylistic.
+
+**Quarantine appears once, in Z3.** v0.4 drew "quarantine (C-11)" in **both** Z3 and Z5, which read as two stores. There is one component and two distinct things:
+
+- **C-1's in-memory withholding, in Z5** — what the D-24 slice does today: ingestion marks an AD-4 §6 case `quarantined` and **withholds** it, keeping **only counters by reason and rate-limited logs**; **no payload is stored and there is no review queue** (v0.5 §3.4). It is a behaviour of C-1, not a store, and it is lost on restart.
+- **C-11, the durable quarantine store, in Z3** — milestone **3.6**, on the one PostgreSQL server, logically separated (§7.1, AD-11), holding withheld envelopes **pending review**, with **no automatic path to the knowledge layer** (Gate 2, D-4).
+
+Nothing in the slice writes a quarantined payload anywhere, and C-11 does not exist yet.
 
 ---
 
@@ -180,13 +200,21 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 | Adapter lifecycle, transport, backoff, breaker | No | No | **Yes** (AD-5 §3) | No |
 | Envelope assembly, hashing, provenance | No | **Re-validates, never assembles** | **Yes** | **Re-validates, never assembles** |
 | Freshness evaluation and thresholds | No | **Yes**, on the server clock (v0.5 §3.3) | Supplies the profile | Advances age by **monotonic** time only |
-| Source status | No | Relays as **content** | **Decides** (AD-5 §9) | Displays, separately from "disconnected" |
+| Source status | No | **Decides the published value** `starting`/`ok`/`outage` from its **own poll** (AD-8 §5.1; `poller.ts`), and carries it as **content**, never as transport state | **Decides its own internal adapter status** (AD-5 §9), which is **never serialized**: `/v1/latest` has no status field | Displays the published value, separately from "disconnected" |
 | Display labels | No | Supplies the inputs | No | **Applies AD-4 §8.1**, first match wins |
 | Channel termination and authentication | No | **Yes** (F-3) | **No** | Client |
 | Observation storage and retention | No | **Yes** (C-5, AD-11) | **No** | No |
 | Knowledge-layer writes | No | No | **No** | No |
 
 **The last row is "No" four times, deliberately.** Knowledge writes need **Gate 2** (D-4), and feasibility comes only from `StaticMemoryProvider` (A-4). No Phase 3 component may write to the knowledge layer until Gate 2 passes, so there is no component to assign it to yet.
+
+**The two source statuses have different owners, and v0.5 said so loosely (Dev C, PR #38).** v0.4's row read "Express: relays as content / Ingestion: decides", which gave the **published** value and the **internal** adapter state one owner. **AD-8 v0.7 §5.1** separates them, and this row now matches it:
+
+- **The published `source.status` is Express's.** It is derived from the outcome of **Express's own poll** — `starting` / `ok` / `outage`, the approved closed enum (AD-1 v0.5 §3.1, §3.2; `stream-message.v1.schema.json`), set in `services/backend/src/observations/poller.ts` with the enum in `constants.ts`. It is a statement about **Express's view of the source**.
+- **The internal adapter status is ingestion's** (AD-5 §9), and it **reaches the browser through no field**: `GET /v1/latest` conforms to `ingestion-latest.v1.schema.json` with `additionalProperties: false` and carries **no status**, so `down` is never a fourth wire value (AD-8 §5.1; AD-5 §9.3).
+- **"As content" still holds, and is a separate point:** whichever value is published travels in the message body, not in the transport state, so a source `outage` is shown **separately from a disconnected stream** (AD-1 v0.5 §3.3).
+
+**Nothing moves with this correction:** the enum, the schemas, the poller's thresholds, AD-5 §9's internal states and every ownership elsewhere are unchanged, and no published status is added or removed.
 
 #### 3.2.1 Policy defaulting: the backend resolves both, and the engine's own defaults are for direct callers
 
@@ -409,7 +437,7 @@ Every statement cites the decision it rests on. Everything else is **[PROPOSED]*
 
 | File | Adds | Status |
 |---|---|---|
-| `infra/compose.yaml` | The Phase 2 stack | **Unchanged by Phase 3** |
+| `infra/compose.yaml` | The Phase 2 stack | **Unchanged under D-24**, which governs the slice, not Phase 3. An **approved** AD-10 change may modify it to close **B-4** (§7.3.1); nothing else may |
 | `infra/compose.observations.yaml` | Ingestion + the internal `observations` network; turns the feature on | **Exists** (D-24) |
 | `infra/compose.observations-test.yaml` | The test-only fake ingestion | **Exists** |
 | *(3.4)* distribution overlay | C-4 and its network | Proposed; needs AD-3 |
@@ -489,25 +517,27 @@ Until then, **everything runs on a developer's machine, on loopback or a private
 
 **[PROPOSED]** The traceability table a reviewer needs to check that nothing is assumed authorized. **Every row's milestone also requires the AD-1 component view** (D-22), and **no gate has passed**.
 
-| Component | Milestone | Required 3.1 deliverables (scope §7.1) | Gate |
+**Attribution of the deliverables column, corrected in v0.5.** v0.4 headed it "Required 3.1 deliverables (scope §7.1)", which attributed every entry to the approved scope table. Scope §7.1 states dependencies **per milestone**, not per component, and some rows here add a deliverable it does not name — C-5's **AD-11** and C-16's **AD-11** are this document's proposals, not scope §7.1's text. The column is therefore **[PROPOSED]**: entries marked **(§7.1)** are the approved milestone dependency; the rest are proposed here and are confirmed, or not, with **AD1P2-Q6**. **No entry removes a scope §7.1 dependency.**
+
+| Component | Milestone | Required 3.1 deliverables — **[PROPOSED]**, derived from scope §7.1 per milestone | Gate |
 |---|---|---|---|
-| C-1 ingestion | Exists (D-24); 3.3 | AD-4, AD-5, AD-12 | — |
-| C-2 provider adapters | 3.3-L | AD-4, AD-5, AD-12 | **Gate 3**, per provider |
-| C-3 synthetic harness | 3.3-S | AD-12 | — |
-| C-4 distribution | 3.4 | AD-2, AD-3 | — |
-| C-5 observation store | 3.5 | AD-6 to AD-9; AD-11 for the model | — |
-| C-6 observation module | Exists (D-24); 3.5 | AD-6 to AD-9 | — |
-| C-7 real-time channel | 3.5 | AD-7 (and AD-10, which AD-7 needs) | Gate 4 for exposure |
-| C-8 observation panel | Exists (D-24); 3.5 | AD-9 | — |
-| C-9 routing status push | 3.5 | AD-7 | **Gate 1** for `ppo_projected` |
-| C-10 context recorder | 3.5 | AD-7 (capture), AD-11 (storage) | — |
-| C-11 quarantine store | 3.6 | AD-12 | — |
-| C-12 review queue | 3.6 | AD-12 | **Gate 2** for any write |
-| C-13 extraction | 3.6 | AD-12 | **Gate 3**, per site |
-| C-14 identity provider | 3.2 | **AD-10** | Produces Gate 4 evidence |
-| C-15 audit trail | 3.2, 3.7 | AD-11 | — |
-| C-16 observability | 3.7 | AD-8, AD-11 | Gate 4 for exposure |
-| C-17 deployment, recovery | 3.7 | AD-8, AD-10 | **Gate 4** for exposure |
+| C-1 ingestion | Exists (D-24); 3.3 | AD-4, AD-5, AD-12 **(§7.1)** | — |
+| C-2 provider adapters | 3.3-L | AD-4, AD-5, AD-12 **(§7.1)** | **Gate 3**, per provider |
+| C-3 synthetic harness | 3.3-S | **AD-4, AD-5, AD-12 (§7.1)** — corrected in v0.5: scope §7.1 makes milestone 3.3, including 3.3-S, depend on all three, not AD-12 alone. A synthetic adapter emits AD-4 envelopes and implements the AD-5 adapter interface and registry record | — |
+| C-4 distribution | 3.4 | AD-2, AD-3 **(§7.1)** | — |
+| C-5 observation store | 3.5 | AD-6 to AD-9 **(§7.1)**; **AD-11 for the model — proposed here, not in §7.1** | — |
+| C-6 observation module | Exists (D-24); 3.5 | AD-6 to AD-9 **(§7.1)** | — |
+| C-7 real-time channel | 3.5 | AD-7 **(§7.1**, within AD-6 to AD-9**)**; **and AD-10, which AD-7 needs — proposed here** | Gate 4 for exposure |
+| C-8 observation panel | Exists (D-24); 3.5 | AD-9 **(§7.1)** | — |
+| C-9 routing status push | 3.5 | AD-7 **(§7.1)** | **Gate 1** for `ppo_projected` |
+| C-10 context recorder | 3.5 | AD-7 **(§7.1)**; **AD-11 for storage — proposed here** | — |
+| C-11 quarantine store (durable; §2.3) | 3.6 | AD-12 **(§7.1)**; **AD-11 for persistence — proposed here** | — |
+| C-12 review queue | 3.6 | AD-12 **(§7.1)** | **Gate 2** for any write |
+| C-13 extraction | 3.6 | AD-12 **(§7.1)** | **Gate 3**, per site |
+| C-14 identity provider | 3.2 | **AD-10 (§7.1)** | Produces Gate 4 evidence |
+| C-15 audit trail | 3.2, 3.7 | **AD-11 — proposed here**; scope §7.1 names AD-10 for 3.2 | — |
+| C-16 observability | 3.7 | **AD-8, AD-11 — proposed here**; scope §7.1 names no 3.1 deliverable for 3.7 beyond 3.2 | Gate 4 for exposure |
+| C-17 deployment, recovery | 3.7 | **AD-8, AD-10 — proposed here** | **Gate 4** for exposure |
 
 **Earliest starts, from the 3.1 plan §4 waves:** milestone **3.2** after wave 2 (AD-10), and **3.3** after wave 3 (AD-12) — in both cases only once this component view's placement is confirmed and those deliverables are approved.
 
