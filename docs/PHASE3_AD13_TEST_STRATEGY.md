@@ -1,6 +1,6 @@
 # AD-13: Test Strategy and Gate Evidence Templates
 
-**Status:** **DRAFT v0.1 for review. Not approved.** 26 November 2026. **Lead:** Dev D. **Reviewers:** Dev A, Dev B, Dev C. **Approver:** project owner.
+**Status:** **DRAFT v0.2 for review. Not approved.** 26 November 2026. v0.2 adds the cross-AD verification map (§2.9), durable-handoff, replay, load and separation layers, provisional gate-timing language, and Gate 2 and Gate 4 evidence aligned with the AD-10, AD-11 and PR #30 drafts. **Lead:** Dev D. **Reviewers:** Dev A, Dev B, Dev C. **Approver:** project owner.
 **Inputs:** gate templates need none (plan §3); the final strategy needs every other AD. **Feeds:** all gates; the 3.1 exit. **Scope source:** `docs/PHASE3_SCOPE.md` §5, §7.3, §8.2; `docs/PHASE3_AD6_ENGINE_BOUNDARY.md` §8.
 
 Part A (strategy) is a **provisional** draft built on the D-24 slice. Part B (templates) has no dependency and can be reviewed now. Nothing here passes a gate; **no gate has passed**.
@@ -30,7 +30,11 @@ Branch protection for the D-24 slice was closed by Ayush on 26 November 2026 and
 | Stack acceptance | `acceptance-stack`: T-6, T-1, T-2, real SSE, fault recovery, limits, restart, SIGTERM | |
 | Browser | `acceptance-browser`: panel on, off, preview (10 tests); `e2e/p3/observations.spec.ts` | |
 | Gap-detection indicator | none; fault cases proposed in AD-12 §4 | `[DEP: AD-3 §6]` |
-| Persistence, audit | none | `[DEP: AD-11, Anvesh]` |
+| Durable handoff (acknowledgement, redelivery, overflow) | none | `[DEP: AD-2, AD-3 §5.1]` |
+| Idempotent persistence and replay (24 h window proposed) | none | `[DEP: AD-2, AD-11]` |
+| Peak load (rates and streams not agreed) | the 300 s soak runs at the slice's 2 events/s only | `[OPEN]` AD-3 §10 X-1; AD-12 §3.3 |
+| Persistence, audit, retention | none | `[DEP: AD-11, Anvesh]` |
+| Storage and privilege separation | none for privileges; T-14 (no foreign key, join or view) is specified in the PR #30 drafts | `[DEP: AD-11]` |
 
 ### 2.2 AD-6 acceptance tests (D-24 coverage)
 
@@ -44,7 +48,7 @@ Branch protection for the D-24 slice was closed by Ayush on 26 November 2026 and
 | T-6 artefact hashes | `acceptance-stack` | 300 s soak; SHA-256 of `src`, `data`, `outputs`, `contracts/test-vectors`, `services/inference`, on host and in the container, before and after |
 | T-7 regression | `guards`, `regression-gate` | Baseline `28da68f`; protected paths; waits on existing workflows rather than rerunning them |
 | T-8 wording | `guards` | `python e2e/p3_safeguards.py text` over `services/web/src` and 10 named documents; **a human wording review is still required** |
-| T-9 context | not applicable | AD-1 §6 item 5: "T-9 does not apply, because no context is recorded" (verified against AD-1); revisit with AD-7, AD-11 |
+| T-9 context | not applicable | AD-1 §6 item 5: "T-9 does not apply, because no context is recorded" (verified against AD-1). The exemption **ends at milestone 3.5**, when displayed context exists (scope §2.2.2, AD6-Q3) |
 | T-10 no converted currency | `acceptance-browser` | Text check on the result region only |
 
 ### 2.3 Keeping Phase 1 and Phase 2 untouched
@@ -54,6 +58,8 @@ Protected paths fail on modification, deletion or rename, and on any addition ou
 ### 2.4 CI structure (preserved from D-24)
 
 `phase3-observations.yml` (path-filtered; jobs `guards`, `regression-gate`, `acceptance-stack`, `acceptance-browser`) plus the unfiltered `phase3-acceptance-gate.yml`, which always reports one check, `phase3-acceptance`. Fail-closed rules, same-commit rule, trusted base script, 125 min wait budget (D-24 §6). No secrets; no pull-request text in commands; Docker is never pruned.
+
+**Gate timing and CI budgets: unchanged, with provisional notes.** This document changes no workflow, job timeout (20, 75 and 90 min) or the gate's 125 min wait. Any added test below (a peak soak, a replay window, the AD-8 drills) would lengthen a job or need its own job; where it runs (this gate, a separate required job or a scheduled run) is `[OPEN]` and `[PROVISIONAL]`. No new duration is estimated here, because none is measured. For scale only: a 60 s peak at 200 events/s is 12,000 events, against the 500 events the AD-8 draft's soak (N-1) requires over at least 300 s. If a longer chain is ever added, the gate's budget must be recomputed in the same change (D-24 §6, which a test enforces).
 
 ### 2.5 Runtimes: historical and measured
 
@@ -82,7 +88,41 @@ Synthetic events only, no live source; fake ingestion is test-only; no live `503
 | Load-test targets against the latency budget (exit criterion 9) | `[DEP: AD-8]` |
 | Gap-detection accuracy tests | `[DEP: AD-3 §6, AD-12 §4]` |
 | Security tests for Gate 4 | `[DEP: AD-10]` |
+| Capacity, idempotency, replay and B-4 conflicts | Recorded in AD-3 §10 (X-1 to X-5); tests cannot be fixed until they are resolved |
+| Where peak, replay and drill tests run (gate timing) | `[OPEN]` `[PROVISIONAL]`, §2.4 |
 | Final strategy | Waits for every other AD (wave 4) |
+
+### 2.9 Cross-AD verification map `[PROVISIONAL]`
+
+Sources: the AD-5, AD-6 Part 2 and AD-8 drafts in PR #30 (unmerged, unreviewed, read at commit `5f78500`), and this branch's AD-3 and AD-12. Identifiers are cited as they stand there; they are qualified by document because the drafts reuse labels (AD-8's alerts B-1, C-1, F-1 and R-1 collide with other uses). If PR #30 changes an identifier, this map changes with it.
+
+| Source | Obligation | Layer here | Runs |
+|---|---|---|---|
+| AD-5 A-1 to A-3, A-5, A-8 | Adapter conformance, registry validation, determinism, item faults, normalization | Contract and unit | With milestone 3.3 |
+| AD-5 A-4 | Fake-provider fault classes, test-only | Fault injection (AD-12 §4) | With 3.3 |
+| AD-5 A-6 | Idempotency key stable across restarts; dedup window boundary | Idempotent persistence | `[DEP: X-3]` |
+| AD-5 A-7 | Status machine, both outage criteria | Unit and stack | With 3.3 |
+| AD-5 A-9 | AD-6 T-1 to T-8 and T-10 per adapter; T-5 per adapter | Stack acceptance | With 3.3-L |
+| AD-5 A-10 | No provider data; fixtures carry origin | Guards; AD-12 §3.4 | Now, for synthetic fixtures |
+| AD-5 A-11 | Gate 3 enforcement: no start, values Unavailable | Unit and stack | With 3.3-L |
+| AD-6 Part 2 T-11 | Per-adapter egress allowlist | Stack | After AD-10; 3.3-L |
+| AD-6 Part 2 T-12 | Distribution isolation | Stack | After AD-3; 3.4 |
+| AD-6 Part 2 T-13 | **Inference egress (B-4 inference side): not run, not claimed** | Stack | After AD-10 |
+| AD-6 Part 2 T-14, T-15 | Store separation; audit independence | Persistence | After AD-11 |
+| AD-6 Part 2 T-16 | Express composition import graph (extends T-4) | Contract (`contracts` job) | Runnable now |
+| AD-6 Part 2 T-17 | Frontend state separation | Browser | 3.5 |
+| AD-6 Part 2 T-18 | Knowledge-path isolation | Stack | 3.6, with Gate 2 |
+| AD-8 N-1 to N-3 | Latency percentiles, segments, burst recovery | Peak load | `[OPEN]` rates (X-1) |
+| AD-8 N-4 to N-6 | Reconnect, thresholds at boundaries, browser invariants | Browser, fake clocks | With 3.5 |
+| AD-8 N-7 to N-9 | Limits, metrics surface, alerts | Stack | With 3.5 and 3.7 |
+| AD-8 N-10 | Drills R-1 to R-7 (document-qualified: AD-8 R-1 to R-7) | Recovery | 3.7 |
+| AD-8 N-11 | T-1, T-2, T-6 before and after each test | Non-interference | Always |
+| AD-3 §5.1 H-1 to H-7 | Handoff acknowledgement, idempotent persistence, storage sequence, replay, persist-before-ack, separation, PostgreSQL failure | Durable handoff, persistence | `[DEP: AD-2, AD-11]` |
+| AD-3 §5.2 | Delivery measured at a named layer; coalescing counted separately | All delivery measures | With any delivery target |
+
+Non-interference is a standing obligation: T-1, T-2 and T-6 run before and after each milestone that adds a component to the observation path (AD-6 Part 2 §6).
+
+**Browser tests assert the current value, not every update.** The browser may coalesce under backpressure by design (AD-3 §5.2), so browser acceptance checks the displayed current value, labels and ages, and a clean snapshot after reconnect. Delivery completeness is tested at the persistence or consumer layer.
 
 ## 3. Part B: gate evidence templates
 
@@ -110,9 +150,9 @@ Evidence is **measured or recorded**, never inferred. A relayed approval is labe
 | Gate | Blocks | Reviewers (D-19) | Evidence the record must hold (scope §5) | Dependencies |
 |---|---|---|---|---|
 | **1 PPO approval** | Activating `ppo_projected` on any served path | Dev A; Dev C | Checkpoint identity, hash and registry entry (`approved_checkpoints.json` is empty today); its Stage 1F results; confirmation that the served artifact is `ppo_projected`, not raw PPO (D-10); permitted UI wording (§4.2). Open Phase 1 item: whether the projection is formally adopted; Gate 1 may pass with `ppo_projected` labelled experimental | `[DEP: owner's checkpoint choice]` |
-| **2 Cognee readiness** | Writes to the knowledge layer from any Phase 3 pipeline | Dev A; Dev B | Real cited knowledge base (Phase 1 item; one assumed fact today); a retrieval-quality measurement (none exists); the review-queue design (AD-12); a written decision on P5; A-4 rules and the cap-sync test | `[DEP: AD-12; AD-11; Phase 1 knowledge work]` |
+| **2 Cognee readiness** | Writes to the knowledge layer from any Phase 3 pipeline | Dev A; Dev B | Real cited knowledge base (Phase 1 item; one assumed fact today); a retrieval-quality measurement (none exists); the review-queue design (AD-12); a written decision on P5; A-4 rules and the cap-sync test. **Provisionally** (Dev B's AD-11 proposals, none approved): authenticated reviewer references, durable review records, logical storage and privilege separation, category-specific retention and append-only refusal records, each with a test once AD-11 is approved | `[DEP: AD-12; AD-11; Phase 1 knowledge work]` |
 | **3 Provider approval, per provider** | That provider's data in any environment, recorded samples and fixtures included (D-17) | Dev A; Dev B (the licence and terms decision is the owner's) | Licence or terms permitting this use including storage and display; streaming or polled; rate limits and cost; reliability and outage history; retention and redistribution limits; scraping decided per site. Hard boundary: no live FX or news source is presented as bridge liquidity or congestion telemetry | `[DEP: AD-5; AD-11 retention]`; no provider evaluated |
-| **4 Production security** | Exposure beyond the private development environment, including staging, LAN, tunnels, public demo URLs (D-16) | Dev B; Dev C; Dev D | Milestone 3.2 complete (identity provider, dev mode removed, httpOnly cookies, strict CSP, secrets management); authorization and rate limits tested; encryption in transit; audit trail of input data, model version, request, allocation and response; monitoring and alerting; backup and recovery exercised, all gathered inside the private environment | `[DEP: AD-10; AD-11; milestones 3.2, 3.7]` |
+| **4 Production security** | Exposure beyond the private development environment, including staging, LAN, tunnels, public demo URLs (D-16) | Dev B; Dev C; Dev D | Milestone 3.2 complete (identity provider, dev mode removed, httpOnly cookies, strict CSP, secrets management); authorization and rate limits tested; encryption in transit; audit trail of input data, model version, request, allocation and response; monitoring and alerting; backup and recovery exercised, all gathered inside the private environment. **Alignment with AD-10 `[DEP: AD-10, unwritten]`:** B-4 on both sides, with T-5 run on the inference side and T-13 (not run today; D-25 waives enforcement for the D-24 slice only and is not Gate 4 evidence); T-11 egress allowlists for any provider adapter; AD-8's recovery drills as the "recovery exercised" evidence; AD-8's boundary-violation alert as monitoring evidence. How inference egress is closed is open (AD-3 §10, X-5) | `[DEP: AD-10; AD-11; milestones 3.2, 3.7]` |
 
 The Gate 3 and Gate 2 rows must not be filled with D-24 results: they concern providers and knowledge content, which D-24 does not touch.
 
@@ -129,7 +169,8 @@ The Gate 3 and Gate 2 rows must not be filled with D-24 results: they concern pr
 |---|---|
 | AD-2, AD-3 (replay, mechanism) | `[DEP]` |
 | AD-5 (adapters, Gate 3 evidence) | `[DEP: Dev A]` |
-| AD-8 (latency budget) | `[DEP]` |
+| AD-8 (latency budget, capacity envelope, delivery measure layer) | `[DEP]`; draft in PR #30, unreviewed; conflicts X-1, X-2 |
+| AD-2 (Dev B provisional requirements, relayed) | `[DEP]` unwritten |
 | AD-10 (Gate 4, T-5 inference side) | `[DEP: Dev B]` |
 | AD-11 (persistence, audit, retention, reviewer references) | `[DEP: Anvesh]` |
 | Stale D-24 lines (§2.5) | `[OPEN]` |
