@@ -1,6 +1,6 @@
 # AD-8: Non-Functional Budgets — Latency, Freshness, Monitoring and Recovery
 
-**Status:** **DRAFT v0.5**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
+**Status:** **DRAFT v0.6**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
 **Revision vv0.5, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Anvesh's (Dev B's) CHANGES_REQUESTED re-review of PR #30** on commit `e457bcf`, together with the conditions in **Nisarga's** re-review that fall in the same sections. Both texts are on the pull request, not in the repository. Documentation only; it preserves every correction from **Varshini's** and Nisarga's earlier rounds, and changes no approved D-24 contract, schema, threshold, ownership or implementation. Cross-AD decisions stay **provisional**: AD-2 is itself a draft (PR #32), and nothing here approves it or is approved by it. Changes:
 
 - **Blocker 3 (H6) fixed — §6.2.1 rewritten and extended beyond event rates.** A dimension-by-dimension table now covers **burst rate and duration** (AD-8 100/s for 10 s versus **AD-2 R-3** 200/s for 60 s, 12× the events), **browser stream concurrency** (20 total versus **R-11** 60, 3×), **server-side consumers** (**R-11** ≤ 3, AD-8 silent), **distinct subjects**, **producer retention before acceptance** (**R-7** 12,000 events / 32 MiB / 10 min, AD-8 silent), **consumer replay** (**R-9** 24 h, AD-8 silent), **browser replay**, **durability**, **overload** and **latency**. The reconciliation rule now applies **per dimension**, and adds a case for dimensions AD-8 leaves silent: AD-8 **adopts** AD-2's approved figure without re-measuring a bound it never claimed. §8.1 records where a recovery objective would come from.
@@ -8,6 +8,8 @@
 - **Blocker 4 (M1) fixed — §4.2:** the economic-indicator `unavailable_after_ms` becomes **max(3 × release period, 90 days)**, so AD-4 §7's `stale_after ≤ unavailable_after` invariant holds at every period. The old 90-day constant broke it for anything published less often than every 60 days — an annual series would have been **withdrawn at 90 days before going stale at 547**. A worked table and the AD-5 **A-2** startup check are recorded.
 - **New §6.2.1a** (Nisarga): the **500-subject** capacity bound is a **store and pipeline** figure and is **not** a browser contract. The approved channel carries **exactly four FX pairs in a fixed order**, enforced in the schema, Express and the browser, so growing the subject set is a **protocol change** (AD-4 Part 2 §6.2.1, **AD4P2-Q7**), not a capacity decision. **Nothing in AD-8 authorizes a fifth pair.**
 - **Message-size wording corrected** (Nisarga): §6.2 now distinguishes the **65,536-byte event payload** limit, excluding SSE framing, from the **131,072-byte** client parser buffer, and notes neither bounds a stored envelope.
+
+**Revision v0.6, 26 November 2026 — still DRAFT, and not re-reviewed.** Documentation only. One arithmetic and wording correction, raised in the project owner's review of PR #36 and requested in `docs/PHASE3_33A_AUTHORIZATION.md` §5.4: **§4.3** said the D-24 slice satisfied §4.2's synthetic row "for the first three settings" and that its `unavailable_after_ms` of 30 000 was "**tighter**" than 15 × interval. **15 × 2 000 ms = 30 000 ms**, so the fourth setting agrees as well and neither value is tighter. A table now states all four, and the coincidence is explicitly **not** offered as validation of §4.2's multiples. No threshold, formula, approved value or behaviour changes.
 
 **Revision v0.2, 26 November 2026 — still DRAFT.** Applies **Nisarga's CHANGES_REQUESTED review of PR #30**, submitted on v0.1 (`5f78500`); its text is on the pull request, not in the repository. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
 
@@ -279,7 +281,16 @@ AD-8 supplies the values. It changes none of the rules above.
 
 ### 4.3 The slice's profile is unchanged
 
-The D-24 slice's profile — `expected_interval_ms` 2000, `live_max_age_ms` null, `stale_after_ms` 6000, `unavailable_after_ms` 30000, `clock_tolerance_ms` 1000 (AD-1 §3.2) — satisfies §4.2's synthetic row at the 2 s interval for the first three settings. Its `unavailable_after_ms` of 30 000 is **tighter** than §4.2's 15 × interval, and it stays as approved: AD-1 v0.5 requires a mandatory positive `unavailable_after_ms` for the slice, a Dev C condition, and §4.2 does not loosen it.
+The D-24 slice's profile — `expected_interval_ms` 2000, `live_max_age_ms` null, `stale_after_ms` 6000, `unavailable_after_ms` 30000, `clock_tolerance_ms` 1000 (AD-1 §3.2) — **satisfies §4.2's synthetic row exactly, at every setting**, at the 2 s interval:
+
+| Setting | Slice value (approved) | §4.2 synthetic formula | At a 2 000 ms interval |
+|---|---|---|---|
+| `live_max_age_ms` | null | null — never Live | null |
+| `stale_after_ms` | 6 000 | 3 × interval | 6 000 |
+| `unavailable_after_ms` | 30 000 | 15 × interval | **30 000** |
+| `clock_tolerance_ms` | 1 000 | 1 000 | 1 000 |
+
+**Corrected in v0.6.** Earlier revisions said the slice satisfied the row "for the first three settings" and that its `unavailable_after_ms` of 30 000 was **tighter** than 15 × interval. Both were wrong: **15 × 2 000 ms = 30 000 ms exactly**, so the fourth setting agrees too and nothing is tighter than anything. The formula and the approved value coincide; neither was derived from the other, and §4.2 does not loosen the slice. The slice's value stays as approved — AD-1 v0.5 requires a mandatory positive `unavailable_after_ms` for the slice, a Dev C condition — and the coincidence is **not** evidence that §4.2's multiples are validated: 30 000 ms is the only one of these figures that has ever run.
 
 ### 4.4 Plausibility bounds (the numbers AD-5 §10 defers)
 
