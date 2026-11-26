@@ -1,6 +1,8 @@
 # AD-7: Real-Time Channel Contract
 
-**Status:** **DRAFT v0.2 for review. Not approved.** 26 November 2026. **Review state:** reviewed on PR #34 at `3f89781` — **APPROVED as draft documentation by Nisarga (Dev D), with three conditions before final architecture approval**, and **CHANGES_REQUESTED by Varshini (Dev C)**. Both rounds are applied in v0.2; **neither reviewer has re-reviewed**, and no owner approval exists. New numbers are **provisional** (`[#?]`). Nothing here is implemented beyond what §2 marks as existing; no milestone or gate is authorized, and **no contract change is made or authorized**.
+**Status:** **DRAFT v0.3 for review. Not approved.** 26 November 2026. **Review state:** on PR #34, v0.2 (`60b6faa`) was **APPROVED as draft documentation by Nisarga (Dev D)**, with AD7-D7 to be resolved before final architecture approval, and **CHANGES_REQUESTED by Varshini (Dev C)** on findings F1 and F2. v0.3 applies both; **neither reviewer has re-reviewed v0.3**, and no owner approval exists.
+
+**Three different approvals, kept apart (Varshini, non-blocking 8):** (1) **draft-document approval** — a reviewer approving this file for merging as DRAFT documentation; it decides nothing and authorizes nothing; (2) **final architecture approval** — the project owner approving AD7-D1 to AD7-D8, which needs AD7-D7 resolved first; (3) **implementation authorization** — a milestone (3.2 for sessions, 3.5 for §5 and §8) authorized by the owner under D-22. Neither (1) nor (2) implies (3), and none passes a gate. New numbers are **provisional** (`[#?]`). Nothing here is implemented beyond what §2 marks as existing; no milestone or gate is authorized, and **no contract change is made or authorized**.
 **Lead:** Dev B. **Reviewers:** Dev C, Dev D. **Approver:** project owner.
 **Inputs:** F-3; AD-4 v0.2 (approved for the D-24 slice only); AD-10 (**draft v0.2**, PR #33). **Feeds:** milestone 3.5.
 
@@ -12,7 +14,23 @@
 | Varshini **B2** (blocking) | Context-claims endpoint: owning module, ownership checks, CSRF and Origin, rate limits | **§8**, **§8.1** |
 | Varshini **B3** (blocking) | Stream-opener authentication: the "only the credential changes" claim is inaccurate; frontend changes; contract and OpenAPI path; bearer-only v0.4 unchanged until the approved milestone | **§4** |
 | Varshini, non-blocking 1–7 | 401 versus role change; per-send checks versus AD-10's model; `stream_seq` at write; overflow when all pending are terminal; recovery through v0.4 `GET`; milestone reference; AD-8 capacity and T6 limits | §4, §5, §7, §9 |
-| Nisarga (before final approval) | AD7-D7 and the four-pair contract; context-claims protection aligned with AD-10; stream capacity reconciled through AD-2 and AD-8 | AD7-D7 (kept open), §8.1, AD7-D6, §9 | **Coordinates with:** AD-2 (replay vs snapshot), AD-8 (budgets), AD-9 (degradation), AD-11 (context records).
+| Nisarga (before final approval) | AD7-D7 and the four-pair contract; context-claims protection aligned with AD-10; stream capacity reconciled through AD-2 and AD-8 | AD7-D7 (kept open), §8.1, AD7-D6, §9 |
+
+**Revision v0.3, 26 November 2026 — still DRAFT.** Documentation only. Applied from the re-reviews of v0.2 (`60b6faa`; the PR head `d685fad` has the same AD-7 text):
+
+| From | Finding | Where applied |
+|---|---|---|
+| Varshini **F1** (blocking) | Producer mechanism unspecified: a `finish` hook cannot see the body; handler-set values would touch T-7-protected routes | **§5.2** producer row and **§5.3** |
+| Varshini **F2** (blocking) | `request_id` is ambiguous: contract v0.4's `requestId` is the echoed `X-Request-Id`, not the persisted record ID | §7, **§8**, **§8.1** (`record_id`; `X-Request-Id` never used for ownership; `createdById` check) |
+| Nisarga; Varshini 1 | AD-8 reference in §9 from v0.4 to v0.5; pin dependency commits | §9 |
+| Varshini 2 | AD-7 evidence in AD-13 §2.9's map | **§11** (proposed rows; AD-13 is not edited here) |
+| Varshini 3 | User-visible benefit of option (a), or reconsider (c) | §5.1 |
+| Varshini 4 | Database uniqueness for one claim per record | §8; AD-11 P-6 (PR #35) |
+| Varshini 5 | `createdById` is the column, `createdBy` the relation | §8.1 |
+| Varshini 6 | Comparison failures persist nothing, so emit no `failed` | §5.1 |
+| Varshini 7 | Migration table wording; the `client.ts:225` 401 path | §4 |
+| Varshini 8 | Draft approval, final architecture approval and implementation authorization | Status |
+| Varshini 9 | "Session" before milestone 3.2 | §4 | **Coordinates with:** AD-2 (replay vs snapshot), AD-8 (budgets), AD-9 (degradation), AD-11 (context records).
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §3 Workstream D, §7.3 (AD-7 row), §9.2; `docs/PHASE3_AD6_ENGINE_BOUNDARY.md` §1, §4, §6.1, §9.1.
 
 The channel is an extension **alongside** API contract v0.4, which it does not modify (scope §7.3). AD-1 v0.5 §3.2 to §3.6 is the approved D-24 slice contract; this document **cites** it and does not restate it.
@@ -58,12 +76,13 @@ Relayed 26 November 2026; no approval document exists in the repository. The own
 
 - **Today, and unchanged until an approved migration (Varshini B3):** the approved API contract **v0.4 §3.0 is bearer-only** and states the frontend never uses cookies; AD-1 v0.5 §3.3.4 applies that to the stream. **This document does not change either.** The bearer-only v0.4 contract and the D-24 stream contract remain in force until the contract revision of AD-10 §4.5 is approved and milestone 3.2 implements it.
 - **What the stream opener does today** (verified at `4424b45`, `services/web/src/auth/AuthProvider.tsx:153-180`): sends `Authorization: Bearer` when a token exists; `credentials: "omit"`; `redirect: "error"`; `cache: "no-store"`; drops the answer unread when the session epoch moved (the superseded-session rule); and calls `expire()` on a 401 **only if a token was present** (`if (response.status === 401 && token)`).
-- **Correction.** v0.1 said `openObservationStream` "keeps its signature and its superseded-session rule; only its credential changes". **That was inaccurate.** Under cookie sessions there is no token, so the token-gated 401 rule would never end the session, and the opener's behaviour changes in four places:
+- **The API client has the same token-gated path** (`services/web/src/api/client.ts:225`): `if (response.status === 401 && token) options.onUnauthorized?.();`. Both 401 paths, the stream opener's and the API client's, therefore depend on a token being present, and **both** must be re-based in milestone 3.2 (non-blocking 7).
+- **Correction.** v0.1 said `openObservationStream` "keeps its signature and its superseded-session rule; only its credential changes". **That was inaccurate.** Under cookie sessions there is no token, so the token-gated 401 rules would never end the session. The table compares today's behaviour with the proposal; the "today" column is the approved D-24 behaviour, and the right-hand column changes nothing until approved:
 
 | Aspect | Today (approved) | Under the cookie proposal (milestone 3.2, if approved) |
 |---|---|---|
 | Credential | Bearer header from the in-memory token | No header; `credentials: "same-origin"` sends the `HttpOnly` session cookie |
-| 401 handling | `expire()` only if a token was present | Re-based on the **session epoch**, so a cookie-session 401 still ends the session; still a permanent stop |
+| 401 handling | Stream: `expire()` only if a token was present (`AuthProvider.tsx`). API: `onUnauthorized` only if a token was present (`client.ts:225`) | **Both** re-based on the **session epoch**, so a cookie-session 401 still ends the session; on the stream it is still a permanent stop |
 | Superseded session | Answer dropped when the epoch moved | Kept, keyed on the epoch; a late 401 from a superseded session still cannot sign out its replacement |
 | Session expiry | The token ends only by sign-out or a 401 | Server-side idle and absolute timeouts, and revocation, close the stream; the reconnect gets 401 (AD-10 §4.3) |
 | Unchanged | Signature; `redirect: "error"`; `cache: "no-store"`; no `Last-Event-ID`; hidden-tab abort; backoff | Same |
@@ -71,6 +90,7 @@ Relayed 26 November 2026; no approval document exists in the repository. The own
 - **Frontend components affected** (all in milestone 3.2, with Dev C, and only after the contract revision): `services/web/src/auth/AuthProvider.tsx` (`openObservationStream`, sign-in, token store, `signOut`), `services/web/src/api/client.ts`, the MSW mock mode, and the observation controller's tests. AD-10 §4.5 lists them in full.
 - **Contract and OpenAPI path:** AD-10 §4.5 (decision AD10-D16) — contract revision, `app.v1.yaml` updated in the same change (still DRAFT), AD-1 §3.3.4 and AD-9 §3.5 revised, then implementation. **Corrected milestone reference (non-blocking 6):** cookie sessions are a **milestone 3.2** dependency; this document's own features (§5, §8) are milestone 3.5 and depend on 3.2, not the reverse.
 - **Origin:** AD-10 §5.1's safe-method rule, checked before a slot is taken.
+- **"Session" before milestone 3.2 (non-blocking 9).** Until 3.2 there is **no server-side session**: "session" in this document means, on the client, the signed-in **session epoch** of `AuthProvider` (which the superseded-session rule keys on) and, on the server, the **authenticated development-token user** of the request. Development tokens are revoked only by a backend restart (AD-1 §3.5), so before 3.2 the per-send checks of §5 reduce to "the stream's user is the status's user", and AD-10's closure bounds do not yet apply. AD-10's server-side sessions exist only from milestone 3.2, if approved.
 - **Session isolation:** a stream is bound to the session that opened it. It receives only its user's `route_status` messages (§5) and closes when that session ends (AD-10 §4.3).
 - **Failure semantics are unchanged:** 401 is a permanent stop; 403 and other 4xx stop; 429 waits; 5xx and network errors reconnect (AD-1 §3.3 table, §3.3.2). **401 versus role change (non-blocking 1):** a 401 follows **revocation, expiry, logout or deactivation**. A **role change** closes the stream but leaves the session valid, so the reconnect **succeeds** with a new snapshot under the new role; it does not produce a 401 (AD-10 v0.2 §4.3 item 6).
 
@@ -98,13 +118,13 @@ AD6-Q1 forbids routing triggered by events; AD-6 §4 allows "pushing the status 
 
 | Option | Correlation key | Statuses possible | Trade-off |
 |---|---|---|---|
-| (a) **Terminal only, by record `id`** | The v0.4 record `id` | `completed`, `failed` — emitted **after** the request's response is final | Implementable with no new identifier. Adds no information to the tab that made the request (it already has the response); its value is for the **user's other streams** (another tab or window) |
+| (a) **Terminal only, by record `id`** | The v0.4 record `id` | `completed`, `failed` — emitted **after** the request's response is final | Implementable with no new identifier. Adds no information to the tab that made the request (it already has the response); its value is for the **user's other streams** (another tab or window). **User-visible benefit, stated plainly (non-blocking 3):** a dashboard open in a second tab or window shows that a transaction or comparison the same user just submitted elsewhere has completed or failed, without polling or a manual refresh. That is a **modest** benefit, and if the owner judges it insufficient, **(c) is the right outcome**; nothing else in this document depends on `route_status` |
 | (b) **Pre-response, by `X-Request-Id`** | The `X-Request-Id` the client already may send (contract v0.4 §1: echoed in the response and in error bodies, and forwarded to inference) | `in_progress` then `completed` or `failed`, the terminal one also carrying the record `id` | Gives progress for a slow request. The key is client-chosen, so it is **untrusted**: it is unique only per user, is never used as a lookup outside that user's own streams, and needs a length and character bound `[#?]` |
 | (c) No `route_status` | — | — | AD6-Q1 is satisfied trivially; AD-6 §4's permission is not used |
 
 **Provisional preference: (a)**, because it needs no new identifier, cannot report a record before it exists, and keeps `route_status` strictly derivative of the v0.4 response. (b) is recorded because it is the only way to show progress; it would make `X-Request-Id` part of this channel's contract. **`accepted` is withdrawn in either case.** A request that persists no record has **no** record `id` and, under (a), produces **no** `route_status`; under (b) it produces `failed` with the v0.4 error `code` and no `id`.
 
-**Meaning of each status (under (a)):** `completed` — the v0.4 request returned `201` and its record and audit row are persisted (contract §6.2, Q19 unchanged); this includes a regulatory rejection, which v0.4 records as `routed` with `feasibility.allowed = false`. `failed` — the request **persisted** a failed record and returned an error carrying its ID (contract §3.2: "inference failures are persisted … the `POST` returns the error with `transactionId` in `error.details`"); the status carries that ID and the error `code`. **An error that persists nothing** — `422`, `409 POLICY_DISABLED`, `401`, `403` — has no record and produces **no** `route_status`. Nothing else is a status.
+**Meaning of each status (under (a)):** `completed` — the v0.4 request returned `201` and its record and audit row are persisted (contract §6.2, Q19 unchanged); this includes a regulatory rejection, which v0.4 records as `routed` with `feasibility.allowed = false`. `failed` — the request **persisted** a failed record and returned an error carrying its ID (contract §3.2: "inference failures are persisted … the `POST` returns the error with `transactionId` in `error.details`"); the status carries that ID and the error `code`. **An error that persists nothing** — `422`, `409 POLICY_DISABLED`, `401`, `403` — has no record and produces **no** `route_status`. **A failed comparison persists nothing** (contract §3.6: "a comparison is persisted **only** when `/v1/compare` returns 200 … on any error nothing is saved"), so under (a) **only a transaction can produce `failed`**; a comparison produces `completed` or nothing (non-blocking 6). Nothing else is a status.
 
 ### 5.2 Producer, consumer and the module boundary (Varshini B1)
 
@@ -114,7 +134,7 @@ AD6-Q1 forbids routing triggered by events; AD-6 §4 allows "pushing the status 
 
 | Role | Module | Rule |
 |---|---|---|
-| **Producer** | A **response-observing middleware** registered in `app.ts` on `POST /api/v1/transactions` and `POST /api/v1/comparisons`. It observes the **final** status code and the record `id` of the response, after the handler has finished, and publishes `{user, kind, id, status, code}` to a status port | It lives **outside** the T-7-protected `routes` folder, so no v0.4 handler changes, and it cannot alter the response. It imports neither the routing modules nor the observation module |
+| **Producer** | A **response-observing middleware** registered in `app.ts` on `POST /api/v1/transactions` and `POST /api/v1/comparisons`, with the exact interception mechanism of **§5.3**. It publishes `{user, kind, record_id, status, code}` to a status port **only after the response is finalized** | It lives **outside** the T-7-protected `routes` folder, so no v0.4 handler changes, and it can never alter, delay or fail the response (§5.3). It imports neither the routing modules nor the observation module |
 | **Port** | A small, neutral status-port module | Imports **neither** routing, mapper, inference-client nor observation code, so T-16's graph still contains no path between them. `app.ts` composes it, as AD-1 already allows |
 | **Consumer** | The observation module's stream hub subscribes to the port and addresses each status to the submitting user's streams (§5 "Recipients") | It receives a plain value; it imports no routing code and writes nothing to the database |
 | **Client** | A separate **routing-status store**, read only by a status indicator | **Never** the observation store, reducer or selector, and never a form, request body or result field (B-8, T-17). The D-24 panel's observation state is untouched |
@@ -127,6 +147,28 @@ The alternative — the v0.4 handlers calling the port directly — **would chan
 - `route_status` is delivered **only on an already-open dashboard observation stream**. It **never** registers a stream, opens one, or causes a page without the panel to connect. A user with no open panel receives nothing, and loses nothing, because the v0.4 response is authoritative.
 - A separate **server-side switch, off by default** `[#?]`, governs whether the producer publishes at all, so that turning the feature on is a deliberate, reversible act and the D-24 slice's behaviour is unchanged while it is off.
 
+### 5.3 Producer interception mechanism (Varshini F1)
+
+**The gap v0.2 left.** A `res.on("finish")` hook sees the status code but **not the body**, so it cannot learn the record `id` or the error's `transactionId`; and asking the v0.4 handlers to set those values for the middleware would change **T-7-protected** route code. The mechanism must therefore read the body without touching the handlers.
+
+**Proposed mechanism (provisional, part of AD7-D8):**
+
+1. **Capture, before the handler runs.** The middleware, mounted ahead of the two `POST` routes in `app.ts`, wraps **`res.json`** for that one response only. The wrapper stores a **reference** to the object passed to it and then calls the original `res.json` with the **same arguments, synchronously and unmodified**. Both handlers respond through `res.json` — `res.status(201).json(…)` for success (verified at `transactions.ts:305` and `comparisons.ts:112`), and the shared error envelope for errors, which `services/backend/src/middleware/errors.ts:58` sends with `res.status(…).json(…)` on the same response object — so no other send path needs wrapping; a response sent any other way is simply **not observed**, and produces no status.
+2. **Publish only after the response is finalized.** Publication is scheduled from `res.on("finish")` — the response has been handed to the network — and **never** from inside the `res.json` wrapper. A response that ends with `close` and no `finish` (the client went away) publishes nothing; the v0.4 record remains authoritative.
+3. **Fields extracted, and nothing else:**
+
+| Final status | Event | Fields read from the captured body | Plus |
+|---|---|---|---|
+| `201`, transaction or comparison | `completed` | `id` | `request_kind` from the route; the authenticated user from `req` |
+| `≥ 400`, transaction, **with** `error.details.transactionId` | `failed` | `error.details.transactionId` as `record_id`; `error.code` | As above |
+| Any other response | — | — | Nothing is published |
+
+   No amount, corridor, allocation, policy, engine field, `clientReference` or `requestId` is read. **`requestId` (the echoed `X-Request-Id`) is never read or published**, so it cannot become a record identifier (§8.1).
+4. **Isolation from the response.** The wrapper never modifies the body or headers and never throws: capture is wrapped so that any error in it is caught, counted and discarded, and the original `res.json` is still called exactly once. Publication runs **after** `finish`, asynchronously, inside its own `try`/`catch`; a full queue, a missing subscriber or a subscriber's exception is **counted and dropped**. **No status-port or subscriber error can alter, delay or fail the HTTP response**, and none is logged with body content.
+5. **Evidence:** with the port throwing, blocked or absent, the v0.4 responses, status codes, bodies, timings within noise, records, audit rows and `decision_id`s are **identical** to a run without the middleware (AD-6 T-1); T-7 shows no protected path changed; a `201` and a persisted-failure response each publish exactly one status, and a `422` or a failed comparison publishes none.
+
+Express response internals are an implementation detail. If wrapping `res.json` proves unreliable on the backend's Express version, the fallback is **(c)**, no `route_status` — **not** a change to the protected handlers.
+
 `session_ended` (advisory, minor version): sent just before the server closes a stream for AD-10 §4.3 reasons, with a reason code. The client must still rely on the 401 that follows, not on this message.
 
 ## 6. Versioning
@@ -135,7 +177,7 @@ AD-1 §3.2's rule is kept: `protocol_version` `"1.x"`; a minor version adds opti
 
 ## 7. Backpressure (bounded)
 
-- Per stream: at most one pending `update` per **subject**, one pending `route_status` per request id, one heartbeat; newest wins (AD-1 §3.5 generalized).
+- Per stream: at most one pending `update` per **subject**, one pending `route_status` per correlation key (the record `id` under §5.1 option (a)), one heartbeat; newest wins (AD-1 §3.5 generalized).
 - A stream that has not drained for 10 s is destroyed (unchanged) and recovers by snapshot (AD-2 R-10).
 - Per-stream pending state is bounded by the subject count of its snapshot plus at most 20 `[#?]` pending `route_status` entries. Beyond that: drop the **oldest non-terminal** entry; **if every pending entry is terminal**, drop the **oldest terminal** entry (non-blocking 4). Either drop is counted and is recoverable through the relevant v0.4 `GET` (§5). The bound never grows and never blocks the stream. Under §5.1 option (a) every entry is terminal, so the second rule is the normal one.
 - Coalescing never touches the store; it is not loss of an accepted event (AD-2 R-12).
@@ -148,10 +190,10 @@ AD-6 §6.1 and AD6-Q3: displayed context is recorded separately; v0.4 requests a
 
 | Rule | Requirement |
 |---|---|
-| Closed schema | `request_kind`, `request_id` (from the v0.4 response), `captured_at` (client clock, informational only), and `items[]`: each `event_id` (or null), subject, display label, freshness state, displayed `age_ms`. Unknown fields → 422 |
-| Bounds | ≤ 50 items; body ≤ 8 KiB `[#?]`; one claim per request id (a second is 409 and counted) |
+| Closed schema | `request_kind` (`transaction` or `comparison`, which selects the P-1 table), `record_id` — the **persisted record `id`** returned by the v0.4 `201` — `captured_at` (client clock, informational only), and `items[]`: each `event_id` (or null), subject, display label, freshness state, displayed `age_ms`. Unknown fields → 422 |
+| Bounds | ≤ 50 items; body ≤ 8 KiB `[#?]`; **one claim per record** (`request_kind`, `record_id`): a second is 409 and counted. Enforced by a **database uniqueness constraint** on (`request_kind`, `record_id`) in AD-11's P-6 family, not by an application check alone, so two concurrent claims cannot both be stored (non-blocking 4) |
 | Allowlist | Only the fields above. **Never**: tokens, cookies, session IDs, form values, amounts, user text, URLs, rates or any payload |
-| Authorization | Session user must own `request_id`; claim accepted only within 5 min `[#?]` of the request's creation |
+| Authorization | The authenticated user must own the record named by `record_id` (§8.1); claim accepted only within 5 min `[#?]` of the record's `createdAt` |
 | Trust | Stored as `trust_level: browser_claim`; the server adds `received_at` and user ID; it does not "correct" or enrich the claim from its own state |
 | Never an engine input | Not read by any routing, mapper or inference-client module (AD-6 B-3); not in `decision_id`, `clientReference`, a cache key or engine logs |
 | Failure | A failed or missing claim never blocks, delays or rolls back the routing record or its audit row (AD-6 §6.1); the UI shows nothing about it; a gap stays a gap |
@@ -163,19 +205,20 @@ AD-6 §6.1 and AD6-Q3: displayed context is recorded separately; v0.4 requests a
 | Item | Proposal (provisional) |
 |---|---|
 | **Owning module** | A **separate context-claims module** in Express, mounted by `app.ts` under `/api/rt/v1/context-claims`. It is **neither** the observation module (which AD-1 forbids to write to the database and to import routing code) **nor** a v0.4 route (which is T-7-protected and outside this extension) |
-| **Permitted dependencies** | The authentication and session middleware; a **read-only ownership lookup** on the P-1 record (`id`, `createdBy`, `createdAt` only) through its own minimal query; the P-6 insert of AD-11 v0.2 (draft). It imports **no** routing, mapper, inference-client or observation module, so T-16's graph is unchanged |
+| **Permitted dependencies** | The authentication and session middleware; a **read-only ownership lookup** on the P-1 record (`id`, `createdById`, `createdAt` only — `createdById` is the Prisma **column**; `createdBy` is the relation, and the v0.4 response field of the same name) through its own minimal query; the P-6 insert of AD-11 v0.2 (draft). It imports **no** routing, mapper, inference-client or observation module, so T-16's graph is unchanged |
 | **Never** | Read by any routing, mapper or inference-client module (AD-6 B-3); written in the transaction of a P-1 record or its audit row (AD-6 §6.1; AD-11 §4) |
-| **Check order** | (1) authentication — 401 before anything else, as contract v0.4 Q14 does for `/api/v1`; (2) **Origin** — AD-10 v0.2 §5.1's state-changing row: own origin only; absent or `null` refused; (3) **CSRF** — the required custom header of AD-10 v0.2 §5.1, which v0.2 extends to every state-changing request under `/api/`; (4) rate limit (§8 "Rate"); (5) body: closed schema, ≤ 8 KiB, ≤ 50 items, else 422; (6) **ownership**: the session user equals the record's `createdBy`, and the record is ≤ 5 min old `[#?]`; (7) one claim per record, else 409 |
-| **Ownership versus visibility** | Contract v0.4 §3.1 lets **any** authenticated user read every record. Attaching a claim is stricter: **only the submitting user** may, because a claim asserts what *that user* saw. A non-owner gets **403**; an unknown `request_id` **404**. Codes and envelope follow v0.4's error shape; whether they are new codes is part of this endpoint's own contract, provisional `[#?]` |
+| **Check order** | (1) authentication — 401 before anything else, as contract v0.4 Q14 does for `/api/v1`; (2) **Origin** — AD-10 v0.2 §5.1's state-changing row: own origin only; absent or `null` refused; (3) **CSRF** — the required custom header of AD-10 v0.2 §5.1, which v0.2 extends to every state-changing request under `/api/`; (4) rate limit (§8 "Rate"); (5) body: closed schema, ≤ 8 KiB, ≤ 50 items, else 422; (6) **ownership**: `request_kind` selects `TransactionRequest` or `Comparison`; the row whose `id` = `record_id` is read; the **authenticated user's ID equals that row's `createdById`**, and the row is ≤ 5 min old `[#?]`; (7) one claim per record, else 409 (the P-6 uniqueness constraint) |
+| **Identifier rule (Varshini F2)** | Ownership is decided **only** from the persisted record `id` and its `createdById`. **`X-Request-Id`, and contract v0.4's `requestId` that echoes it, are never used for ownership, lookup or deduplication:** they are client-supplied correlation strings, not record identifiers. v0.2's field name `request_id` invited exactly that confusion and is withdrawn |
+| **Ownership versus visibility** | Contract v0.4 §3.1 lets **any** authenticated user read every record. Attaching a claim is stricter: **only the submitting user** may, because a claim asserts what *that user* saw. A non-owner gets **403**; an unknown `record_id` **404**. Codes and envelope follow v0.4's error shape; whether they are new codes is part of this endpoint's own contract, provisional `[#?]` |
 | **Under bearer tokens** (until milestone 3.2) | Origin and the custom header still apply; `SameSite` does not, because no cookie exists. The endpoint is therefore **not** enabled before its protection set is complete — it depends on AD-10 v0.2 §5.1 and milestone 3.2 |
 | **Evidence** | A cross-origin `POST` and a `POST` without the custom header are refused before the body is read; a non-owner's claim is 403 and writes nothing; a second claim is 409; the per-user limit returns 429; T-9 holds throughout |
 
 ## 9. Alignment
 
-- **AD-2 (v0.2, PR #32, draft):** consumer replay (R-9) is server-side only; browsers get snapshots (R-10). The channel never carries replayed history.
+- **AD-2 (v0.2, PR #32, merged into `feature/phase3-platform` at `0af9156`; DRAFT, not an approved architecture):** consumer replay (R-9) is server-side only; browsers get snapshots (R-10). The channel never carries replayed history.
 - **AD-9 (PR #29, merged into `feature/phase3-platform`, still draft):** the panel's degradation states (disconnected, paused, offline, stopped, too many streams) are AD-9 §3.3's; this document adds no state, and `route_status` loss is not a degradation state. AD-9 §3.5's authentication semantics change only as AD-10 v0.2 §4.5 states.
-- **AD-10 (v0.2, PR #33, draft):** sessions, origin, CSRF, revocation, rate limits and the contract transition (§4, §8.1).
-- **AD-8 (v0.4, PR #30, draft) — limits kept explicit (non-blocking 7):** (1) **T6 is not instrumented**. AD-8 §2.4 *proposes* using each `update`'s `server_time` as the correlated marker, but no such measurement exists and whether to build it is **AD8-Q9**; so no render-latency figure exists for this channel, and AD-8 N-1 and N-4(b) are blocked. (2) **Capacity:** AD-8 v0.5 §6.3 keeps 3 streams per user and 20 in total; AD-2's 60 exceeds it, and AD-8 §6.2.1 requires AD-8 to be revised, re-approved and its budgets re-measured before milestone 3.4 if 60 is adopted. `route_status` adds pending state per stream (§7) that AD-8's capacity test must include.
+- **AD-10 (v0.2, PR #33 at `a8fb24b`, open, draft):** sessions, origin, CSRF, revocation, rate limits and the contract transition (§4, §8.1).
+- **AD-8 (v0.5, PR #30, merged into `feature/phase3-platform`; DRAFT, not approved) — limits kept explicit:** (1) **T6 is not instrumented**. AD-8 §2.4 *proposes* using each `update`'s `server_time` as the correlated marker, but no such measurement exists and whether to build it is **AD8-Q9**; so no render-latency figure exists for this channel, and AD-8 N-1 and N-4(b) are blocked. (2) **Capacity:** AD-8 v0.5 §6.3 keeps 3 streams per user and 20 in total; AD-2's 60 exceeds it, and AD-8 §6.2.1 requires AD-8 to be revised, re-approved and its budgets re-measured before milestone 3.4 if 60 is adopted. `route_status` adds pending state per stream (§7) that AD-8's capacity test must include.
 
 ## 10. Decisions
 
@@ -192,6 +235,17 @@ AD-6 §6.1 and AD6-Q3: displayed context is recorded separately; v0.4 requests a
 
 ## 11. Approval checklist
 
-- [ ] Dev C: §3, §4 (including the opener changes), §5 to §5.2 client handling and the separate status store, §8 capture
+**Proposed rows for AD-13 §2.9's cross-AD verification map (Varshini, non-blocking 2).** AD-13 is Dev D's and is not edited here; these are the obligations it would carry:
+
+| Source | Obligation | Layer | Runs |
+|---|---|---|---|
+| AD-7 AD7-D3, §5 | Route-status isolation: user B receives nothing of user A's | Stack | 3.5 |
+| AD-7 §5.3 | Producer non-interference: port failing, blocked or absent leaves v0.4 responses, records and `decision_id`s identical | Stack (extends AD-6 T-1) | 3.5 |
+| AD-7 §5.1 | No status before the response is final; `422` and failed comparisons publish none | Contract and unit | 3.5 |
+| AD-7 §5.2 | T-16 import graph and T-17 frontend state separation with the producer and consumer in place | Contract; browser | 3.5 |
+| AD-7 §6, AD7-D7 | A D-24 client against a 1.1 server shows no protocol fault | Browser | 3.5, after AD7-D7 |
+| AD-7 §8, §8.1 | Context claims: cross-origin, missing custom header, non-owner (403), duplicate (409), rate limit (429); `X-Request-Id` never accepted as an owner key; T-9 | Stack | 3.5, after 3.2 |
+
+- [ ] Dev C: §3, §4 (including the opener changes), §5 to §5.3 client handling and the separate status store, §8 capture
 - [ ] Dev D: §6 schema location, §7, §8.1, CI implications (T-7, T-16, T-17)
 - [ ] Project owner: AD7-D1 to **AD7-D8**
