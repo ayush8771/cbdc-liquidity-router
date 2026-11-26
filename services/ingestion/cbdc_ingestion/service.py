@@ -14,13 +14,37 @@ AD-1 §3.1 requires in place of `204` or `404`.
 `instance_id` is a fresh UUID at each start (AD-1 §3.1) and is **diagnostic
 only**: AD-1 §3.4 says consumers order by `source_timestamp` and that an
 ingestion restart needs no reset, so nothing may key state on it.
+
+---
+
+**Phase 3.3-A: the adapter path is additive, and the generator path is the
+default** (authorization §7.2).
+
+`IngestionService(seed, ...)` behaves **exactly** as it did: it owns an
+`FxGenerator`, `tick()` drives it, and **nothing reads the registry, the
+allocation file or the adapters package**. D-24 behaviour is unchanged, and
+`test_seed_allocation.py` asserts both halves — that the generator starts with
+no registry record and no allocation entry, and that the default path never
+calls `load_registry`.
+
+The adapter path exists only when a caller passes `sources=` (from
+`CBDC_INGESTION_SOURCES`, empty by default). It is **off unless named**: no
+registry record selects it, and selecting one is a deliberate act.
+
+The adapter path is **not activatable today** — `pipeline.build_envelope`
+refuses by name, because `envelope.py` writes a constant `source_id` and is
+untouched by rule (§7.3). See `pipeline.py`'s docstring: it needs an owner
+decision and is not taken here. **Also still missing from the §3.4 path:**
+`dedup.py` (AD5-Q1, AD5-Q8), `status.py` (AD-5 §9.2) and the plausibility
+bounds. Until they exist the adapter path is incomplete, and it says so rather
+than appearing complete.
 """
 from __future__ import annotations
 
 import logging
 import threading
 import uuid
-from typing import Optional
+from typing import Optional, Sequence
 
 from . import PROTOCOL_VERSION, SOURCE_ID
 from .clock import Clock, SystemClock, format_timestamp
@@ -44,11 +68,20 @@ class IngestionService:
     """The component's state and its generator thread."""
 
     def __init__(self, seed: int, *, clock: Optional[Clock] = None, case_id: str = "normal",
-                 start_ms: Optional[int] = None) -> None:
+                 start_ms: Optional[int] = None,
+                 sources: Sequence[str] = (),
+                 registry_path=None, allocations_path=None) -> None:
         self.clock: Clock = clock or SystemClock()
         self.instance_id = str(uuid.uuid4())
         self.store = LatestStore()
         self.generator = FxGenerator(seed, self.clock, start_ms=start_ms, case_id=case_id)
+        # Phase 3.3-A. Empty by default, so the three lines below do nothing and
+        # the registry is never read: the D-24 path is exactly as it was.
+        self.sources = tuple(sources)
+        self._registry_path = registry_path
+        self._allocations_path = allocations_path
+        self._adapters: list = []
+        self._sink = None
         self._state = "starting"
         self._state_lock = threading.Lock()
         self._stop = threading.Event()
@@ -81,6 +114,10 @@ class IngestionService:
         """
         if self._thread is not None or self.state == "running":
             return self
+        # The registry is loaded **only** when a source was named. With none
+        # named this is a no-op and the default path is untouched (§7.2).
+        if self.sources:
+            self._start_adapters()
         if not run_loop:
             self._set_state("running")
             return self
@@ -100,6 +137,12 @@ class IngestionService:
         thread, self._thread = self._thread, None
         if thread is not None:
             thread.join(timeout=timeout_s)
+        # Cooperative, and idempotent from any state (AD-5 §5.2, authorization
+        # §5.2): the cancellation signal is delivered and the adapter returns.
+        # Nothing is killed and no thread is terminated from outside.
+        for adapter, _record, _seed in self._adapters:
+            adapter.stop(deadline_ms=2000)
+        self._adapters = []
         self._set_state("stopped")
         logger.info("ingestion stopped: %s", self.store.counters())
 
@@ -132,7 +175,69 @@ class IngestionService:
                 applied += 1
             else:
                 self._log_withheld(event)
+        applied += self._tick_adapters(now_ms)
         return applied
+
+    # ----------------------------------------------------------- the adapter path
+    def _start_adapters(self) -> None:
+        """Loads the registry, validates it, and starts each selected adapter.
+
+        **Every check is a startup failure, never a warning** (AD-5 §2.1,
+        acceptance criteria 1, 2 and 8): the registry and the allocations are
+        validated, each record's `describe()` is checked against it, and each
+        adapter's seed comes from its **recorded allocation** — never from the
+        record and never from `CBDC_INGESTION_SEED`, which belongs to the
+        exempt D-24 generator.
+
+        Imported here, not at module import, so the default path does not even
+        load the adapters package.
+        """
+        from .adapters.registry import check_description, load_registry, selected_records
+        from .adapters.synthetic_fx import SyntheticFxAdapter
+        from .adapters.context import AdapterContext, CancellationSignal, NullMetrics
+        from .sink import ServiceSink
+
+        registry = load_registry(self._registry_path, self._allocations_path)
+        records = selected_records(registry, self.sources)
+        self._sink = ServiceSink(self.store)
+        for record in records:
+            allocation = registry.allocation_for(record.source_id)
+            if allocation is None:  # unreachable: load_registry already refused
+                raise RuntimeError(f"{record.source_id}: no active seed allocation")
+            adapter = SyntheticFxAdapter.for_record(record, allocation.seed)
+            check_description(record, adapter.describe())
+            context = AdapterContext(
+                source_id=record.source_id, clock=self.clock, sink=self._sink,
+                cancellation=CancellationSignal(), metrics=NullMetrics(),
+            )
+            adapter.start(context)
+            self._adapters.append((adapter, record, allocation.seed))
+            logger.info("adapter started: source_id=%s adapter_id=%s state=%s",
+                        record.source_id, record.adapter_id, adapter.state)
+
+    def _tick_adapters(self, now_ms: Optional[int] = None) -> int:
+        """One production cycle per started adapter. A no-op when none is."""
+        if not self._adapters:
+            return 0
+        from .pipeline import run_cycle
+
+        published = 0
+        for adapter, record, seed in self._adapters:
+            result = run_cycle(adapter, record, self._sink, seed=seed,
+                               retrieved_at_ms=self.clock.now_ms() if now_ms is None else now_ms)
+            published += result.published
+            for reason in result.reasons:
+                self._log_adapter_reason(record.source_id, reason)
+        return published
+
+    def _log_adapter_reason(self, source_id: str, reason: str) -> None:
+        """Rate-limited, and the reason code only — never a payload (AD-1 §3.4)."""
+        key = f"{source_id}:{reason}"
+        now_ms = self.clock.now_ms()
+        if now_ms - self._last_log_ms.get(key, -LOG_INTERVAL_MS) < LOG_INTERVAL_MS:
+            return
+        self._last_log_ms[key] = now_ms
+        logger.warning("adapter item withheld: source_id=%s reason=%s", source_id, reason)
 
     def _log_withheld(self, event: dict) -> None:
         """Rate-limited diagnostics for an event that did not become current.

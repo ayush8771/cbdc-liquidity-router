@@ -140,6 +140,60 @@ digests.
 
 Every timing test drives a manual clock, so the suite needs no real waiting.
 
+## The Phase 3.3-A adapter contract, as implemented
+
+Authorized by `docs/PHASE3_33A_AUTHORIZATION.md` v1.2 §7, with the exclusions of
+§8 and the acceptance criteria of §9. **Synthetic sources only**, local-only, and
+**additive**: the D-24 generator above is unchanged and remains the default.
+
+| Module | What it is |
+|---|---|
+| `adapters/base.py` | AD-5 §3.2's operations and §3.3's state machine. `failed_permanent` is reached only by a permanent fault and left by nothing |
+| `adapters/context.py` | The **closed** field set an adapter is given: injected clock, sink, cancellation, metrics, credential resolver. Never a database handle, an inference client or a filesystem writer |
+| `adapters/faults.py` | AD-5 §7.1's taxonomy, partitioned into permanent, recoverable and item-level |
+| `adapters/registry.py` | AD-5 §2.2's record as version-controlled configuration, A-2's startup validation and AD-12 §3.1's collision safeguards |
+| `adapters/synthetic_fx.py` | The first adapter. Wraps the generator's **pure functions**, so values cannot drift between the two paths |
+| `sink.py` | AD-5 §3.6's three channels. `observations` is the existing `LatestStore`; `quarantine` and `faults` are **bounded counters, not queues** |
+| `pipeline.py` | The service-side steps around an adapter (AD-5 §3.4) |
+| `registry/sources.json`, `registry/seed_allocations.json` | The one synthetic record and the seed allocations. **Read-only at runtime**, never written by the process, inside the package where the existing `COPY` already carries them — no Dockerfile, `.dockerignore` or Compose change |
+
+### The D-24 generator path is the default, and is exempt
+
+`CBDC_INGESTION_SOURCES` is **empty by default**, which selects nothing. With it
+empty the registry and allocation files are **not read at all**, the adapters
+package is not imported by the default path, and the events are byte-identical.
+
+The generator takes its seed from `CBDC_INGESTION_SEED` and has **no registry
+record and no allocation entry**. It is exempt from the registry and
+seed-allocation checks, and must be: an unscoped refusal would refuse to start
+the approved slice. `tests/test_seed_allocation.py` asserts both halves — that it
+still starts, and that the default path never loads the registry.
+
+### What is NOT implemented yet
+
+The adapter path is wired and validated but **not activatable**, and three
+authorized modules are still missing:
+
+| Missing | Criteria |
+|---|---|
+| `dedup.py` — AD5-Q1's two keys and AD5-Q8's outcomes in the order C-b, D, C-a | 5, 5a |
+| `status.py` — AD-5 §9.2's internal status machine, in process only | 6 |
+| Plausibility bounds — quarantine, never reject and never clamp | 16 |
+
+**And one unresolved item blocks activation.** `envelope.py` writes a constant
+`source.source_id` of `synthetic.fx` and is **untouched by rule** (§7.3), so the
+adapter path cannot emit an envelope carrying its own record's `source_id`.
+`pipeline.build_envelope` therefore **refuses by name**, with a permanent
+`contract_violation`, rather than emit an envelope that contradicts the record
+that selected it. It needs an owner decision — an authorized `envelope.py` change
+or an agreed `source_id` — and that decision is **not** taken here.
+
+**Also out of scope, and not claimed:** any real provider or contact with one,
+any outbound network access, any credential, restart-safe deduplication,
+acknowledgement or replay, the distribution mechanism, and any capability
+activation. **All four capability gates remain closed**, and **A-4 fault
+injection is not exercised**, so the 3.3-S exit is not reached.
+
 ## Not in this component
 
 | Item | Owner |
