@@ -1,6 +1,14 @@
 # AD-8: Non-Functional Budgets — Latency, Freshness, Monitoring and Recovery
 
-**Status:** **DRAFT v0.4**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
+**Status:** **DRAFT v0.5**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
+**Revision vv0.5, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Anvesh's (Dev B's) CHANGES_REQUESTED re-review of PR #30** on commit `e457bcf`, together with the conditions in **Nisarga's** re-review that fall in the same sections. Both texts are on the pull request, not in the repository. Documentation only; it preserves every correction from **Varshini's** and Nisarga's earlier rounds, and changes no approved D-24 contract, schema, threshold, ownership or implementation. Cross-AD decisions stay **provisional**: AD-2 is itself a draft (PR #32), and nothing here approves it or is approved by it. Changes:
+
+- **Blocker 3 (H6) fixed — §6.2.1 rewritten and extended beyond event rates.** A dimension-by-dimension table now covers **burst rate and duration** (AD-8 100/s for 10 s versus **AD-2 R-3** 200/s for 60 s, 12× the events), **browser stream concurrency** (20 total versus **R-11** 60, 3×), **server-side consumers** (**R-11** ≤ 3, AD-8 silent), **distinct subjects**, **producer retention before acceptance** (**R-7** 12,000 events / 32 MiB / 10 min, AD-8 silent), **consumer replay** (**R-9** 24 h, AD-8 silent), **browser replay**, **durability**, **overload** and **latency**. The reconciliation rule now applies **per dimension**, and adds a case for dimensions AD-8 leaves silent: AD-8 **adopts** AD-2's approved figure without re-measuring a bound it never claimed. §8.1 records where a recovery objective would come from.
+- **Blocker 3, second part — the contradictory G-1 target is corrected. New §6.1a.** "100%, with unexplained loss ≥ 99.9% accounted" was two incompatible targets in one cell. G-1 is now (1) an **accounting identity** that must balance exactly, with **no percentage target**, matching **AD-2 R-6**; (2) **measured** loss that is bounded and counted, not budgeted — AD-2 **L-1** buffer exhaustion and **L-2** expiry; and (3) **crash and restart loss**, which is **unquantifiable** (AD-2 **L-3**), reported as a **gap marker with the last acknowledged position and never as a number**, with the identity reset at the boundary and **no zero-loss claim across it**. **N-13** and the metric catalogue are aligned, and a durable producer buffer is noted as needing an approved change to ingestion's no-volume isolation.
+- **Blocker 4 (M1) fixed — §4.2:** the economic-indicator `unavailable_after_ms` becomes **max(3 × release period, 90 days)**, so AD-4 §7's `stale_after ≤ unavailable_after` invariant holds at every period. The old 90-day constant broke it for anything published less often than every 60 days — an annual series would have been **withdrawn at 90 days before going stale at 547**. A worked table and the AD-5 **A-2** startup check are recorded.
+- **New §6.2.1a** (Nisarga): the **500-subject** capacity bound is a **store and pipeline** figure and is **not** a browser contract. The approved channel carries **exactly four FX pairs in a fixed order**, enforced in the schema, Express and the browser, so growing the subject set is a **protocol change** (AD-4 Part 2 §6.2.1, **AD4P2-Q7**), not a capacity decision. **Nothing in AD-8 authorizes a fifth pair.**
+- **Message-size wording corrected** (Nisarga): §6.2 now distinguishes the **65,536-byte event payload** limit, excluding SSE framing, from the **131,072-byte** client parser buffer, and notes neither bounds a stored envelope.
+
 **Revision v0.2, 26 November 2026 — still DRAFT.** Applies **Nisarga's CHANGES_REQUESTED review of PR #30**, submitted on v0.1 (`5f78500`); its text is on the pull request, not in the repository. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
 
 - **Blocker 1 fixed:** **new §6.0** separates **G-1 event delivery** (no loss, T1 to T4) from **G-2 browser update coalescing** (convergence, T4 to T6). v0.1 stated one ≥ 99.9% delivery target while §6.3's newest-wins backpressure deliberately discards superseded updates — a contradiction. §6.1's single indicator becomes two, §6.3's backpressure is identified as G-2, and acceptance is split into **N-13** (accounting identity) and **N-14** (coalescing and convergence invariants).
@@ -247,7 +255,7 @@ AD-8 supplies the values. It changes none of the rules above.
 | FX, genuine streaming | Provider's, typically 1 000 to 5 000 | 2 × interval | 3 × interval | 15 × interval | 2 000 |
 | FX, polled | The poll interval | 2 × interval | 3 × interval | 15 × interval | 2 000 |
 | FX, daily reference rate (`scheduled`) | 86 400 000 | **null** — never Live | 129 600 000 (1.5 days) | 604 800 000 (7 days) | 60 000 |
-| Economic indicator | Release schedule, or null | **null** | 1.5 × the release period, or 30 days if irregular | 90 days | 60 000 |
+| Economic indicator | Release schedule, or null | **null** | **1.5 × the release period**, or 30 days if irregular | **max(3 × the release period, 90 days)**, or 90 days if irregular | 60 000 |
 | Announcement | null (irregular) | **null** | **null** — an announcement does not go stale; it is dated | null | 60 000 |
 | Bank holiday calendar | 86 400 000 | **null** | 7 days | 30 days | 60 000 |
 | Manual entry | null | **null** | **null** — shows its age and no freshness state (AD-4 §7) | null | 0 |
@@ -255,6 +263,17 @@ AD-8 supplies the values. It changes none of the rules above.
 **Why synthetic is never Live.** A synthetic value is labelled **Simulated** by AD-4 §8.1 rule 4, which precedes the Live rule, so a `live_max_age_ms` would have no effect. Setting it to null states that plainly instead of leaving a dead setting in the registry. AD-1 §3.2 fixes exactly this for the slice: `live_max_age_ms: null`.
 
 **Why `3 × interval` for stale.** It is **F-5's rule** — "a synthetic source's value is stale after three expected update intervals" — generalized to every interval-driven source. Two intervals would make a single missed update stale, which is normal jitter; three means two consecutive misses, which is a real gap.
+
+**The invariant binds, so a long release period lifts the withdrawal threshold too.** AD-4 §7 requires `live_max_age_ms` ≤ `stale_after_ms` ≤ `unavailable_after_ms` where set, and §4.2's earlier draft broke it for any indicator published less often than every 60 days: an annual series would have had `stale_after_ms` of 1.5 × 365 = **547 days** against an `unavailable_after_ms` of **90 days**, so it would have been withdrawn before it was ever stale. Both thresholds are therefore expressed as multiples of the **same** release period — 1.5× and 3× — with 90 days as a floor, which keeps the ordering true at every period:
+
+| Release period | `stale_after` (1.5×) | `unavailable_after` (max(3×, 90 d)) | Ordering holds |
+|---|---|---|---|
+| Monthly (30 d) | 45 d | 90 d | Yes |
+| Quarterly (90 d) | 135 d | 270 d | Yes |
+| Annual (365 d) | 547 d | 1,095 d | Yes |
+| Irregular (no period) | 30 d | 90 d | Yes |
+
+**A registry record is validated against the invariant, not trusted to satisfy it.** AD-5 §13 obligation **A-2** already makes an out-of-order freshness profile a **startup failure**, so a per-source override that broke the ordering could not load. §4.2's formulas are defaults; the check is what guarantees the invariant.
 
 **Why announcements and manual entries never go stale.** They are not samples of a continuing quantity, so there is no interval against which lateness means anything. An announcement from last month is not stale, it is dated, and AD-4 §8.1 already requires every value to show its timestamp. AD-4 §7 permits this for `manual`; for `announcement` it needs the **AD8-Q2** decision (§11), because AD-4 §7 says a source without `stale_after_ms` cannot be displayed unless its transport is `manual`.
 
@@ -349,10 +368,42 @@ Monotonicity holds: age only increases between events, so a value never returns 
 |---|---|---|---|
 | Observation channel availability | 99.0% | Calendar month | A single host with no redundancy; planned restarts are excluded and announced |
 | Routing path availability | **Unchanged from Phase 2** | — | Not set here; A-8's limits stand |
-| **G-1** event accounting (every emitted event in exactly one recorded outcome: delivered, quarantined, rejected, duplicate or late) | **100%**, with unexplained loss ≥ 99.9% accounted | Rolling 24 h | An unaccounted event is a **defect**; §3.1 delivers late rather than dropping. Coalesced updates are **not** counted here: they are G-2 (§6.0) |
+| **G-1** event accounting: within one ingestion process lifetime, every emitted event is in **exactly one** recorded outcome | **The identity balances exactly** (§6.1a). There is **no percentage target**: an unaccounted event is a **defect**, not a budgeted loss | Per process lifetime, reported rolling 24 h | §3.1 delivers late rather than dropping. Coalesced updates are **not** counted here: they are G-2 (§6.0). **Loss across a crash or restart is a separate, unquantifiable case** and is reported as a gap, never as a number (§6.1a) |
 | **G-2** convergence (share of quiescent evaluations where a subject's displayed value equals the latest value Express accepted) | **100%** | Rolling 24 h | A **coalesced** superseded update is not a loss (§6.0). Dropping the **newest** value, or failing to converge, is a defect |
 | Freshness attainment (share of evaluations where a displayed value is `fresh`) | ≥ 95% per source | Rolling 24 h | Depends on the provider, so it is reported per source and is a Gate 3 data-quality input, not only an engineering one |
 | Planned maintenance | ≤ 1 window per week | — | Announced to the named pilot users |
+
+##### 6.1a G-1 accounting: an identity, a bounded measured loss, and an unquantifiable gap
+
+**[PROPOSED]** The earlier draft stated G-1 as "**100%**, with unexplained loss ≥ 99.9% accounted", which is **two incompatible targets in one cell** — a 100% guarantee and a 0.1% allowance — and it had no account of what a crash loses. It is replaced by three separate statements, aligned with **AD-2 R-6** and AD-2 §7's fault model.
+
+**1. The accounting identity (the real G-1 target).** Within one ingestion process lifetime, per source:
+
+```text
+emitted = accepted + rejected + quarantined + duplicates
+        + buffer_exhausted + buffer_expired + still_buffered
+```
+
+It **balances exactly or the test fails**. This is a conservation property, not a percentage: there is no acceptable residue, because an event that is in no outcome is one nobody can account for. **AD-2's R-6 invariant is the same identity**, and §9's **N-13** asserts it.
+
+**2. Measured loss is bounded and counted, not budgeted.** Some outcomes in that identity *are* losses, and they are legitimate because they are **counted**:
+
+| Loss | AD-2 | Accounted as |
+|---|---|---|
+| Producer buffer exhaustion | **L-1** | `buffer_exhausted` per source; source status degraded; the discard rule is AD-3's |
+| Buffer entry expiry | **L-2** | `buffer_expired` per source |
+
+They are **not** a reliability allowance to be spent: each occurrence is a capacity or outage signal, alertable under §7.3, and the identity still balances.
+
+**3. Crash and restart loss is unquantifiable and is reported as a gap.** This is the case the earlier wording omitted:
+
+- **An ingestion crash or restart with an in-memory buffer loses every unacknowledged entry** (AD-2 **L-3**). The count dies with the process, so the number lost is **not knowable**.
+- It is therefore recorded as a **gap indication** — a restart marker with the last acknowledged position — and **never as a number of lost events**.
+- **The identity is reset at the boundary**, and **no claim of zero loss is made across it**. A G-1 figure is always "within one process lifetime".
+- Making it quantifiable would need a **durable** producer buffer, which would need an approved change to ingestion's no-volume isolation (AD-1 §3.6) — so it is **not** proposed here.
+- **Provider-side loss before ingestion received anything** (AD-2 **L-4**) is likewise only *indicated*, by timestamp-gap counters, and is unrecoverable without a Gate 3-permitted backfill.
+
+**What this does not weaken.** G-1 still forbids silent loss: every loss is in a counter, a gap marker, or both, and §7.3's **G-1** alert fires on `observation_unaccounted_total` above zero. What it stops claiming is a *guarantee across a crash*, which a single host with an in-memory buffer cannot give.
 
 **Explicitly not targeted:** redundancy, failover, multi-host operation and a recovery-point objective for observations. A single host cannot provide them, and claiming otherwise would breach exit criterion 8.
 
@@ -365,34 +416,68 @@ Monotonicity holds: age only increases between events, so a value never returns 
 | Sustained, all sources | **20 events/s** |
 | Burst, for up to 10 s | **100 events/s** |
 | Distinct subjects in current state | ≤ 500 |
-| Largest single envelope | 65 536 UTF-8 bytes of payload JSON (AD-1 §3.3.5, clarification **C-2**) |
+| Largest single event payload | **65,536 UTF-8 bytes** of one event's `data` JSON, **excluding SSE framing**; exactly 65,536 is accepted. The client's unterminated parser buffer is a **separate** limit of **131,072 bytes** (AD-1 §3.3.5, clarification **C-2**). Neither is a limit on an envelope's size in the store |
 | Sustained, per source | 10 events/s |
 
 The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envelope is an order of magnitude above the only measured workload. It is a **design envelope**, not a measurement, until §9's load test runs.
 
-#### 6.2.1 Provisional capacity: where AD-2 and AD-8 differ, and how they reconcile
+#### 6.2.1 Provisional capacity and recovery: where AD-2 and AD-8 differ, and how they reconcile
 
-**[PROPOSED]** Three different numbers are in play, and they are **not** three estimates of one quantity. Conflating them would let a slice measurement be read as a requirement, or a design envelope as evidence.
+**[PROPOSED]** Three different kinds of number are in play, and they are **not** three estimates of one quantity. Conflating them would let a slice measurement be read as a requirement, or a design envelope as evidence.
 
 | Figure | Value | Kind | Owner | Status |
 |---|---|---|---|---|
 | **Slice throughput** | **2 events/s**, 4 pairs every 2 s staggered 500 ms; Express polls every 500 ms | **Measured**, on the only workload that exists | AD-1 §3, approved for the slice | **Approved**, and explicitly "for the slice, not final budgets" |
-| **AD-8 design envelope** | **20 events/s** sustained, **100 events/s** burst, ≤ 500 subjects | **A commitment to test against.** It is what §3's latency budgets are claimed under | AD-8 §6.2 | **Provisional**, until the owner approves this document and §9's load tests run |
-| **AD-2 throughput requirement** | **Unknown** | **A requirement**, derived from estimated event rates per source category | AD-2, lead Dev B | **Not written** |
+| **AD-8 design envelope** | §6.2 and §6.3 | **A commitment to test against.** It is what §3's latency budgets are claimed under | AD-8 | **Provisional**, until the owner approves this document and §9's load tests run |
+| **AD-2 requirements** | R-1 to R-17 | **Requirements**, derived from estimated rates per source category | AD-2, lead Dev B | **Drafted, not approved** |
 
-**The order of derivation is backwards today, and that is deliberate.** Scope §7.3 has AD-2 state throughput, ordering, replay, durability and operational burden **with estimated event rates per source category**, and AD-3 then choose the mechanism **from** AD-2 — because the roadmap forbids choosing a mechanism before its requirements exist (§4.B). AD-8 cannot wait for AD-2, because AD-9 and milestone 3.5 need the budgets, and a latency budget is meaningless without a stated load. So AD-8 **asserts an envelope** and AD-2 later states a requirement against it.
+**The order of derivation is backwards today, and that is deliberate.** Scope §7.3 has AD-2 state throughput, ordering, replay, durability and operational burden **with estimated event rates per source category**, and AD-3 then choose the mechanism **from** AD-2 — because the roadmap forbids choosing a mechanism before its requirements exist (§4.B). AD-8 cannot wait for AD-2, because AD-9 and milestone 3.5 need the budgets, and a latency budget is meaningless without a stated load. So AD-8 **asserts an envelope** and AD-2 states requirements against it.
 
-**Reconciliation rule.** When AD-2 is written:
+##### The open differences, by dimension
 
-| If AD-2's requirement is | Then |
+**Every row is unresolved and every number on both sides is provisional.** Reconciliation is **AD-2's and the owner's**, not this document's; AD-8 records the difference rather than picking a winner.
+
+| Dimension | AD-8 (this document) | AD-2 draft | Difference |
+|---|---|---|---|
+| **Sustained rate** | 20 events/s (§6.2) | **R-1** 20 events/s | **Agree** |
+| **Burst rate and duration** | **100 events/s for 10 s** (= 1,000 events) | **R-3** **200 events/s for 60 s** (= 12,000 events) | **Differs on both axes**, 2× the rate and 6× the duration, so 12× the events. AD-2 records it as its conflict **X-1** |
+| **Browser stream concurrency** | **20 in total**, 3 per user (§6.3) | **R-11** **60 browser streams** (20 users × 3), plus ≤ 3 server-side consumers | **Differs 3×.** AD-2 records it as **X-1**. §6.3's per-user cap of 3 agrees |
+| **Server-side consumers** | Not bounded here | **R-11** ≤ 3 | **AD-8 is silent**; AD-2's bound stands unless it is contradicted |
+| **Distinct subjects** | ≤ 500 (§6.2) | R-1 assumes ≤ 20 FX subjects at 1/s | **AD-8's is far wider**, and it is a **store and memory** bound, not a browser one (§6.2.1a) |
+| **Producer retention before acceptance** | **Not specified here.** §8.1 states only that observations have no recovery-point objective in v1 | **R-7** a bounded ordered buffer: **12,000 events**, **32 MiB**, **10 min** entry age, first limit reached applies | **AD-8 is silent.** AD-2's buffer is the mechanism that would give §8.1 an objective at all |
+| **Consumer replay window** | Not specified here | **R-9** **24 h**, positions stored durably | **AD-8 is silent.** It bears directly on §8.1's recovery objectives |
+| **Browser replay** | Implicit in §3.4: a snapshot replaces all state | **R-10** browsers **never** replay; one snapshot per (re)connection | **Agree**, and AD-2 states it explicitly |
+| **Durability after acceptance** | **G-1** (§6.0): no accepted event lost or unaccounted | **R-6** under AD-2 §7's fault model, with **L-1 to L-6** naming what is **not** covered | **Compatible, and AD-2 is more precise.** §6.1 is corrected to match (§6.1a) |
+| **Overload behaviour** | **G-2** coalescing, newest wins per subject (§6.0, §6.3) | **R-12** accepted events are never dropped by overload; coalescing is **not** loss and is counted separately; an undrainable stream is **closed and resyncs by snapshot** | **Agree in substance.** AD-2 adds the stream-close rule, which §6.3's "no drain within 10 s destroys the stream" already implies |
+| **Latency** | §3.1, §3.4, with §2.3.1's and §3.4.1's unmeasured status | **R-13** defers measurement points to AD-8 and withdraws its own segment number | **Agree:** AD-2 defers to AD-8 here, and AD-8 defers capacity to AD-2 |
+
+##### Reconciliation rule
+
+**[PROPOSED]** When AD-2 is approved, for **each dimension independently** — the rows above are separate constraints, so one may move without the others:
+
+| If AD-2's approved requirement is | Then |
 |---|---|
-| **At or below** the §6.2 envelope | Nothing changes. AD-8's budgets already hold at a higher rate than required, and AD-2 cites this envelope as headroom |
-| **Above** the §6.2 envelope | **AD-8 is revised and re-approved before milestone 3.4 begins.** The §3 latency budgets were measured under the old envelope, so they are re-measured, not re-asserted. AD-2's own approval records the dependency |
-| **Lower but with a different shape** — a larger burst, more subjects, bigger envelopes | The envelope is amended on the dimension that changed. Each row of §6.2 is an independent constraint, so one may move without the others |
+| **At or below** AD-8's figure | Nothing changes. AD-8's budgets already hold at or above what is required, and AD-2 cites the envelope as headroom |
+| **Above** AD-8's figure | **AD-8 is revised and re-approved, and its affected budgets re-measured, before milestone 3.4 begins.** A latency budget measured under one envelope is not evidence under a larger one. This applies to **burst rate and duration** and to **stream concurrency**, where AD-2's draft is already higher |
+| **A dimension AD-8 leaves silent** — producer retention, consumer replay, server-side consumers | AD-8 **adopts** AD-2's figure and states the recovery objective it implies in §8.1. No AD-8 re-measurement is needed for a bound it never claimed |
+| **Lower but differently shaped** | The envelope is amended on the dimension that changed only |
 
 **What may not happen:** AD-2 must **not** cite the slice's 2 events/s as a capacity finding — it is the generator's configured rate, not a measured ceiling — and must **not** derive rates from recorded provider samples, which are ingestion and need Gate 3 (D-17; 3.1 plan §5). Published provider documentation or synthetic load only.
 
-**Until both are approved,** §6.2 is a design envelope and nothing more: **no capacity claim is evidence**, and exit criterion 9 needs the recorded number **and** the load tests (§12 item 8).
+**Until both are approved,** §6.2, §6.3 and this section are a design envelope and nothing more: **no capacity claim is evidence**, and exit criterion 9 needs the recorded number **and** the load tests (§12 item 8).
+
+##### 6.2.1a The 500-subject bound is a store bound, not a browser contract
+
+**[PROPOSED]** §6.2's "≤ 500 distinct subjects in current state" is a **capacity** figure for ingestion, distribution, Express's in-memory state and the observation store. It is **not** a statement about what the browser displays, and it must not be read as relaxing an approved contract.
+
+| | Approved today | §6.2's proposal |
+|---|---|---|
+| What it governs | What the **channel** carries and the **client** accepts | How many subjects the **pipeline and store** hold |
+| Value | **Exactly 4 FX pairs**, in a fixed order | ≤ 500 subjects |
+| Where | `stream-message.v1.schema.json`; AD-1 §3.2, §3.4; enforced in the schema, in Express and in the browser | AD-8 §6.2 only |
+| Enforcement | A `snapshot` whose `values` is not exactly the four pairs in order, or an `update` outside the allowlist, is a **protocol fault** (AD-1 §3.3.3) | A capacity target, tested by load |
+
+**So growing the subject set is a protocol change, not a capacity decision.** AD-4 Part 2 §6.2.1 and **AD4P2-Q7** record that adding a fifth FX pair faults the deployed client; §6.2's 500 would be reached by **server-side consumers and the store**, or by a later channel version that AD-7 defines, long before the browser contract changes. The two numbers are not in conflict because they are not about the same thing — and nothing in AD-8 authorizes a fifth pair.
 
 ### 6.3 Concurrency limits
 
@@ -438,6 +523,9 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | `stream_coalesced_updates_total` | Counter | `source_id` | **G-2** (§6.0). A superseded update not transmitted. **Expected, not a defect** |
 | `stream_newest_dropped_total` | Counter | `source_id` | **G-2 defect counter.** Must stay **zero**: it counts a drop of a value that was *not* superseded |
 | `observation_unaccounted_total` | Counter | `source_id` | **G-1 defect counter.** Must stay **zero**: an emitted event that reached no recorded outcome |
+| `observation_buffer_exhausted_total`, `observation_buffer_expired_total` | Counter | `source_id` | §6.1a's **measured** loss terms (AD-2 L-1, L-2). Non-zero is a capacity or outage signal, not a defect, and the identity still balances |
+| `observation_buffer_entries`, `observation_buffer_bytes`, `observation_buffer_oldest_age_ms` | Gauge | `source_id` | Occupancy against AD-2 **R-7**'s three limits, whichever binds first |
+| `observation_restart_gap_marker` | Counter | `source_id` | A process-lifetime boundary (AD-2 **L-3**). It records **that** a gap exists with the last acknowledged position, **never a number of lost events** (§6.1a) |
 | `stream_destroyed_no_drain_total` | Counter | — | §6.3 |
 
 **Cardinality:** `subject` is labelled only where the subject allowlist is bounded (AD-5 §6.3) and at most 500 subjects exist (§6.2). `reason` and `class` are closed enumerations. **No label ever carries a payload value, a user identity, a token or a URL.**
@@ -490,6 +578,8 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 
 **Observations have no recovery-point objective in v1**, because no durability is decided (AD-3) and the slice stores nothing. That is stated as a limitation rather than left to be inferred.
 
+**Where a recovery objective would come from.** §6.2.1 records that AD-8 is **silent** on producer retention and the consumer replay window, and that AD-2's draft proposes both — **R-7**'s bounded buffer (12,000 events, 32 MiB, 10 min, first limit reached) and **R-9**'s 24-hour consumer replay. Those are the mechanisms that would give this section an objective at all. Under §6.2.1's reconciliation rule, **AD-8 adopts AD-2's approved figures for a dimension it never claimed**, and states the resulting objective here, with no AD-8 re-measurement needed. Until AD-2 and AD-3 are approved there is **no retention, no replay and no recovery-point objective**, and a crash loses an unquantifiable amount (§6.1a).
+
 **Two things a restart depends on, both open.** Recovery correctness rests on **restart-safe deduplication** (AD-5 §8.5), which holds for every transport whose keys derive from observation properties and **fails** for a source with no source timestamp (`dedup: within_run`, AD-5 §8.4); and on the **delivery semantics** of AD-5 §3.7 **H-1 to H-6**, which are pending. At-least-once delivery makes restart-safe deduplication load-bearing; at-most-once makes §8.1's "what is lost" column real rather than theoretical. **§6.2.1's reconciliation rule applies to AD-2 here too:** if AD-2 requires durability or replay, this section is revised and re-approved before milestone 3.4. Acceptance is **N-15**.
 
 ### 8.2 Graceful shutdown
@@ -528,7 +618,7 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | N-8 | §7.1's metrics all exist, with bounded cardinality, and §7.2's prohibitions hold | A metrics-surface test, plus a scan for forbidden fields |
 | N-9 | §7.3's alerts fire on their conditions and do **not** fire on the excluded states | Synthetic fault injection per alert |
 | N-10 | §8.3's drills R-1 to R-7 pass | Recorded drill runs |
-| **N-13** | **G-1, event accounting** (§6.0): over a soak with faults injected, every emitted event appears in exactly one recorded outcome — delivered, quarantined, rejected, duplicate or late — and `observation_unaccounted_total` is **zero**. Asserted as an identity on the counters, not a sample | A ≥ 300 s soak with the §13 fault set; the harness compares the generator's emitted count against the sum of outcomes |
+| **N-13** | **G-1, event accounting** (§6.0, §6.1a): over a soak with faults injected, §6.1a's identity — `emitted = accepted + rejected + quarantined + duplicates + buffer_exhausted + buffer_expired + still_buffered` — **balances exactly**, and `observation_unaccounted_total` is **zero**. Asserted as an identity on the counters, not as a percentage of a sample. **Scoped to one ingestion process lifetime**: a deliberate restart mid-soak must produce a **gap marker with the last acknowledged position**, reset the identity, and make **no** zero-loss claim across the boundary (AD-2 **L-3**) | A ≥ 300 s soak with the §13 fault set; the harness compares the generator's emitted count against the sum of outcomes, per process lifetime. Buffer exhaustion and expiry are exercised deliberately, so the loss terms are non-zero and still balance |
 | **N-14** | **G-2, coalescing and convergence** (§6.0): under a slow client at burst rate, (a) `stream_newest_dropped_total` is **zero** — every coalesced drop was of a value already superseded for that subject; and (b) after updates stop and the socket drains, **every** subject's displayed value equals the latest value Express accepted, within one heartbeat interval of quiescence. A reconnection converges the same way, by `snapshot` | A slow-consumer harness with a throttled socket, plus a browser run; the per-subject accepted value is read from Express and compared with the rendered value |
 | **N-15** | **Restart-safe deduplication** (AD-5 §8.5): across a restart under load, no already-published observation is republished as current, no genuinely newer observation is discarded, and no subject stalls. Dev B's C-1 restart measurement is the precedent | Drill **R-1**, with the counters asserted |
 | **N-16** | **Null source timestamps** (AD-5 §8.4): a source with `timestamp_basis: none` is never labelled **Live**, its age is measured from `retrieved_at`, and it is marked `dedup: within_run`. The D-24 slice's own rejection of a null `source_timestamp` is unaffected | Fixture-driven, at Express and in the browser |
@@ -578,7 +668,7 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | 1 | **Every figure here is a design target, not a measurement**, except where it restates an approved slice figure or a measured D-24 runtime. Nothing in §3, §4 or §6 has been load-tested. **§6.2's envelope is provisional and AD-2's requirement is unwritten** (§6.2.1) | §9's tests, in milestones 3.5 and 3.7; **AD-2** for the requirement |
 | 1a | **T6 is not instrumented** (§2.4), so **every target whose endpoint is render is unmeasured**: §3.1's end-to-end p95, §3.2's **T5-to-T6 segment**, and §3.4's **reconnect-to-render** p95 and first-snapshot figure (§3.4.1). What *is* measured is narrower at the end in each case — `emitted_at` to programmatic SSE frame arrival, and reachability to first snapshot **arrival** — against the slice's own approved targets, and it is **not** evidence for the proposed ones | **AD8-Q9**; Dev C in milestone 3.5; **AD-13** for the harness |
 | 1b | **The real client's reconnect behaviour is unmeasured**, separately from T6. The probe is not the product client: it implements none of the client's backoff schedule, 2 s header timeout, 35 s no-bytes timeout, single-connection rule or permanent stopped states, and the browser spec counts streams started without measuring any duration (§3.4.1). The approved "backoff fits the target" reasoning is an argument from the schedule, not a measurement | **N-4**, both obligations; Dev C and Dev D in milestone 3.5 |
-| 2 | **No durability or replay is decided**, so §8.1 has no recovery-point objective for observations, **G-1 has no store to deliver into** (§6.0), and the delivery semantics **H-1 to H-6** are pending (AD-5 §3.7). Today a coalesced update is genuinely gone, because there is no observation store | **AD-2**, **AD-3**; **AD-11** for the store |
+| 2 | **No durability or replay is decided**, so §8.1 has no recovery-point objective for observations, **G-1 has no store to deliver into** (§6.0), and the delivery semantics **H-1 to H-6** are pending (AD-5 §3.7). Today a coalesced update is genuinely gone, because there is no observation store. **Producer retention, the consumer replay window and the server-side consumer bound are dimensions AD-8 leaves silent** and AD-2 proposes (§6.2.1) | **AD-2**, **AD-3**; **AD-11** for the store |
 | 3 | **Provider-specific freshness values cannot be finalized**, because no provider is approved and no documentation has been read for one. §4.2 gives category defaults only | **Gate 3**, per provider; then a registry record under AD-5 §2.2 |
 | 4 | **The metric and alert mechanism is unchosen.** §7 specifies names, labels and conditions, not a stack | Milestone 3.7; AD-10 for anything exposed |
 | 5 | **AD-6 B-4 is unresolved on the inference side.** D-25 waives it for the D-24 slice only; it is not Gate 4 evidence and no gate has passed | **AD-10** (scope §2.2.3, D-25) |

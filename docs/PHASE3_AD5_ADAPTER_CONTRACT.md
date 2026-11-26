@@ -1,6 +1,14 @@
 # AD-5: Source Adapter Contract
 
-**Status:** **DRAFT v0.3**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Nothing here authorizes a milestone, a provider, an adapter or a gate.
+**Status:** **DRAFT v0.4**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Nothing here authorizes a milestone, a provider, an adapter or a gate.
+**Revision vv0.4, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Anvesh's (Dev B's) CHANGES_REQUESTED re-review of PR #30** on commit `e457bcf`, together with the conditions in **Nisarga's** re-review that fall in the same sections. Both texts are on the pull request, not in the repository. Documentation only; it preserves every correction from **Varshini's** and Nisarga's earlier rounds, and changes no approved D-24 contract, schema, threshold, ownership or implementation. Cross-AD decisions stay **provisional**: AD-2 is itself a draft (PR #32), and nothing here approves it or is approved by it. Changes:
+
+- **Blocker 1 (H3) fixed — new §8.2a:** validated provider **corrections** are separated from unexplained **value conflicts**, and corrections are **no longer implicitly restricted to announcements** — every event type may be corrected, including `fx_rate`. §6.3's and §8.1's announcement rows now say that "never superseded by recency" is an **ordering** statement only. Five pieces of **revision evidence** are required, including that an adapter sets `supersedes` **only** from something the provider published and **never infers a correction** from a value differing, plus V-4 `supersedes` validation (same source, same event type, or rejected). Aligned with **AD-2 R-5**'s "validated correction" row.
+- **Blocker 2 (X-4) fixed — §8.3:** "Older: ignored" now reads **"not current"**, with "not current" explicitly **not** meaning "not stored". An ordinary late arrival is **retained historically** and never becomes current. A table maps all five **AD-2 R-5** cases onto this document and adopts AD-2's vocabulary, and the **late-tracking horizon** is distinguished from the **dedup window** — AD-2 proposes 24 h for the former; AD-5 sets neither.
+- **Conflict-rule citation corrected** (Nisarga): §8.2 no longer claims its **C-a** is the same rule as AD-1 §3.4's row. A table records that AD-1's is keyed on **`event_id` inequality** and C-a on the **payload hash**, so two same-payload events with different `event_id`s are a conflict in the slice and a duplicate in the general rule. The slice keeps AD-1 §3.4 **as approved**; the divergence is the benign post-restart case AD-1 §3.4.1 records, and **AD5-Q11** leaves the choice open.
+- **Identifier collisions:** AD-2 **R-8**'s classification of an overlapping-run collision as a **conflict, not a duplicate**, is adopted, with its operational rule — a shared-seed overlapping run is invalid as a **performance result**, while its conflicts are **still detected, rejected and counted**.
+- New **AD5-Q10** (correction evidence) and **AD5-Q11** (the C-a keying divergence); new gaps **9a** and an extended gap 9.
+
 **Revision v0.2, 26 November 2026 — still DRAFT.** Applies **Nisarga's CHANGES_REQUESTED review of PR #30**, submitted on v0.1 (`5f78500`); its text is on the pull request, not in the repository. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
 
 - **Blocker 3 fixed:** §8.1 now defines **two keys** — `observation_key` for conflicts and `idempotency_key` for duplicates — removing v0.1's unsatisfiable rule "the same key with a different `payload_sha256`", which cannot occur because the hash is inside the key. §8.2 replaces it with three outcomes: duplicate, value conflict (first kept) and identity collision (rejected). **No event identity changes:** C-1's approved derivation and AD-4 v0.2 are untouched.
@@ -303,7 +311,7 @@ The D-24 slice implements the first channel as an in-memory latest-per-pair stor
 | `fx_rate` | `base_currency`, `quote_currency`, `rate_type` |
 | `economic_indicator` | `indicator_code`, `country`, `period` |
 | `bank_holiday` | `country`, `date` |
-| `announcement` | **None.** An announcement is an event, not a value with a current state. It is never superseded by recency; a correction uses `supersedes` (AD-4 §2) |
+| `announcement` | **None.** An announcement is an event, not a value with a current state, so it is never superseded **by recency**. This is an **ordering** statement only: like every type, an announcement may be **corrected** by a new event carrying `supersedes` (§8.2a) |
 
 A source's `subjects` allowlist bounds the state an adapter can create, which bounds memory and the display. The D-24 slice's four-pair allowlist is this mechanism (AD-1 §3.4).
 
@@ -384,7 +392,7 @@ idempotency_key  = (observation_key, payload_sha256)
 |---|---|
 | `source_timestamp` is null | Both keys use `retrieved_at` in its place, and the source is **not restart-safe**: it is marked `dedup: within_run` (§8.4, §8.5) |
 | `manual` | Not deduplicated. Two identical entries are two acts (§5) |
-| `announcement` | Deduplicated on the `idempotency_key`, but **never superseded by recency**: an announcement has no subject (§6.3), so a newer one does not replace an older one |
+| `announcement` | Deduplicated on the `idempotency_key`, but **never superseded by recency**: an announcement has no subject (§6.3), so a newer one does not replace an older one. A **declared correction** still applies, through `supersedes` (§8.2a) |
 
 ### 8.2 Duplicates and conflicts
 
@@ -393,15 +401,52 @@ idempotency_key  = (observation_key, payload_sha256)
 | # | Condition | Outcome | Behaviour |
 |---|---|---|---|
 | **D** | Same `idempotency_key` as an event already seen | **Duplicate** | **Discarded**, not rejected and not quarantined (AD-4 §6), and counted. Normal and expected for a polled source: AD-1 §3.4 counts it as "duplicate (normal for polling): ignored, no update" |
-| **C-a** | Same `observation_key`, **different** `payload_sha256` | **Value conflict** | The **first is kept**; the later event is counted as a conflict and does not become current. AD-1 §3.4's row "same `source_timestamp`, different `event_id`: conflict, first kept, counted" is this case |
+| **C-a** | Same `observation_key`, **different** `payload_sha256`, and **no** validated `supersedes` (§8.2a) | **Value conflict** | The **first is kept**; the later event is counted as a conflict and does not become current |
 | **C-b** | Same `event_id`, different payload or subject | **Identity collision** | **Rejected**, counted; the first is kept (AD-1 §3.4). This is the **C-1 class of defect** |
 
 - **C-a is a statement about the source.** Two different values for one subject at one instant means the provider contradicted itself, the adapter mis-normalized, or two configurations are writing to one `source_id`. None of them is resolvable by picking a value, so the first is kept and the disagreement is counted rather than hidden.
 - **C-b is a statement about us.** It means two distinct observations were given one name, which is a derivation defect, not a data fault. It is **only possible where the derivation omits the payload hash** — that is, the synthetic transport, whose derivation is fixed by C-1. For the provider transports the hash is in the name (AD-4 Part 2 §3.2), so a differing payload yields a differing `event_id` and the case cannot arise.
 - **Both conflict classes must be alertable** (AD-8 §7.3 **Q-2**), because C-1 showed a conflict loop can stall a subject for an entire run while showing only as a counter.
+
+**How these classes relate to AD-1 §3.4's approved rows — similar, not identical.** AD-1 §3.4 is **approved for the D-24 slice** and is **unchanged**; §8.2 is the full-Phase-3 generalization, and the two are keyed differently, so the correspondence is partial:
+
+| AD-1 §3.4 row (approved, slice) | Keyed on | Nearest §8.2 class | Where they differ |
+|---|---|---|---|
+| "Same `event_id` as a current event, different content or pair — conflict: rejected, counted; first kept" | `event_id` | **C-b** identity collision | None of substance: both reject and keep the first |
+| "Same `source_timestamp`, different `event_id` — conflict: first kept; counted" | `event_id` **inequality** at an equal timestamp | **C-a** value conflict | **The keys differ.** AD-1's row fires whenever the `event_id`s differ, *whatever the payloads are*; C-a fires only when the **payload hashes** differ. Two events with the same payload and different `event_id`s are AD-1's **conflict** in the slice and §8.2's **duplicate** in the general rule, because their `idempotency_key`s are equal |
+| "Same `event_id`, identical content — duplicate: ignored, no update" | `event_id` | **D** duplicate | None of substance |
+
+**Which governs where.** The slice runs on **AD-1 §3.4 as approved**; §8.2 governs adapters AD-5 introduces. The divergent cell is reachable in the slice only through a generator restart that realigns a pair's timestamp at a different sequence — the case AD-1 §3.4.1 records as "**not a defect, for the record**", where one post-restart event per pair is dropped and the next is accepted. **Nothing here changes that behaviour or that approval.** Whether the general rule should be narrowed to match the slice, or the slice's rule widened at its next revision, is **AD5-Q11** (§15) and is **not decided here**.
+
+**Identifier collisions from overlapping synthetic runs.** AD-2's **R-8** classifies the second arrival of a C-1-style collision as a **conflict, rejected and counted — not a duplicate**, which agrees with **C-b**. AD-2 adds an operational rule this document adopts: until AD-5 and AD-12 resolve the residual risk, **load and fault runs must not overlap with a shared seed**, and a run that does is **invalid as a performance result** and may be excluded from throughput and latency figures — but its conflicts are **still detected, rejected, counted and recorded** exactly as in any other run. **Exclusion applies to the result, never to conflict detection.**
 - **The C-1 residual risk lives in C-b** and is **open**: overlapping generator runs with the same seed and timestamps but a different `case_id` or `generator_version` produced 40 collisions. §14 item 5 and AD-4 Part 2 §3.4 track it.
 
-The dedup window is bounded, not unbounded: the AD-8 `dedup_window` per source, long enough to cover a redelivery and a restart (§8.5), short enough to bound memory. A duplicate arriving after the window is handled by §8.3's ordering rule, which is safe — it is older, so it is ignored as late.
+The dedup window is bounded, not unbounded: the AD-8 `dedup_window` per source, long enough to cover a redelivery and a restart (§8.5), short enough to bound memory. A duplicate arriving after the window is handled by §8.3's ordering rule, which is safe — it is older, so it does not become current and is counted as late (§8.3).
+
+### 8.2a Validated corrections are not conflicts
+
+**[PROPOSED]** §8.2's conflict classes catch an **unexplained** second value. A provider that **declares** a revision is a different case, and conflating the two would either reject legitimate corrections or let an unexplained disagreement through as one. This section separates them and is written to align with **AD-2 R-5**'s "validated correction" row.
+
+**Corrections are not restricted to announcements.** §6.3 gives `announcement` no subject, so a later announcement never supersedes an earlier one *by recency* — but that is a statement about **ordering**, not about corrections. **Every event type may be corrected**, including `fx_rate`, `economic_indicator` and `bank_holiday`: a revised economic indicator is the ordinary case, and AD-4 §2's `supersedes` field is defined for every type.
+
+| | **Validated correction** | **Value conflict (§8.2 C-a)** |
+|---|---|---|
+| What arrives | A **new event** whose `supersedes` names an earlier event | A second value for one subject at one instant, with **no** `supersedes` |
+| Evidence of intent | The provider stated a revision, and `supersedes` records which event it revises | None. The source contradicted itself, or two configurations write to one `source_id` |
+| Validation | **V-4** (AD-4 Part 2 §5.1): `supersedes` must resolve to an existing event **of the same source and the same event type**, or the event is **rejected** (AD-4 §6) | Not applicable |
+| Stored | **Yes**, and **the superseded event is kept unchanged.** Events are immutable (AD-4 §2) | The later event is **rejected and counted**; the first is kept |
+| Becomes current | **Only if** it is the subject's newest by §8.3's ordering rule. A superseded event is **never** current again (AD-4 §8.1) | Never |
+| Counted as | A correction | A conflict, and **alertable** (AD-8 §7.3 **Q-2**) |
+
+**Revision evidence required of a correction**, so that "it carried `supersedes`" cannot be asserted without support:
+
+1. **`supersedes` resolves.** The named `event_id` exists, is of the same `source_id` and the same `event_type`. A dangling, cross-source or cross-type reference is `SUPERSEDES_INVALID` and is **rejected** (AD-4 §6; AD-4 Part 2 §5.3).
+2. **The provider declared it.** The adapter sets `supersedes` only from something the provider actually published — a revision flag, a revision identifier, a corrected-value endpoint or an explicit restatement. **An adapter must never infer a correction** from the mere fact that a value differs: that inference is exactly what would turn §8.2's C-a conflict into a silent overwrite.
+3. **The subject is unchanged.** A correction corrects an observation *of the same subject* (§6.3). An event whose `supersedes` points at another subject is rejected under rule 1's same-type check plus V-4's semantic check.
+4. **Timestamps are the correction's own**, except that a review approval copies the reviewed event's timestamps apart from `emitted_at` (AD-4 §5). A correction is never back-dated to make itself current.
+5. **No in-place edit, ever.** The correction is a new event with its own `event_id`; the superseded event is retained exactly as received. Correction history belongs to **AD-11**.
+
+**What AD-5 does not decide.** How corrections are retained and queried, and how a correction chain is presented, are **AD-11**'s and **AD-9**'s. Whether a given provider's revision mechanism is usable at all is a **Gate 3** question, recorded in its registry entry (§2.2). **AD5-Q10** (§15) puts rule 2 to the owner, because it constrains every future adapter.
 
 ### 8.3 Ordering, late events and ties
 
@@ -412,14 +457,25 @@ The dedup window is bounded, not unbounded: the AD-8 `dedup_window` per source, 
 | Case | Result |
 |---|---|
 | Newer `source_timestamp` | Becomes current; one update is published |
-| Older | Ignored; counted as **late**, not as an error |
+| Older | **Not current**; counted as **late**, not as an error. "Not current" is **not** "not stored": an ordinary late arrival within the late-tracking horizon is **retained historically** and simply never becomes the subject's current value (**AD-2 R-5**; storage and retention are **AD-11**'s) |
 | Equal `source_timestamp`, different `event_id` | **First kept**, counted. This is §8.2's **C-a** value conflict, so it is also alertable, not a benign tie. Provider sequence is not used to break it: `source_sequence` is opaque (AD-4 §2) |
 | `source_timestamp` null for the source | Arrival order, within the run only, and the registry says so |
 | Beyond the AD-8 clock tolerance in the future | **Quarantined** as `FUTURE_SOURCE_TIMESTAMP` (AD-4 §6) and never current, so it cannot block later valid events (AD-1 §3.4) |
 
 - The current event remains the **ordering watermark** after it becomes unavailable, while its number stops being shown (AD-1 §3.4).
 - A superseded event is never the current value (AD-4 §8.1).
-- **No reordering buffer in v1.** Holding events back to sort them would add latency against AD-8's budget to correct an ordering the timestamp already settles. A late-event window beyond the dedup window is an AD-2 question.
+- **No reordering buffer in v1.** Holding events back to sort them would add latency against AD-8's budget to correct an ordering the timestamp already settles.
+- **"Ignored" never meant "discarded".** Throughout §8, a late or non-current event is one that does **not become the subject's current value**; whether it is **stored** is a separate question, answered by **AD-2 R-5** and **AD-11**, not here. The five AD-2 R-5 cases map onto this document as follows, and AD-5 adopts that vocabulary:
+
+| AD-2 R-5 case | AD-5 | Current value? | Stored? |
+|---|---|---|---|
+| **Ordinary late arrival** | §8.3 "Older" | Never | **Yes**, within the late-tracking horizon; counted by lateness bucket |
+| **Eligible late history** | §8.3 "Older", beyond the horizon | Never | **Only if** the source's Gate 3 terms and AD-11's retention permit; otherwise not stored and counted as outside retention. That is a **retention or permission refusal, not a validation rejection** |
+| **Validated correction** | **§8.2a** | Only if it is the subject's newest by this section's ordering | **Yes**, and the superseded event is kept unchanged |
+| **Quarantined** | §10; AD-4 §6 | Never, unless a review approves it as a **new** event | **Yes**, in quarantine only (AD-11) |
+| **Rejected** | §7.1 `item_invalid`; §8.2 conflicts | — | Only a rejection record without payload (AD-4 Part 2 §5.4). **Lateness alone never causes rejection** |
+
+- **The late-tracking horizon and the dedup window are different bounds.** The dedup window (§8.2, AD-8 §3.5) bounds **memory** for recognizing a redelivery; the late-tracking horizon bounds **how far back an arrival is still counted as ordinary**. **AD-2 R-5 proposes 24 h** for the latter, marked provisional there; AD-5 does not set it, and a late-event window beyond the dedup window remains an **AD-2** decision.
 
 ### 8.4 Sources without a source timestamp
 
@@ -618,7 +674,8 @@ A provider adapter changes exactly one thing: ingestion acquires **outbound** ac
 | 6 | **The three non-FX payload schemas are minimal** and each is reviewed again before its first adapter (AD-4 §4) | AD-4 at that point; `docs/PHASE3_AD4_ENVELOPE_PART2.md` §7 drafts the refinement |
 | 7 | **Multi-source derivation is deferred beyond envelope v1** (**AD4-Q8**, owner-decided), so §4's inversion case cannot combine two providers | A future AD-4 major version |
 | 8 | **No provider is approved**, so no adapter beyond the synthetic one can be exercised end to end | **Gate 3**, per provider |
-| 9 | **Storage, retention and the trust level of a stored observation** are unspecified here | **AD-11** |
+| 9 | **Storage, retention and the trust level of a stored observation** are unspecified here, including whether a late arrival or a superseded event is retained and for how long | **AD-11**; the case split is **AD-2 R-5** |
+| 9a | **The late-tracking horizon is not set here.** AD-2 R-5 proposes 24 h, provisionally | **AD-2** |
 | 10 | **The review queue for quarantined and extracted items** is unspecified here | **AD-12**; Gate 2 for any knowledge write |
 
 ---
@@ -635,6 +692,8 @@ A provider adapter changes exactly one thing: ingestion acquires **outbound** ac
 | AD5-Q6 | Does a provider's `withdrawn` status ever require deleting stored observations? | Only where its terms require it; §2.4 keeps history by default | Gate 3 terms; AD-11 |
 | AD5-Q7 | Which **delivery semantics** does Phase 3 require (§3.7 **H-1**)? | At-least-once, which makes §8.5's restart-safe deduplication load-bearing and is the semantics the deterministic derivations already support | **AD-2** states the requirement, **AD-3** chooses; the owner approves both |
 | AD5-Q8 | Is **§8.2's three-outcome model** adopted — duplicate, value conflict (first kept), identity collision (rejected) — with both conflict classes alertable? | Yes. Each row's behaviour is AD-1 §3.4's, unchanged | Owner, with Dev B (P-4 owns the acceptance rules) |
+| AD5-Q11 | §8.2's **C-a** is keyed on the **payload hash** while AD-1 §3.4's approved row is keyed on **`event_id` inequality**, so two same-payload events with different `event_id`s are a conflict in the slice and a duplicate in the general rule. Should the general rule be narrowed to match the slice, or the slice's rule widened at its next revision? | Keep both as they are for now: the slice's approval is version-specific and the divergent cell is the benign post-restart case AD-1 §3.4.1 already records. Decide it when AD-7 or a slice revision next opens §3.4 | Owner, with Dev B and Dev D |
+| AD5-Q10 | Is **§8.2a rule 2** adopted — an adapter sets `supersedes` **only** from something the provider actually published, and **never infers a correction** from a value simply differing? | Yes. The inference is exactly what would turn a §8.2 C-a conflict into a silent overwrite | Owner, with Dev B. It constrains every future adapter |
 | AD5-Q9 | Is **§9.3's mapping** adopted — `down` stays internal and publishes as `outage`, keeping the approved three-value `source.status` enum unchanged, with the distinction carried in metrics and the paged S-2 alert? | Yes. A fourth enum value would fault the deployed client, and the difference is operational rather than user-facing | Owner, with Dev C; a published `down` would be **AD-7**'s and **AD-9**'s |
 
 ---
