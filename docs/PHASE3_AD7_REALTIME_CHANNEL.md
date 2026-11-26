@@ -1,10 +1,10 @@
 # AD-7: Real-Time Channel Contract
 
-**Status:** **DRAFT v0.3 for review. Not approved.** 26 November 2026. **Review state:** on PR #34, v0.2 (`60b6faa`) was **APPROVED as draft documentation by Nisarga (Dev D)**, with AD7-D7 to be resolved before final architecture approval, and **CHANGES_REQUESTED by Varshini (Dev C)** on findings F1 and F2. v0.3 applies both; **neither reviewer has re-reviewed v0.3**, and no owner approval exists.
+**Status:** **DRAFT v0.4 for review. Not approved.** 26 November 2026. **Review state:** on PR #34, v0.3 (`97e4c9b`) was **APPROVED as draft documentation by Nisarga (Dev D)** and received **CHANGES_REQUESTED from Varshini (Dev C) on F1-a only** (F2 resolved). v0.4 applies F1-a and the non-blocking follow-ups of both reviews; **neither reviewer has re-reviewed v0.4**, and no owner approval exists. AD7-D7 must still be resolved before final architecture approval.
 
 **Three different approvals, kept apart (Varshini, non-blocking 8):** (1) **draft-document approval** — a reviewer approving this file for merging as DRAFT documentation; it decides nothing and authorizes nothing; (2) **final architecture approval** — the project owner approving AD7-D1 to AD7-D8, which needs AD7-D7 resolved first; (3) **implementation authorization** — a milestone (3.2 for sessions, 3.5 for §5 and §8) authorized by the owner under D-22. Neither (1) nor (2) implies (3), and none passes a gate. New numbers are **provisional** (`[#?]`). Nothing here is implemented beyond what §2 marks as existing; no milestone or gate is authorized, and **no contract change is made or authorized**.
 **Lead:** Dev B. **Reviewers:** Dev C, Dev D. **Approver:** project owner.
-**Inputs:** F-3; AD-4 v0.2 (approved for the D-24 slice only); AD-10 (**draft v0.2**, PR #33). **Feeds:** milestone 3.5.
+**Inputs:** F-3; AD-4 v0.2 (approved for the D-24 slice only); AD-10 (**draft v0.2**, PR #33, **merged into `feature/phase3-platform` at `1f6ea8f`**; merged is not approved). **Feeds:** milestone 3.5.
 
 **Revision v0.2, 26 November 2026 — still DRAFT.** Documentation only. Applied:
 
@@ -30,7 +30,16 @@
 | Varshini 6 | Comparison failures persist nothing, so emit no `failed` | §5.1 |
 | Varshini 7 | Migration table wording; the `client.ts:225` 401 path | §4 |
 | Varshini 8 | Draft approval, final architecture approval and implementation authorization | Status |
-| Varshini 9 | "Session" before milestone 3.2 | §4 | **Coordinates with:** AD-2 (replay vs snapshot), AD-8 (budgets), AD-9 (degradation), AD-11 (context records).
+| Varshini 9 | "Session" before milestone 3.2 | §4 |
+
+**Revision v0.4, 26 November 2026 — still DRAFT.** Documentation only. Applied from the re-reviews of v0.3 at `97e4c9b`:
+
+| From | Finding | Where applied |
+|---|---|---|
+| Varshini **F1-a** (blocking) | Capture order: a second, failing `res.json` call could overwrite the captured body and status, publishing `failed` for a response the client never received. Snapshot the status at call time; record only after the original returns; first successful response only; a failed later write cannot overwrite; double-write and serialization-error evidence | **§5.3** steps 1, 2 and 5 |
+| Varshini, non-blocking | Placement after authentication, user read safely in `finish`; primitive fields only at capture; `this` binding and return value preserved; bounded port queue; client-abort and `res.destroy()` evidence; D-24 suite with the switch off; pin Express 5.3.0 | §5.3 |
+| Nisarga; Varshini | AD-10 reference updated to its merged state | Inputs line; §9 |
+| Nisarga; Varshini | P-6 uniqueness and `record_id` naming aligned with AD-11; state that AD-11 P-6 must adopt the constraint; pin the AD-11 revision | §8 "Bounds" | **Coordinates with:** AD-2 (replay vs snapshot), AD-8 (budgets), AD-9 (degradation), AD-11 (context records).
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §3 Workstream D, §7.3 (AD-7 row), §9.2; `docs/PHASE3_AD6_ENGINE_BOUNDARY.md` §1, §4, §6.1, §9.1.
 
 The channel is an extension **alongside** API contract v0.4, which it does not modify (scope §7.3). AD-1 v0.5 §3.2 to §3.6 is the approved D-24 slice contract; this document **cites** it and does not restate it.
@@ -153,8 +162,14 @@ The alternative — the v0.4 handlers calling the port directly — **would chan
 
 **Proposed mechanism (provisional, part of AD7-D8):**
 
-1. **Capture, before the handler runs.** The middleware, mounted ahead of the two `POST` routes in `app.ts`, wraps **`res.json`** for that one response only. The wrapper stores a **reference** to the object passed to it and then calls the original `res.json` with the **same arguments, synchronously and unmodified**. Both handlers respond through `res.json` — `res.status(201).json(…)` for success (verified at `transactions.ts:305` and `comparisons.ts:112`), and the shared error envelope for errors, which `services/backend/src/middleware/errors.ts:58` sends with `res.status(…).json(…)` on the same response object — so no other send path needs wrapping; a response sent any other way is simply **not observed**, and produces no status.
-2. **Publish only after the response is finalized.** Publication is scheduled from `res.on("finish")` — the response has been handed to the network — and **never** from inside the `res.json` wrapper. A response that ends with `close` and no `finish` (the client went away) publishes nothing; the v0.4 record remains authoritative.
+1. **Capture, before the handler runs.** The middleware is mounted in `app.ts` ahead of the two `POST` routes and **after the authentication middleware**, so the authenticated user is already on `req` when it runs; it copies that user ID into its own closure at that point. It wraps **`res.json`** for that one response only. **Capture order (Varshini F1-a):**
+   1. On each call, the wrapper first **snapshots `res.statusCode`** as it is at that moment.
+   2. It then calls the original `res.json` with the **same arguments, unmodified**, with **`this` bound to `res`**, and keeps its **return value**.
+   3. **Only if that call returns without throwing**, and **only if nothing has been captured yet**, it records the capture: the snapshotted status plus **primitive fields only** (§5.3 step 3) copied out of the argument — never a reference to the body object.
+   4. It then returns the original's return value. If the original throws (for example a serialization error, or `ERR_HTTP_HEADERS_SENT` on a second write), the wrapper **rethrows the same error** and records nothing.
+
+   So **only the first successful response is captured**, and a later write that fails can never overwrite it: in the review's example, a first `201` with `rec-D` followed by a failing `500` attempt publishes `completed` for `rec-D` and nothing for the second ID. Both handlers respond through `res.json` — `res.status(201).json(…)` for success (verified at `transactions.ts:305` and `comparisons.ts:112`), and the shared error envelope for errors, which `services/backend/src/middleware/errors.ts:58` sends with `res.status(…).json(…)` on the same response object — so no other send path needs wrapping; a response sent any other way is simply **not observed**, and produces no status.
+2. **Publish only after the response is finalized.** Publication is scheduled from `res.on("finish")` — the response has been handed to the network — and **never** from inside the `res.json` wrapper. The `finish` handler reads **only** the capture and the user ID copied in step 1, never `req` or the body again; if there is no capture, it publishes nothing. A response that ends with `close` and no `finish` — a client abort, or `res.destroy()` — publishes nothing; the v0.4 record remains authoritative.
 3. **Fields extracted, and nothing else:**
 
 | Final status | Event | Fields read from the captured body | Plus |
@@ -164,10 +179,10 @@ The alternative — the v0.4 handlers calling the port directly — **would chan
 | Any other response | — | — | Nothing is published |
 
    No amount, corridor, allocation, policy, engine field, `clientReference` or `requestId` is read. **`requestId` (the echoed `X-Request-Id`) is never read or published**, so it cannot become a record identifier (§8.1).
-4. **Isolation from the response.** The wrapper never modifies the body or headers and never throws: capture is wrapped so that any error in it is caught, counted and discarded, and the original `res.json` is still called exactly once. Publication runs **after** `finish`, asynchronously, inside its own `try`/`catch`; a full queue, a missing subscriber or a subscriber's exception is **counted and dropped**. **No status-port or subscriber error can alter, delay or fail the HTTP response**, and none is logged with body content.
-5. **Evidence:** with the port throwing, blocked or absent, the v0.4 responses, status codes, bodies, timings within noise, records, audit rows and `decision_id`s are **identical** to a run without the middleware (AD-6 T-1); T-7 shows no protected path changed; a `201` and a persisted-failure response each publish exactly one status, and a `422` or a failed comparison publishes none.
+4. **Isolation from the response.** The wrapper never modifies the body or headers and never throws: capture is wrapped so that any error in it is caught, counted and discarded, and the original `res.json` is still called exactly once. Publication runs **after** `finish`, asynchronously, inside its own `try`/`catch`, into a **bounded** port queue (at most 1,000 entries `[#?]`); a full queue drops the new entry, and a full queue, a missing subscriber or a subscriber's exception is **counted and dropped**. **No status-port or subscriber error can alter, delay or fail the HTTP response**, and none is logged with body content.
+5. **Evidence:** with the port throwing, blocked or absent, the v0.4 responses, status codes, bodies, timings within noise, records, audit rows and `decision_id`s are **identical** to a run without the middleware (AD-6 T-1); T-7 shows no protected path changed; a `201` and a persisted-failure response each publish exactly one status, and a `422` or a failed comparison publishes none. **Also (F1-a and follow-ups):** a **double write** — a successful first `res.json` followed by a second call that fails with `ERR_HTTP_HEADERS_SENT` — publishes only the first response's status, whatever the second carried; a **serialization error** in `res.json` publishes nothing and the error propagates unchanged; a **client abort** and a **`res.destroy()`** each publish nothing; a full port queue drops and counts without affecting the response; and the **D-24 acceptance suite passes unchanged with the producer switch off** (§5.2).
 
-Express response internals are an implementation detail. If wrapping `res.json` proves unreliable on the backend's Express version, the fallback is **(c)**, no `route_status` — **not** a change to the protected handlers.
+Express response internals are an implementation detail. The mechanism is written against the backend's pinned **Express `5.3.0`** (`services/backend/package.json`); a change of Express version re-runs the step 5 evidence. If wrapping `res.json` proves unreliable on that version, the fallback is **(c)**, no `route_status` — **not** a change to the protected handlers.
 
 `session_ended` (advisory, minor version): sent just before the server closes a stream for AD-10 §4.3 reasons, with a reason code. The client must still rely on the 401 that follows, not on this message.
 
@@ -191,7 +206,7 @@ AD-6 §6.1 and AD6-Q3: displayed context is recorded separately; v0.4 requests a
 | Rule | Requirement |
 |---|---|
 | Closed schema | `request_kind` (`transaction` or `comparison`, which selects the P-1 table), `record_id` — the **persisted record `id`** returned by the v0.4 `201` — `captured_at` (client clock, informational only), and `items[]`: each `event_id` (or null), subject, display label, freshness state, displayed `age_ms`. Unknown fields → 422 |
-| Bounds | ≤ 50 items; body ≤ 8 KiB `[#?]`; **one claim per record** (`request_kind`, `record_id`): a second is 409 and counted. Enforced by a **database uniqueness constraint** on (`request_kind`, `record_id`) in AD-11's P-6 family, not by an application check alone, so two concurrent claims cannot both be stored (non-blocking 4) |
+| Bounds | ≤ 50 items; body ≤ 8 KiB `[#?]`; **one claim per record** (`request_kind`, `record_id`): a second is 409 and counted. Enforced by a **database uniqueness constraint** on (`request_kind`, `record_id`) in AD-11's P-6 family, not by an application check alone, so two concurrent claims cannot both be stored (non-blocking 4). **AD-11 P-6 must adopt this constraint**, and does: AD-11 v0.3 §3 P-6 (PR #35 at `eff34f5`, open, draft) states "at most one claim per record, enforced by a uniqueness constraint on (`request_kind`, `record_id`) — the persisted record `id`, never `X-Request-Id`", with the same field names as here |
 | Allowlist | Only the fields above. **Never**: tokens, cookies, session IDs, form values, amounts, user text, URLs, rates or any payload |
 | Authorization | The authenticated user must own the record named by `record_id` (§8.1); claim accepted only within 5 min `[#?]` of the record's `createdAt` |
 | Trust | Stored as `trust_level: browser_claim`; the server adds `received_at` and user ID; it does not "correct" or enrich the claim from its own state |
@@ -217,7 +232,7 @@ AD-6 §6.1 and AD6-Q3: displayed context is recorded separately; v0.4 requests a
 
 - **AD-2 (v0.2, PR #32, merged into `feature/phase3-platform` at `0af9156`; DRAFT, not an approved architecture):** consumer replay (R-9) is server-side only; browsers get snapshots (R-10). The channel never carries replayed history.
 - **AD-9 (PR #29, merged into `feature/phase3-platform`, still draft):** the panel's degradation states (disconnected, paused, offline, stopped, too many streams) are AD-9 §3.3's; this document adds no state, and `route_status` loss is not a degradation state. AD-9 §3.5's authentication semantics change only as AD-10 v0.2 §4.5 states.
-- **AD-10 (v0.2, PR #33 at `a8fb24b`, open, draft):** sessions, origin, CSRF, revocation, rate limits and the contract transition (§4, §8.1).
+- **AD-10 (v0.2, PR #33, merged into `feature/phase3-platform` at `1f6ea8f`; DRAFT, not approved):** sessions, origin, CSRF, revocation, rate limits and the contract transition (§4, §8.1).
 - **AD-8 (v0.5, PR #30, merged into `feature/phase3-platform`; DRAFT, not approved) — limits kept explicit:** (1) **T6 is not instrumented**. AD-8 §2.4 *proposes* using each `update`'s `server_time` as the correlated marker, but no such measurement exists and whether to build it is **AD8-Q9**; so no render-latency figure exists for this channel, and AD-8 N-1 and N-4(b) are blocked. (2) **Capacity:** AD-8 v0.5 §6.3 keeps 3 streams per user and 20 in total; AD-2's 60 exceeds it, and AD-8 §6.2.1 requires AD-8 to be revised, re-approved and its budgets re-measured before milestone 3.4 if 60 is adopted. `route_status` adds pending state per stream (§7) that AD-8's capacity test must include.
 
 ## 10. Decisions
