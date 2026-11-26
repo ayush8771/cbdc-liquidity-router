@@ -1,6 +1,6 @@
 # AD-11: Audit Trail and Persistence Proposal
 
-**Status:** **DRAFT v0.2 for review. Not approved.** 26 November 2026. **Review state:** reviewed on PR #35 at `5473af4` — **CHANGES_REQUESTED by Nisarga (Dev D)** and **CHANGES_REQUESTED by the project owner (Ayush)**. Both rounds are applied in v0.2; **neither reviewer has re-reviewed**, and no owner approval exists. A **proposal**: no migration, schema change or role change is made or authorized until it is approved (scope §7.3). Physical storage and schema choices are **provisional**. New numbers are `[#?]`.
+**Status:** **DRAFT v0.3 for review. Not approved.** 26 November 2026. **Review state:** on PR #35, v0.2 (`1efb269`) was **APPROVED as DRAFT architecture documentation by the project owner (Ayush)**, with two non-blocking corrections, and received **CHANGES_REQUESTED from Nisarga (Dev D)** on the review path. v0.3 applies both; **neither reviewer has re-reviewed v0.3**. Draft approval authorizes no migration, privilege change or implementation, and every AD-11 decision stays provisional. A **proposal**: no migration, schema change or role change is made or authorized until it is approved (scope §7.3). Physical storage and schema choices are **provisional**. New numbers are `[#?]`.
 **Lead:** Dev B. **Reviewers:** Dev A, Dev D. **Approver:** project owner.
 **Inputs:** AD-3 (**v0.3**, PR #31, merged into `feature/phase3-platform` and still DRAFT), AD-4 v0.2 (approved for the D-24 slice only), AD-10 (**draft v0.2**, PR #33, open). **Feeds:** milestones 3.2, 3.7. **Coordinates with:** AD-2, AD-5, AD-7, AD-12, Gate 3.
 
@@ -18,6 +18,16 @@
 | Owner 2 | §8/§9: observed P-2 retention is provider-bound, but no proposed role can delete observed rows | **§8**, §9 role table, **AD11-D12** |
 | Owner 3 | PR #31 alignment: AD-3/AD-12/AD-13 to v0.3; correct C11-4, C11-5, C11-6, in particular AD-13's existing G4-1 and G4-2 | **§13** |
 | Owner 4 (minor) | Clarify P-9 retention, the seeder role, and the storage implication of 30-day synthetic retention | §8, §9.3 |
+
+**Revision v0.3, 26 November 2026 — still DRAFT.** Documentation only. Applied from the re-reviews of v0.2 at `1efb269`:
+
+| From | Finding | Where applied |
+|---|---|---|
+| Nisarga (blocking) | The role split does not say how the review module reads P-4 and coordinates the approved P-2 event with P-5 and P-7: read access, atomicity or recoverable coordination, idempotent retries, partial-commit recovery, no premature publication, without changing the event-identity contract; acceptance criteria | **§9.4**, §9 role table, §11 items 14 to 19, **AD11-D15** |
+| Owner 1; Nisarga | Reflect AD-10's finding that Phase 2 integration tests need a separate privileged fixture connection | §9, §11 item 1 |
+| Owner 2; Nisarga | Stale AD-5 v0.3 reference in §4 | §4 |
+| Consistency (AD-7 v0.3, PR #34) | One claim per record enforced by a database uniqueness constraint | §3 P-6 |
+| Consistency (merged AD-2 v0.2) | `degraded` is an internal source state, not a published status | §9.1 |
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §3 Workstream E, §5 (Gates 2–4), §7.3 (AD-11 row); `docs/PHASE2_API_CONTRACT.md` §6; `docs/PHASE3_AD6_ENGINE_BOUNDARY.md` §5 (B-5, B-7), §6.1; AD4-Q7.
 
 ## 1. Directions applied (relayed)
@@ -47,7 +57,7 @@ Relayed 26 November 2026; no approval document exists in the repository. The own
 | P-3 | **Rejection records** (no payload; draft AD-4 Part 2 §5.4) | Append-only | Backend | None to P-1 |
 | P-4 | **Quarantine** (withheld valid envelopes) | Append-only | Backend | Referenced by P-5 |
 | P-5 | **Review records**: queue entries, outcomes (approve or refuse), refusals | Append-only | Backend, on an authenticated reviewer action | P-4 item; on approval, the new event in P-2 (`supersedes`, AD-4 §6) |
-| P-6 | **Browser-context claims** (AD-7 §8) | Append-only | Backend | Points **to** a P-1 record; never the reverse (AD-6 §6.1) |
+| P-6 | **Browser-context claims** (AD-7 §8) | Append-only; **at most one claim per record**, enforced by a uniqueness constraint on (`request_kind`, `record_id`) — the persisted record `id`, never `X-Request-Id` (AD-7 v0.3 §8.1) | Backend | Points **to** a P-1 record; never the reverse (AD-6 §6.1) |
 | P-7 | **Security events** (AD-10 §6) | Append-only for the application; deleted only by retention | Backend | None |
 | P-8 | **Sessions** (AD-10 §4) | **Mutable** (create, refresh, delete) | Backend | User |
 | P-9 | **Consumer positions** (AD-2 R-9) | **Mutable** (advance only) | Each consumer | P-2 sequence |
@@ -61,7 +71,7 @@ Relayed 26 November 2026; no approval document exists in the repository. The own
 
 - **Acceptance (AD-2 §4, R-6), mechanism-neutral:** an event is accepted when the acceptance point has validated it and **durably committed** it to P-2, and only then acknowledges it to its producer. This document does not choose the mechanism (AD-3 does). **Under the PostgreSQL proposal** (AD-3 v0.3 §5.1, H-5, unapproved), the acceptance point is the backend and "committed" means a committed PostgreSQL transaction on the P-2 table.
 - **Idempotency (AD-2 R-8):** a uniqueness constraint on `event_id` (the persistence identity); a redelivery with identical content is a no-op; different content is a conflict recorded in P-3 and counted. **Known limit (AD-12 v0.3 §3.1, PR #31; AD-1 §3.4.1 C-1 residual):** overlapping synthetic runs with the same seed and timestamps but a different `case_id` or `generator_version` derive the same `event_id`; under this rule the second is stored as a conflict, not as a distinct event. Whether the synthetic identity changes is AD-5's and AD-12's; until then such runs must not share a seed (AD-2 §7). AD-12 v0.3 §3.1 records a **second** gap on the same rule: the C-1 derivation contains **no source identity**, so two synthetic sources, or a slice run and a load run, with the same seed, pair, sequence and timestamp also collide, and under this rule the second source's events are stored as conflicts for the whole run.
-- **Semantic deduplication, aligned with the revised AD-5 keys (Nisarga's finding 6).** AD-5 **v0.3 §8.1** replaced its v0.1 single five-part key with **two** keys over the same fields: `observation_key` = (`source_id`, `event_type`, subject, `source_timestamp`), which **excludes** the payload hash, and `idempotency_key` = (`observation_key`, `payload_sha256`). They answer different questions, so they map to **different** persistence rules, and the v0.1 text here — "AD-5's key, applied as a second constraint" — was too loose to be implementable:
+- **Semantic deduplication, aligned with the revised AD-5 keys (Nisarga's finding 6).** AD-5 **v0.4 §8.1** replaced its v0.1 single five-part key with **two** keys over the same fields: `observation_key` = (`source_id`, `event_type`, subject, `source_timestamp`), which **excludes** the payload hash, and `idempotency_key` = (`observation_key`, `payload_sha256`). They answer different questions, so they map to **different** persistence rules, and the v0.1 text here — "AD-5's key, applied as a second constraint" — was too loose to be implementable:
 
 | AD-5 v0.4 key | Question | Proposed persistence rule | Outcome |
 |---|---|---|---|
@@ -154,6 +164,7 @@ Builds on AD-10 §5.6, which defines the Phase 2 roles; this adds the Phase 3 fa
 | `cbdc_owner` (migrate) | DDL | DDL | DDL | DDL | DDL | DDL |
 | `cbdc_app` (backend, routing and review) | SELECT, INSERT | **—** *(v0.2, if AD11-D11 adopts the writer role; otherwise SELECT, INSERT as v0.1)* | SELECT, INSERT | **Through §9.2 only** *(v0.2, AD11-D10)* | ALL | — |
 | `cbdc_obs_writer` *(v0.2, proposed, AD11-D11)* | **—** | SELECT, INSERT | — | — | — | SELECT (to answer "outside window") |
+| `cbdc_review` *(v0.3, proposed, AD11-D15; §9.4)* | **—** | **SELECT** P-2 and P-4 (P-4 read-only); P-2 INSERT **only** under §9.4 option (a) | SELECT, INSERT on P-5 and P-10 | EXECUTE on the §9.2 function only | — | — |
 | `cbdc_security_log` | — | — | — | INSERT | — | — |
 | `cbdc_consumer` (a group role; §9.3) | — | SELECT (P-2, observed or synthetic per §3 separation) | — | — | — | SELECT, INSERT, UPDATE, **own row only** (§9.3) |
 | `cbdc_retention` | — | DELETE past retention: P-2 synthetic, **P-2 observed past its source's approved retention** *(v0.2)*, P-3, P-4 (subject to §8.1) | **—** | DELETE past retention | DELETE expired | DELETE deregistered consumers' rows *(v0.2)* |
@@ -163,7 +174,7 @@ Builds on AD-10 §5.6, which defines the Phase 2 roles; this adds the Phase 3 fa
 - **What "append-only" means here:** no in-place modification by any role, and no deletion by the application. Two changes are still allowed, and neither is an edit: (1) **authorized retention deletion** of whole rows past an approved retention period, only by `cbdc_retention`, and each run logged as a P-7 event; (2) **identity and status changes** expressed as **new rows** (P-10 lifecycle, review outcomes, corrections), never as updates.
 - **Append-only enforcement:** no UPDATE privilege for any runtime role on append-only families; DELETE only for `cbdc_retention`, on the families listed; a trigger that raises on UPDATE always, and on DELETE unless the current role is `cbdc_retention`, as a second line `[provisional]`.
 - **Retention authority** is separate from writing: `cbdc_app` cannot delete; `cbdc_retention` cannot insert or update. P-1, P-5 and P-10 have no retention deletion (§8).
-- The test database needs the same roles, and the Phase 2 backend integration tests must pass connected as `cbdc_app` (§11 item 1). Whether Prisma's generated client and the existing suites run under an INSERT-only role is **unverified**; AD-10 §5.6 records the same assumption to test.
+- The test database needs the same roles. **The Phase 2 backend integration tests cannot simply run as `cbdc_app`:** AD-10 v0.2 §5.6 (PR #33 at `a8fb24b`, open) found that the suite resets its tables with `TRUNCATE … CASCADE` through the same Prisma client (`services/backend/test/integration/transactions.test.ts:157-158`), which an INSERT-only role cannot do. The requirement is therefore: **the code under test connects as `cbdc_app`, and setup and cleanup use a separate, privileged fixture connection** that the application never holds. That is a test-harness change for the implementing milestone and is **not authorized here**. The same split applies to any test of the Phase 3 families. Whether Prisma Client's `create` needs only INSERT and SELECT remains **an assumption to test** (AD-10 §5.6).
 
 ### 9.1 Observation writes: privilege and failure isolation (Nisarga's finding 1)
 
@@ -183,7 +194,7 @@ Builds on AD-10 §5.6, which defines the Phase 2 roles; this adds the Phase 3 fa
 
 | Failure | Observation path | Routing and Phase 2 | Boundary that holds it |
 |---|---|---|---|
-| P-2 to P-4 writes fail (constraint, lock timeout, table missing) | Backend stops acknowledging; ingestion keeps entries until its buffer limit (AD-2 R-7, L-1); source labelled degraded | **Unaffected** | Separate role, pool and timeouts; separate transactions (§4) |
+| P-2 to P-4 writes fail (constraint, lock timeout, table missing) | Backend stops acknowledging; ingestion keeps entries until its buffer limit (AD-2 R-7, L-1); the source enters the **internal** `degraded` state, which is not a published source status (AD-2 L-1; AD-5 v0.4 §9.3) | **Unaffected** | Separate role, pool and timeouts; separate transactions (§4) |
 | Observation pool exhausted | As above | **Unaffected**: routing uses its own pool | Separate pool |
 | `cbdc_obs_writer` credentials revoked or wrong | As above | **Unaffected** | Separate credential |
 | **Complete PostgreSQL outage** (AD-3 H-7 case b) | Stops | **Also affected**; outside the observation boundary and governed by Phase 2's readiness rules | None: **not claimed** |
@@ -206,6 +217,31 @@ Builds on AD-10 §5.6, which defines the Phase 2 roles; this adds the Phase 3 fa
 
 **Provisional recommendation: (c)**, because it is the only option that is both atomic and keeps `cbdc_app` from holding P-7 table privileges. **Not decided:** **AD11-D10**, decided **jointly** with AD-10's **AD10-D14** so the two documents cannot diverge; Nisarga's review permits leaving the mechanism unresolved, and the owner's requires an executable one, so the choice between (c) and (d) is the owner's. Ordinary security events (AD-10 §6 default) are **not** affected: they stay outside every other transaction and use `cbdc_security_log` directly. **Acceptance:** §11 item 12.
 
+### 9.4 The review path: reading quarantine and coordinating P-2, P-5 and P-7 (Nisarga, v0.2 re-review)
+
+**The gap v0.2 left.** v0.2's table gives `cbdc_app` P-5 and P-10, and, under AD11-D11, gives P-2 to P-4 to `cbdc_obs_writer` alone. A reviewer therefore had **no defined way to read the P-4 item under review**, and an approval — which writes a **new P-2 event** (AD-4 §2, §6), a **P-5 outcome** and a **P-7 security event** (§6; AD-10 §6 case (a)) — spanned roles that v0.2 kept apart. §9.2 made P-5 + P-7 atomic, but said nothing about P-2.
+
+**Guarantees required, whatever mechanism is chosen** (the mechanism itself stays provisional, AD11-D15):
+
+| # | Guarantee |
+|---|---|
+| R-1 | **Read access.** The review module reads P-4, and the P-2 rows a reviewed item refers to, **read-only**. It never holds UPDATE or DELETE on P-4 or P-2, and never reads P-1. The synthetic/observed separation (§3; AD-2 R-14) applies to what a reviewer may see. `cbdc_obs_writer` keeps sole INSERT on P-3 and P-4, so the ingestion path is unchanged |
+| R-2 | **All or nothing.** An **approval** leaves exactly one P-5 outcome, exactly one new P-2 event and exactly one P-7 event, or none of them. A **refusal** leaves exactly one P-5 outcome and one P-7 event and **no** P-2 row. No state persists in which P-5 says "approved" and the approved event can never appear, or the approved event exists with no outcome |
+| R-3 | **One outcome per item.** A uniqueness constraint on the P-5 outcome's P-4 item reference. Two reviewers, or one reviewer retrying, can never record two outcomes for one item; the loser is answered `409` and writes nothing |
+| R-4 | **Idempotent retry and partial-commit recovery.** A retry after an unknown result (timeout, lost connection) either finds the committed outcome through R-3 and returns it, writing nothing, or finds nothing and runs again in full. **No new event-identity rule is introduced:** the approved event is a new event whose `supersedes` names the reviewed event and whose timestamps copy it except `emitted_at` (AD-4 §2, §5). Its `event_id` is produced as the approved AD-4 contract and its drafts provide, and AD-11 neither derives nor changes it |
+| R-5 | **No premature publication.** The approved event is not visible to replay, distribution, the stream hub or the current-value computation before the transaction that creates it commits. Current-value updates are driven only from **committed** P-2 rows, and gap-safe replay (§4) applies to it like any other row. A rolled-back approval is never displayed |
+| R-6 | **Boundaries unchanged.** No P-1 row and no `AuditLog` row is in any review transaction, so Q19 is unchanged. No outcome writes to the knowledge layer without Gate 2 (§7). The routing path never waits on a review |
+
+**Mechanism options** (decision **AD11-D15**, open):
+
+| Option | How R-2 is met | R-4 | Privilege | Cost |
+|---|---|---|---|---|
+| (a) **One transaction, dedicated role.** `cbdc_review` reads P-4, inserts the P-2 event and the P-5 outcome, and calls the §9.2 function for P-7, all on one connection | Atomic commit | A retry after rollback starts clean; after commit, R-3 returns the existing outcome | `cbdc_review` holds INSERT on P-2, a second P-2 writer beside `cbdc_obs_writer` | Two P-2 writers; review writes share P-2's uniqueness and sequence rules |
+| (b) **One transaction through a definer function.** `cbdc_app` (or `cbdc_review`) holds SELECT on P-4 and EXECUTE on an `approve_review` / `refuse_review` function that performs the P-2, P-5 and P-7 inserts with a pinned `search_path` and fixed parameters | Atomic commit | As (a) | **No** table privilege on P-2, P-5 or P-7 for the caller: the same pattern as §9.2 option (c) | A larger privileged function under `cbdc_owner`, needing its own review and test |
+| (c) **Recoverable coordination.** One transaction records the P-5 outcome as `approved — publication pending` with its P-7 event and the approved event's full envelope; `cbdc_obs_writer` then inserts the P-2 event in a second transaction, and a reconciler retries any pending outcome until the P-2 row exists | **Eventually**: a pending outcome is never displayed as published, and the reconciler completes it | The P-2 insert is idempotent on `event_id`, which was fixed in the pending outcome, so a reconciler retry is a duplicate, not a second event | Keeps P-2 with `cbdc_obs_writer` alone | A reconciler, a pending state and a monitored backlog; more moving parts |
+
+**Provisional preference: (b)**, because it meets R-2 by an atomic commit and keeps every caller free of P-2, P-5 and P-7 table privileges, consistent with §9.2's preference. **Not decided here.** If (a) or (b) is chosen, the §9.2 function, or a new one, must be callable by the review path, and AD-10 v0.2 §6.1 — which names `cbdc_app` as the caller — must be aligned in the same change. Under every option a refusal writes no P-2 row.
+
 ### 9.3 Remaining role definitions and consumer row isolation (Nisarga 7; owner minor)
 
 - **`cbdc_consumer` is a group role, never a login.** Each server-side consumer (≤ 3, AD-2 R-11) has its own login role that is a member of it. PostgreSQL has no row ownership, so v0.1's "own rows" was not enforceable by grants alone. **Proposal:** **row-level security** on P-9 with a policy `USING (consumer_name = current_user) WITH CHECK (consumer_name = current_user)`, P-9 owned by `cbdc_owner`, and no consumer role ever an owner (owners bypass row-level security unless it is forced). A consumer can then read and advance only its own position, and cannot read another's lag. **Acceptance:** §11 item 13.
@@ -222,7 +258,7 @@ Builds on AD-10 §5.6, which defines the Phase 2 roles; this adds the Phase 3 fa
 
 ## 11. Acceptance criteria
 
-1. UPDATE or DELETE on an append-only family as `cbdc_app` fails; the Phase 2 suites pass as `cbdc_app`.
+1. UPDATE or DELETE on an append-only family as `cbdc_app` fails; the Phase 2 suites pass with the **code under test connected as `cbdc_app`** and their setup and cleanup (`TRUNCATE`) on a **separate privileged fixture connection** (§9; AD-10 v0.2 §5.6).
 2. Redelivery leaves exactly one P-2 row per `event_id`; a conflict writes a P-3 record.
 3. No foreign key, join or view links P-2–P-6 to P-1 except P-6 → P-1 (draft AD-6 Part 2 T-14).
 4. A 401 writes a P-7 event and **no** `AuditLog` row (Q19).
@@ -235,6 +271,12 @@ Builds on AD-10 §5.6, which defines the Phase 2 roles; this adds the Phase 3 fa
 11. **Failure isolation (if (c)):** with observation writes failing, the observation pool exhausted, or `cbdc_obs_writer`'s credential revoked, AD-6 T-1's routing requests give identical responses and `decision_id`s, and Phase 2 suites pass (AD-3 H-7 case a). Instance-wide failures are not claimed (§9.1).
 12. **Atomic review write (per AD11-D10):** with P-7 unavailable, a review outcome is refused with no P-5 row left; with P-5's insert failing, no P-7 row is left; `cbdc_app` holds no P-7 table privilege under option (c).
 13. **Consumer row isolation:** a consumer cannot read or update another consumer's P-9 row.
+14. **Review read access (§9.4 R-1):** the review path can read a P-4 item and cannot update or delete any P-4 or P-2 row, nor read any P-1 row.
+15. **Failure between writes (R-2):** with a failure injected after the P-2 insert, after the P-5 insert, and at the P-7 call in turn, an approval leaves **either all three rows or none**; under option (c), a pending outcome with no P-2 row is completed by the reconciler and is never displayed as published meanwhile.
+16. **Concurrent and repeated approval (R-3, R-4):** two simultaneous approvals of one item leave one outcome and one P-2 event (the other `409`); a retry after a committed approval whose response was lost returns the existing outcome and writes nothing; a retry after a rolled-back approval completes once.
+17. **No premature publication (R-5):** while the approval transaction is open, and after it rolls back, no consumer replay, stream `update` or current value shows the approved event.
+18. **Refusal (R-2):** a refusal leaves one P-5 outcome and one P-7 event and no P-2 row.
+19. **Boundaries (R-6):** no review transaction contains a P-1 or `AuditLog` row, and feasibility is byte-identical before and after an approval (AD-6 Part 2 T-18).
 
 ## 12. Decisions
 
@@ -253,6 +295,7 @@ Builds on AD-10 §5.6, which defines the Phase 2 roles; this adds the Phase 3 fa
 | **AD11-D11** | **Observation writer role** (§9.1) | (a) shared `cbdc_app`; (b) distinct role; (c) distinct role, own pool and timeouts | **(c), provisional** | AD-3 H-6, H-7; AD-1 §4; AD11-D1 | Owner, Dev B, Dev D | §11 items 10, 11 |
 | **AD11-D12** | **Reviewed-evidence retention** (§8.1), and observed P-2 deletion authority (§8) | (a) keep reviewed evidence with P-5; (b) non-payload digest in P-5; (c) P-5 follows its evidence | **(b), provisional**; observed P-2 deletable by `cbdc_retention` per source | Gate 3; AD-5 `retention_policy_ref`; AD11-D6 | Owner, Dev D | §11 item 8; a P-5 row whose evidence was deleted resolves as "deleted by retention" |
 | **AD11-D13** | **Reviewer-identity erasure** (§8.1) | Never; on approved request, redacting only P-10's (`iss`, `sub`) | **Open — no recommendation.** Policy, requester and approver are not engineering decisions | Owner policy | Owner | None until decided; no erasure privilege exists |
+| **AD11-D15** | **Review-path coordination** (§9.4) | (a) one transaction, `cbdc_review` writes P-2; (b) one transaction through a definer function; (c) recoverable coordination with a reconciler | **(b), provisional**; R-1 to R-6 required under every option | AD11-D10, AD10-D14, AD11-D11; AD-4 §2, §6; AD-12 §6.2 | Owner, Dev A, Dev D | §11 items 14 to 19 |
 | **AD11-D14** | **Gap-safe replay mechanism** (§4) | Watermark or lag bound; in-flight snapshot; commit-serialized assignment; set-valued position | **Open — no recommendation**; same decision as AD-2 **AD2-D8** | AD-3, AD-2 | Owner, Dev B, Dev D | §11 item 9 |
 
 ## 13. Conflicts and open dependencies
@@ -272,5 +315,5 @@ Builds on AD-10 §5.6, which defines the Phase 2 roles; this adds the Phase 3 fa
 ## 14. Approval checklist
 
 - [ ] Dev A: §4, §6, §7 (Stage 1E and AD-4 consistency)
-- [ ] Dev D: §3, §9, §9.1 to §9.3, §10 (operations, roles, backup)
-- [ ] Project owner: AD11-D1 to **AD11-D14**. **No migration before approval.**
+- [ ] Dev D: §3, §9, §9.1 to §9.4, §10 (operations, roles, backup)
+- [ ] Project owner: AD11-D1 to **AD11-D15**. **No migration before approval.**
