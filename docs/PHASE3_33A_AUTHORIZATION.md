@@ -1,10 +1,17 @@
 # Phase 3.3-A: Implementation Authorization Request (synthetic-only adapter foundation)
 
-**Status: v1.1, 27 November 2026 — OWNER AUTHORIZATION RECORDED, and complete for this scope.** This document was a request; it is now the **record** of the project owner's authorization of the bounded 3.3-A scope, given on 26 November 2026 and relayed in session, **not quoted**. **All four technical sign-offs and both D-23 reviews are in** (§10.2), and the owner has decided **AD1P2-Q1 to Q7**, **AD5-Q1 to Q11**, **AD-12** and the **synthetic-only part of AD-8** (§§3–6), and approved **§7's scope, §8's twelve exclusions and §9's nineteen acceptance criteria**, **in full** — on **27 November 2026** the owner **granted AD4P2-Q2 for Phase 3.3-A only**, which closes the last open clause of criterion 8.
+**Status: v1.2, 27 November 2026 — OWNER AUTHORIZATION RECORDED, and complete for this scope.** This document was a request; it is now the **record** of the project owner's authorization of the bounded 3.3-A scope, given on 26 November 2026 and relayed in session, **not quoted**. **All four technical sign-offs and both D-23 reviews are in** (§10.2), and the owner has decided **AD1P2-Q1 to Q7**, **AD5-Q1 to Q11**, **AD-12** and the **synthetic-only part of AD-8** (§§3–6), and approved **§7's scope, §8's twelve exclusions and §9's nineteen acceptance criteria**, **in full** — on **27 November 2026** the owner **granted AD4P2-Q2 for Phase 3.3-A only**, which closes the last open clause of criterion 8.
 
 **The last open prerequisite is now closed, and strictly bounded:** **AD4P2-Q2** — AD-4 Part 2 §3.4 item 3, "one active generator configuration per `source_id`" — is **GRANTED for Phase 3.3-A only**, as a registry configuration rule **on the registry-selected synthetic adapter path**, so §6.1 adopts it and **criterion 8's third clause is authorized** within that bound (§13.3). **This grants nothing beyond 3.3-A:** **AD-4 Part 2 is not approved as a document**, it remains a DRAFT with no technical review, and **AD4P2-Q1 and Q3 to Q7 stay undecided**. **The approved C-1 `event_id` derivation is unchanged**, **no envelope field changes**, **the D-24 generator path keeps its exemption and its behaviour**, and **all four capability gates remain CLOSED**.
 
 **What is still true and unchanged:** **all four capability gates remain CLOSED** (D-18); **no provider, site, checkpoint or knowledge write is approved**; **the D-24 slice is untouched** and its behaviour unchanged; **milestones 3.2, 3.3-L, 3.4, 3.5, 3.6 and 3.7 are not authorized**, nor is the **3.3-S exit**, which still needs **A-4** fault injection (§1.1, §9). **Nothing is reachable outside the private development environment** (D-16). **This record does not start implementation**, and the owner has directed that none begin on it yet.
+
+**Revision v1.2, 27 November 2026 — DEPENDENCY RECORDS CORRECTED (Dev B, PR #39).** Applies Anvesh's CHANGES_REQUESTED review of `5ec87b4`, whose text is on the pull request and is **relayed, not quoted**. His review states that the owner decisions, the 3.3-A scope, the deferrals, the D-24 preservation and the closed capability gates are satisfactory, and that all earlier Dev B sign-offs are accurately recorded; the one blocker was that §1's **Depends on** list and §2's table still cited **superseded draft versions**. **Documentation only. No requirement, scope item, exclusion, acceptance criterion, contract, schema, threshold, derivation, envelope field, ownership, D-24 behaviour or gate state changes, and the 3.3-A authorization is not widened.** Changes:
+
+- **§1's Depends on list now states the approved versions** — AD-1 Part 2 **v0.7**, AD-5 **v0.8**, AD-12 **v0.4** (Part A), AD-4 **v0.2** extended to 3.3, AD-8 **v0.8** partial (synthetic rows only) — and keeps the slice-only and still-DRAFT items named as such.
+- **§2 is labelled a HISTORICAL SNAPSHOT at `002cefe`** and is **left unrewritten**, with a one-line current state and a pointer to **§10.3**, which wins on any difference. The Dev B review offered either option; both are taken.
+- **§2's "Consequence" paragraph is marked as the snapshot's**, with a dated **Superseded** note recording that F-1's three documents are approved and D-22's component-view condition is satisfied, and restating what that does not do.
+- **Nothing else moves.** §§3–9 are untouched, **AD-12 Part B, the §3.3 load modes and AD-8 as a whole stay DEFERRED or unapproved**, **AD-4 Part 2 stays DRAFT**, **AD-2, AD-3, AD-6 Part 2, AD-7, AD-9, AD-10, AD-11 and AD-13 stay unapproved**, **AD-6 B-4 stays unresolved** under D-25, and **AD-6 must not be described as fully enforced**.
 
 **Revision v1.1, 27 November 2026 — AD4P2-Q2 GRANTED FOR 3.3-A ONLY.** Records the project owner's decision of 27 November 2026, relayed in session and **not quoted**, which takes option 1 of §13.3. **Documentation only. No requirement, scope item, exclusion, acceptance criterion, contract, schema, threshold, derivation, envelope field, ownership, D-24 behaviour or gate state changes.** Changes:
 
@@ -86,7 +93,12 @@
 
 **Leads:** **Dev A** for the adapter contract inside C-1, **Dev D** for the synthetic adapter and harness (C-3). **Approver:** project owner. **Required reviewers:** §10.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §2.2.2 (the D-24 F-1 exception, as precedent only), §2.3 **F-1**, §7.1 (milestone 3.3), §7.2, §12 remaining item 1; D-20, D-22, D-23.
-**Depends on:** the AD-1 component view v0.5, AD-4 v0.2 and AD-6 v0.2 (each approved **for the D-24 slice only**), and the DRAFT documents AD-1 Part 2 **v0.6**, AD-4 Part 2 v0.2, AD-5 **v0.7b**, AD-6 Part 2 v0.2, AD-8 **v0.7**, AD-12 **v0.3.7**.
+**Depends on**, at the approved versions as of 27 November 2026 (§10.3 is the current approval state):
+
+- **APPROVED:** **AD-1 Part 2 v0.7** — the §2.2 placement and the §8 mapping, satisfying D-22's component-view condition; **AD-5 v0.8**; **AD-12 v0.4** — **Part A only**, Part B and the §3.3 load modes DEFERRED; **AD-4 v0.2** — approval **extended to milestone 3.3**.
+- **APPROVED FOR THE D-24 SLICE ONLY**, version-specific and unchanged: the **AD-1 component view v0.5** and **AD-6 v0.2** (subject to **D-25**, with **B-4 unresolved**).
+- **PARTIALLY APPROVED:** **AD-8 v0.8** — the **synthetic rows only**; the document as a whole is **NOT approved**, so **F-5's targets stay provisional and exit criterion 9 is unmet**.
+- **STILL DRAFT, not approved:** **AD-4 Part 2 v0.2** (no technical review; **AD4P2-Q2 granted for 3.3-A only**, which approves no part of the document) and **AD-6 Part 2 v0.2**.
 **Changes no code, no contract, no schema, no OpenAPI file, no Compose file, no CI workflow and no capability gate.**
 
 ---
@@ -107,9 +119,13 @@
 
 Scope §7.1 defines milestone 3.3 with two exits, **3.3-S** (synthetic) and **3.3-L** (live). **There is no milestone "3.3-A" in the scope, and this document does not create one.** "3.3-A" is a label for the **first, synthetic-only part of 3.3-S**: the adapter contract, one synthetic adapter, and the outage and stale handling that 3.3-S's "before its gate" column names. 3.3-S's exit — *"synthetic adapter feeding the envelope, faults handled"* — is **not** claimed by this scope, because fault injection against a controllable fake provider (**A-4**) needs a transport a synthetic source does not have (§9). Reaching the 3.3-S exit therefore needs this work **plus** A-4, which is why the label is useful and why it is not a renaming.
 
-## 2. Prerequisite state, as the repository records it
+## 2. Prerequisite state — HISTORICAL SNAPSHOT at `002cefe`
 
-| Document | State on `feature/phase3-platform` at `002cefe` |
+**This table is a historical snapshot, taken on `feature/phase3-platform` at `002cefe`, before the owner's decisions of 26 and 27 November 2026. It is not the current approval state.** It is kept unrewritten as the record of what the repository held when this request was written. **For the current state, see §10.3** (all eleven rows closed), the **Depends on** list in §1, and scope §§2.2.4 and 2.2.5. Where the two differ, **§10.3 wins**.
+
+**Current approval state, in one line:** **AD-1 Part 2 v0.7, AD-5 v0.8, AD-12 v0.4 (Part A) and AD-4 v0.2 extended to 3.3 are APPROVED**; **AD-8 v0.8 is partially approved, synthetic rows only**; **AD-4 Part 2 and AD-6 Part 2 stay DRAFT**; **D-22's component-view condition is satisfied** and **F-1's three documents for milestone 3.3 are approved**. **No gate passes, all four capability gates remain CLOSED, the D-24 slice is unchanged, and no implementation is authorized to begin.**
+
+| Document | State on `feature/phase3-platform` at `002cefe` — **snapshot, superseded** |
 |---|---|
 | AD-1 component view **v0.5** | **APPROVED**, 25 November 2026, **for the D-24 slice only**; version-specific. §4's placement of later components is **not** confirmed, so **D-22 is unsatisfied for milestones 3.2–3.7** |
 | AD-4 **v0.2** | **APPROVED, D-24 slice only.** F-1 names AD-4 among milestone 3.3's required deliverables, and the slice-only approval does **not** cover 3.3 (§13 **DB-1**) |
@@ -120,7 +136,9 @@ Scope §7.1 defines milestone 3.3 with two exits, **3.3-S** (synthetic) and **3.
 | AD-12 **v0.3.7** | DRAFT. Dev B approve-with-conditions on v0.3; applied. v0.3.2 added §3.1's seed-allocation mechanism and §3.4's fixture-origin format; v0.3.3 refreshed the stale AD-5 citations; **v0.3.4** scopes the seed refusal to registry-selected adapters with the D-24 exemption, adds the synthetic-only registry assertions, refreshes the AD-5 and AD-8 references, acknowledges Dev B's `7557a5a` re-review as a recommendation, adds AD-6 **T-10**, and records the Stage 1E **$500,000** cap synchronization. **v0.3.5** completed that reference refresh to **AD-8 v0.7** and corrected §1.1's AD-8 review status; **v0.3.6** recorded Dev B's AD-5 v0.7b technical sign-off at `bfecb46` and the PR #38 state of AD-12's own D-23 reviews; **v0.3.7** names the three-way cap-synchronization test in §6.3 and resolves §1.1's stale AD-5 status-line relay. **Nisarga has technically approved the harness items at `a35932d` from Dev D's perspective**; Dev A's and Dev B's D-23 reviews and owner approval are outstanding |
 | AD-2 v0.2, AD-3 v0.3, AD-7, AD-9, AD-10 v0.2, AD-11 v0.3, AD-13 v0.3 | DRAFT or unwritten; none approved |
 
-**Consequence.** Of the three documents F-1 names for milestone 3.3, **AD-4 v0.2's approval has been extended to 3.3 by the owner** (§10.3 row 1), while **AD-5 and AD-12 are still drafts with no owner approval**, and **D-22 is unsatisfied**. **F-1 is therefore still unmet.** The work is therefore **blocked on authorization, not on design**: §7's scope is implementable the day §10 is complete.
+**Consequence, as the snapshot stood.** Of the three documents F-1 names for milestone 3.3, **AD-4 v0.2's approval has been extended to 3.3 by the owner** (§10.3 row 1), while **AD-5 and AD-12 were still drafts with no owner approval**, and **D-22 was unsatisfied**, so **F-1 was unmet**. The work was **blocked on authorization, not on design**.
+
+**Superseded — 26 and 27 November 2026.** **AD-5 v0.8 and AD-12 v0.4 (Part A) are now APPROVED** and **AD-1 Part 2 v0.7 confirms the placement**, so **F-1's three documents for milestone 3.3 are approved and D-22's component-view condition is satisfied** (§10.3 rows 1 to 4, scope §2.2.4). **§10 is complete: all eleven rows are closed** (§10.3). **What that does not do:** it **passes no gate** — all four capability gates remain **CLOSED** — approves **no provider, site, checkpoint or knowledge write**, leaves the **D-24 slice unchanged**, authorizes **no milestone 3.2–3.7** and **no 3.3-S exit**, and **starts no implementation**: the owner has directed that none begin on this record.
 
 ### 2.1 Milestone, placement and ownership (Varshini B1)
 
