@@ -133,3 +133,30 @@ For `feature/phase3-platform` (a branch protection rule, or an equivalent rulese
 5. **Path matching is GitHub's own glob subset.** `*` stays within a path segment and `**` crosses segments; negated patterns (`!`) are rejected and make acceptance required. A file that matches nothing in the list cannot trigger acceptance, so a new protected path must be added to the list (and a test fails when a protected prefix is not covered).
 6. **Pushes to the platform branch are checked too, but a branch protection rule does not apply to a check that arrives after a push.** The pull request check is the control.
 7. **A re-run of a failed run replaces its conclusion.** The newest run of the commit decides, so a re-run that succeeds turns the gate green on the next gate run; the gate itself must be re-run after the acceptance jobs are re-run.
+
+## 7. Browser test: the reload and the end of the old stream
+
+**What failed.** On the merge commit `27ba481` the `@on` test "leaving the dashboard closes the stream, and returning opens exactly one" failed at its last count, after `page.reload()`: `streams.open` expected 1, received 2. Panel-off and preview passed. It had passed in four earlier CI runs, so it was intermittent.
+
+**Verified root cause (measured on one isolated stack, not read from the CI log alone).** The test counted open streams as "requests started minus requests reported ended". A reload destroys the document that owned the old stream, and the browser does not always report the end of a request that teardown cancelled.
+- Run 1: in 30 reloads, 1 old stream's `requestfailed` was never delivered, and it never arrived later (the count stayed one too high for the remaining 25 steps). Run 2: 1 in 60 (iteration 34). Together 2 in 90 reloads. No delivered event ever arrived late, so a bounded `expect.poll` could not have fixed it.
+- The server was not affected: with the page holding one stream, exactly two more streams (the per-user cap of 3) opened in all 110 steps (40 in run 1, 70 in run 2), including both steps with the lost event. Where measured (run 1), it took 31 to 356 ms. Exactly one new stream started in every step, and still one after settling.
+- Navigation inside the page (the history link and back) reported its stream end in every observed step (20 of 20), because the app aborts those itself.
+
+**The fix (test only: `e2e/p3/observations.spec.ts`, `e2e/p3/streams.ts`).** Before the reload the test takes a snapshot of the open stream requests and forgets exactly those afterwards. It asserts that the reload opened exactly one stream, that it is open, and that nothing reconnected after settling. The closing of the old connection is proved on the server: `freeStreamSlots()` opens probe streams as the same user and requires `PER_USER_STREAM_LIMIT - 1` to fit, under a bounded `expect.poll` (5 s, no fixed sleeps). Each probe request is bounded (3 s), registered for abort before it is sent, and every probe connection is aborted in a `finally`. The test also waits for `Receiving` before it takes its baseline, because run in isolation it otherwise counted the first stream. The acceptance criteria are unchanged: one open stream after a reload, exactly one new connection, and the old one closed.
+
+**Negative controls (all observed).**
+- A connection held open from outside, standing in for an old connection that was not released: the free-slot count is 1, the server poll fails, and it recovers once the connection is closed.
+- A second stream opened by the page itself: the open count becomes 2, so the strict equality assertions fail.
+- The probe helper against a local fake server: normal (2 free), one slot held (1 free), connection reset (the call throws), and no answer (the call throws after 3 s). In every case all probe connections were closed within 34 ms.
+
+**Results.** 60 reloads and 10 navigation cycles with the new assertions: 0 failures, where the old counting would have misread 27 of the 60 reloads (all after the one lost event). The real test, repeated 40 times on one stack with the precondition: 40 of 40 passed. Earlier repeats before the precondition failed in isolation (a stream baseline of 0 instead of 1, and one sign-in that did not reach the dashboard); I inspected two of the baseline failures and the sign-in one, and did not trace the rest.
+
+**Limitations.**
+1. The repeated real test reloads once per repeat, and a lost event happens in about 2 of 90 reloads, so those 40 passes do not themselves exercise the lost-event path. The 70-step probe did.
+2. The hardened helper (the 3 s request bound and abort-before-send) was verified against a local fake server, not on a real stack; the 40 and 70 step runs used the version without it. The change does not touch the logic that was measured.
+3. The probes take up to 2 of the user's 3 slots for a few milliseconds. This is only safe while the page already holds its own stream; it must not run while the page is reconnecting.
+4. Slot release was measured at 31 to 356 ms; the 5 s bound is generous, not derived. A slow runner could need more.
+5. In-page stream aborts (navigation, hidden tab) still depend on the browser reporting the end of the request. It did in all 20 observed navigations, but the loss mechanism is not ruled out there. Only reloads are protected by the server check.
+6. One sign-in in the repeated runs did not reach the dashboard within 15 s; it did not recur in 40 further repeats and is unexplained.
+7. `AbortSignal.any` needs Node 20.3 or newer (CI uses 20.20.2). The helper is type-checked only by Playwright's loader, not by `tsc`.
