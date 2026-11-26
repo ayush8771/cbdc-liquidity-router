@@ -1,7 +1,8 @@
 # AD-12: Synthetic Event Harness and Review-Queue Specification
 
-**Status:** **DRAFT v0.3 for review. Not approved.** 26 November 2026. v0.3 answers Dev B's technical review of PR #31 at `d96aabe` (approve with conditions): the synthetic identity collision risk and its provisional mitigations (§3.1), reviewer authorization and separation of duties (§6.2), the open release workflow for quarantined FX observations (§6.2), and the status of referenced documents (§1.1). v0.2 adds synthetic load modes (§3.3), persistence and replay fault cases (§4), Dev B's provisional AD-11 proposals (§6.2), and fixture-origin and fake-provider obligations from the PR #30 drafts. **Lead:** Dev D. **Reviewers:** Dev A (Stage 1E rules), Dev B (review-queue persistence), per D-23. **Approver:** project owner.
-**Inputs:** AD-4 (v0.2, approved for the D-24 slice only), AD-5 (draft v0.1 in PR #30, unreviewed; see §1.1). **Feeds:** milestones 3.3, 3.4, 3.6. **Scope source:** `docs/PHASE3_SCOPE.md` §3 Workstreams A and C, §6, §7.3.
+**Status:** **DRAFT v0.3.1 for review. Not approved.** 26 November 2026. **v0.3.1 (documentation only) refreshes references and review status after the merge of PRs #30 to #35, and applies the owner's review of PR #36; see the reference-update note below.** v0.3 answers Dev B's technical review of PR #31 at `d96aabe` (approve with conditions): the synthetic identity collision risk and its provisional mitigations (§3.1), reviewer authorization and separation of duties (§6.2), the open release workflow for quarantined FX observations (§6.2), and the status of referenced documents (§1.1). v0.2 adds synthetic load modes (§3.3), persistence and replay fault cases (§4), Dev B's provisional AD-11 proposals (§6.2), and fixture-origin and fake-provider obligations from the PR #30 drafts. **Lead:** Dev D. **Reviewers:** Dev A (Stage 1E rules), Dev B (review-queue persistence), per D-23. **Approver:** project owner.
+**Reference update, v0.3.1 (documentation only, after the merge of PR #30 and the owner's review of PR #36):** references now cite the merged **AD-5 v0.4**, **AD-8 v0.5**, **AD-4 Part 2 v0.2** and **AD-6 Part 2 v0.2** (all DRAFT, not approved), and §1.1 states the status of AD-2, AD-10 and AD-11. The shared-seed collision rule is attributed to AD-5 v0.4 §8.2 (§3.1). The outage reference in §4 is corrected to AD-8 §3.5. No requirement, decision, contract, C-1 text or approval of AD-12 changed.
+**Inputs:** AD-4 (v0.2, approved for the D-24 slice only), AD-5 (DRAFT v0.4, in `docs/`, not approved; see §1.1). **Feeds:** milestones 3.3, 3.4, 3.6. **Scope source:** `docs/PHASE3_SCOPE.md` §3 Workstreams A and C, §6, §7.3.
 
 AD-1 §3 stands in for AD-12 **for the D-24 slice only and approves nothing**. This document describes what that slice built, generalizes it only where facts allow, and leaves dependency-bound parts open.
 
@@ -20,9 +21,12 @@ Ayush (project owner and Dev A) approved the directions below on 26 November 202
 | Document | Status |
 |---|---|
 | AD-1 component view v0.5, AD-4 v0.2, AD-6 v0.2 | Approved for the D-24 slice only (25 November 2026); in `docs/` |
-| AD-5 adapter contract, AD-8 budgets, Part 2 companions | **DRAFT v0.1, unreviewed**, in PR #30 (read at `5f78500`), not in the repository baseline; citations may change |
-| AD-2 | Unwritten; Dev B's provisional proposals relayed |
-| AD-10, AD-11 | Unwritten; Dev B's provisional AD-11 proposals relayed |
+| AD-5 adapter contract v0.4, AD-8 budgets v0.5, AD-4 Part 2 v0.2, AD-6 Part 2 v0.2 | **DRAFT, merged into `docs/` from PR #30; no final approval.** Review status as each document states it. **AD-5 v0.4 and AD-4 Part 2 v0.2 (status lines):** "CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)", "NOT APPROVED", findings applied, "neither reviewer has re-reviewed", no owner approval. **AD-8 v0.5 (status line and v0.5 revision note):** the same two reviews, and the note applies Dev B's (Anvesh's) CHANGES_REQUESTED re-review of PR #30 on commit `e457bcf`; its text is on the pull request, not in the repository. No document records a re-review of its applied version or an owner approval. Citations are to those versions and may still change |
+| AD-2 v0.2 | **DRAFT, merged; no final approval.** On PR #32 at `be3f6ae`: approved as draft documentation by Dev D with four conditions before final architecture approval, and CHANGES_REQUESTED by the project owner; both rounds applied in v0.2. Its status line records no re-review. Every number is provisional |
+| AD-10 v0.2 | **DRAFT, merged; no final approval.** CHANGES_REQUESTED by Dev D and Dev C on PR #33 at `ddac407`, applied in v0.2; no re-review recorded. The isolated backend-inference network is an approved *direction* only. **B-4 stays open** (D-25); nothing is implemented |
+| AD-11 v0.3 | **DRAFT, merged; no final approval.** v0.2 on PR #35 was approved as draft architecture documentation by the project owner, with two non-blocking corrections, and CHANGES_REQUESTED by Dev D; v0.3 applies both and has no re-review recorded. Draft approval authorizes no migration, privilege change or implementation. Reviewer references, persistence and retention stay provisional |
+
+Draft-documentation approval (a document may be merged and cited as a draft) is not final architecture approval, and neither is implementation approval. Only the project owner's recorded approval of a document makes it a basis for a code milestone (scope §7, D-22).
 
 ## 2. Scope and rules
 
@@ -55,7 +59,7 @@ Ayush (project owner and Dev A) approved the directions below on 26 November 202
 2. **Disjoint subjects.** Sources registered at the same time use disjoint pair sets, so `pair` never repeats across them.
 3. **A start-up check.** The harness refuses to start a synthetic source whose (seed, pair) overlaps one already running or recorded for the same period.
 
-None of these replaces a derivation fix. Whether a future generator version adds `source_id`, `generator_version` or `case_id` is the owner's decision in §3.4 and AD4P2-Q1 of `PHASE3_AD4_ENVELOPE_PART2.md` (a PR #30 draft on branch `docs/phase3-architecture-ad1-ad4-ad5-ad6-ad8`, **not in this repository's `docs/`**), because C-1 is approved text. **The broader C-1 residual risk stays open.**
+None of these replaces a derivation fix. Whether a future generator version adds `source_id`, `generator_version` or `case_id` is the owner's decision in §3.4 and AD4P2-Q1 of `PHASE3_AD4_ENVELOPE_PART2.md` (now in `docs/`, a draft), because C-1 is approved text. AD-4 Part 2 §3.4 item 3 records a further containment that changes no derivation: **one active generator configuration per `source_id`**, a second configuration being a second `source_id`, which enters the idempotency key (AD-5 §8.1). It is proposed, not approved. **Shared-seed collision rule (AD-5 v0.4 §8.2, adopting AD-2 R-8; also AD-5's revision note):** a second arrival of a C-1-style collision is a **conflict, not a duplicate**. Load and fault runs must not overlap with a shared seed until AD-5 and AD-12 resolve the residual risk, and a run that does is invalid as a performance result and may be excluded from throughput and latency figures. Exclusion applies to the result only: the collisions are still **detected, rejected, counted and recorded** exactly as in any other run. Provisional; AD-5 is a draft. **The broader C-1 residual risk stays open.**
 
 ### 3.2 Determinism and replay rules
 
@@ -68,8 +72,8 @@ The D-24 generator produces 2 events/s over four pairs. The rates now proposed a
 | Mode | Profile | Source of the number |
 |---|---|---|
 | D-24 slice | 2 events/s, 4 pairs | AD-1 §3, approved for the slice |
-| Sustained | 20 events/s | Dev B (relayed) and AD-8 draft §6.2 agree |
-| Peak A | 100 events/s for up to 10 s | AD-8 draft §6.2 |
+| Sustained | 20 events/s | Dev B (relayed) and AD-8 v0.5 §6.2 agree |
+| Peak A | 100 events/s for up to 10 s | AD-8 v0.5 §6.2 |
 | Peak B | 200 events/s for 60 s (12,000 events) | Dev B (relayed) |
 
 Peak A and Peak B conflict and neither is chosen (AD-3 §10, X-1).
@@ -77,14 +81,14 @@ Peak A and Peak B conflict and neither is chosen (AD-3 §10, X-1).
 Rules:
 - **Deterministic.** Seed, injected clock and sequence fix every event, with the C-1 identity (`UUIDv5(seed, pair, sequence, source_timestamp)`) unchanged. Timestamps within a pair stay distinct at the highest rate.
 - **Own seed range.** A load source takes a seed and subject set disjoint from the slice's and from every other running source (§3.1 mitigations).
-- **More subjects need a separate registered synthetic source.** The slice's four-pair allowlist (AD-1 §3.4) stays as approved. A load source with up to 500 subjects (AD-8 draft §6.2) is an AD-5 registry question `[DEP: AD-5]`, and its `source_id` must begin `synthetic.`.
+- **More subjects need a separate registered synthetic source.** The slice's four-pair allowlist (AD-1 §3.4) stays as approved. A load source with up to 500 subjects (AD-8 v0.5 §6.2) is an AD-5 registry question `[DEP: AD-5]`, and its `source_id` must begin `synthetic.`. The 500 is a store and pipeline figure, not a browser contract: the approved channel carries exactly four pairs, and a fifth is a protocol change (AD-8 v0.5 §6.2.1a; AD-4 Part 2 AD4P2-Q7).
 - **Redelivery ratio.** A mode sets a share of duplicate and redelivered events, to test idempotent persistence and handoff acknowledgement (AD-3 §5.1 H-1, H-2).
 - **Test-only.** Load generation lives with the fault tooling, outside every runtime image, and uses no provider data (D-17).
 - **Reporting.** Each result states its rate, duration, event count, host, commit and seed. A figure from a synthetic path is described as "streaming pipeline exercised with synthetic events only; no live source integrated" (scope §6).
 
 ### 3.4 Fixture origin
 
-Every generated or hand-written fixture carries an origin: `synthetic`, the seed and generator version, or `hand-written`. CI can then show that no fixture came from a provider (AD-5 draft A-10; D-17). The format is `[OPEN]`; the envelope's `synthetic` block already carries seed and generator version (AD-4 §3.2) and is not changed.
+Every generated or hand-written fixture carries an origin: `synthetic`, the seed and generator version, or `hand-written`. CI can then show that no fixture came from a provider (AD-5 v0.4 §13 A-10; AD-8 v0.5 §9 N-12; D-17). The format is `[OPEN]`; the envelope's `synthetic` block already carries seed and generator version (AD-4 §3.2) and is not changed.
 
 ## 4. Fault-injection catalogue
 
@@ -102,7 +106,9 @@ Reused from AD-1 §3.7; implemented in D-24 by `infra/testing/fault_ingestion/` 
 
 **Additions for durable handoff, persistence and replay (AD-3 §5.1), proposed, none run** `[DEP: AD-2, AD-3, AD-11]`: acknowledgement lost, so an event is redelivered; backend restart mid-handoff; ingestion buffer overflow, which must be counted; ingestion crash with unacknowledged entries, whose loss must be measured and reported; observation-storage failure with Phase 2 still served; a complete PostgreSQL outage, then restored (AD-3 §5.1 H-7); the same event delivered twice after the dedup window; a replay request past the replay window; a replay gap followed by a browser snapshot resync; a burst at each peak profile (§3.3).
 
-**Fake-provider cases (AD-5 draft A-4)** `[DEP: AD-5]`, against a controllable fake provider that is test-only and absent from runtime images: each fault class of the AD-5 taxonomy; `Retry-After` present, absent and invalid; the circuit breaker opening, cooling down and probing; a redirect; an oversized body; a wrong content type; a truncated stream; an immediate close on connect.
+**Fake-provider cases (AD-5 v0.4 §13 A-4)** `[DEP: AD-5]`, against a controllable fake provider that is test-only and absent from runtime images: each fault class of the AD-5 taxonomy; `Retry-After` present, absent and invalid; the circuit breaker opening, cooling down and probing; a redirect; an oversized body; a wrong content type; a truncated stream; an immediate close on connect.
+
+**Timing expectations are kept separate.** The D-24 slice keeps its approved values (3 failures or 2 s to outage; stale after 6 s; unavailable after 30 s; AD-1 §3.1, §3.2; AD-8 v0.5 §4.3). The synthetic-transport defaults are provisional: outage at 3 failures or 3 times the interval, and `dedup_window` 300 s (AD-8 v0.5 §3.5); freshness thresholds (AD-8 v0.5 §4.2). These defaults apply only to a newly registered synthetic source. A test states which of the two it exercises and never applies one set to the other. `[DEP: AD-8]`
 
 **Not in D-24, so unspecified here:** gaps and outages longer than the slice's, replay faults (`[DEP: AD-2, AD-3]`), and provider-shaped faults (`[DEP: AD-5]`, Gate 3).
 
@@ -151,7 +157,7 @@ Reused from AD-1 §3.7; implemented in D-24 by `infra/testing/fault_ingestion/` 
 |---|---|
 | Stable, authenticated reviewer references | AD-4 §2 allows only an opaque internal ID, not a name or email. Compatible if the reference maps to an authenticated identity held elsewhere `[DEP: AD-10]` |
 | Durable review records | AD-4 §2: events are immutable and an approval is a new event with `supersedes` |
-| Logical storage and privilege separation | Matches the separation the PR #30 drafts require (AD-6 Part 2 T-14); privilege tests are not yet in any test list |
+| Logical storage and privilege separation | Matches the separation AD-6 Part 2 v0.2 (draft) requires (T-14); privilege tests are not yet in any test list |
 | Category-specific retention | Open; a Gate 3 input for provider data |
 | Append-only refusal records | Fits AD-4 §2's immutability: a refusal is a new record, never an edit. Candidate answer to AD-12's open refusal question |
 
@@ -184,7 +190,7 @@ Seed reproducibility; hash vectors; the same verdict per event fixture in both l
 
 | Item | Status |
 |---|---|
-| AD-5 adapter contract, idempotency key, bounds | `[DEP: Dev A]`; a DRAFT v0.1 exists in PR #30 (unmerged, unreviewed) |
+| AD-5 adapter contract, idempotency key, bounds | `[DEP: Dev A]`; AD-5 v0.4 is merged as a DRAFT in `docs/`; changes requested earlier and applied; no owner approval (§1.1) |
 | Synthetic identity: source identity absent from the approved derivation | Provisional mitigations in §3.1; derivation unchanged; broader C-1 residual open |
 | Reviewer authorization, separation of duties; quarantined FX release workflow | `[PENDING: AD-10, AD-11]`; `[OPEN]` |
 | AD-11 reviewer reference, persistence, retention, storage separation | `[DEP: Anvesh]`; provisional proposals recorded in §6.2, none approved |
