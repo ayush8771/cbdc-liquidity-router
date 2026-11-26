@@ -1,6 +1,10 @@
 # AD-1 Part 2: Full Phase 3 Component and Deployment Architecture
 
-**Status:** **DRAFT v0.6**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied. **Reviewed again on PR #38, on v0.5:** **Dev B (Anvesh) granted the D-22 technical sign-off** — quarantine placement, C-3 prerequisites and Compose boundaries satisfactory; **Dev D (Nisarga) approved** §7.3 and §7.3.1's D-24, D-25, B-4 and Compose-authorization boundaries; **Dev C (Varshini) requested one change**, the §3.2 source-status row against AD-8 v0.7 §5.1, **applied in v0.6**, and offers the Dev C sign-off once it is confirmed. Those texts are on PR #38, **relayed here, not quoted**. **Dev A's review is outstanding, v0.6 is not re-reviewed by anyone, and no owner approval exists**, so **D-22 is unsatisfied and no milestone 3.2–3.7 is authorized**.
+**Status:** **APPROVED v0.7 for the §2.2 placement and the §8 mapping**, 26 November 2026, by the project owner. **v0.7's text is unchanged by this approval**; it records it and applies the §10 decisions. The approval is **version-specific to v0.7** and **satisfies D-22's component-view condition for milestones 3.2–3.7** — the placement only. **It authorizes no milestone and passes no gate: all four capability gates remain closed** (D-18), and each milestone still needs its own F-1 deliverables and its gates (§8, §9).
+**Technical sign-offs, all four, relayed from PR #38 and not quoted:** **Dev A — APPROVED for D-22 component placement** (26 Nov, on v0.6); **Dev B (Anvesh) — D-22 sign-off granted** on v0.6, restated as still valid at `c8f0471`; **Dev C (Varshini) — APPROVE on v0.6**, his §3.2 source-status finding confirmed resolved, within the Dev C review scope; **Dev D (Nisarga) — APPROVED** §7.3 and §7.3.1's D-24, D-25, B-4 and Compose-authorization boundaries. **D-22 names Dev A, Dev B and Dev C, and all three are in.**
+**Owner decisions of §10, recorded 26 November 2026** (relayed in session, **not quoted**; no separate approval document exists): **AD1P2-Q1 YES** — the §2.2 inventory and its placement are confirmed, which is scope §12 remaining item 1; **Q2 YES** — the §5 six-zone trust model; **Q3 YES** — §3.1's second responsibility rule; **Q4 YES** — §7's deployment architecture, with §7.1's limitations stated; **Q5 YES** — §7.3.1's split, so that an **approved** AD-10 change may modify inference's networking to close **B-4**; **Q6 YES, confirmed together** — §2.2's placement and §8's deliverable and gate mapping are confirmed as one record. **Q7 (CODEOWNERS) is DEFERRED**: recommended, to be decided with Dev D outside this document, and **not** a D-22 condition — §6 item 8's "ownership is not enforced" gap therefore stays open.
+**What this approval does not do** (unchanged from §9): it authorizes **no milestone**, passes **no gate**, does **not** resolve AD-6 **B-4**, does **not** change the D-24 slice, and approves **no other deliverable**. **`docs/PHASE3_AD1_COMPONENT_VIEW.md` v0.5 remains the approved component view for the D-24 slice** and is untouched.
+**Review history:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — then on PR #38 as recorded above. The findings of every round are applied.
 **Relationship to the approved component view:** this is an **additive companion** to `docs/PHASE3_AD1_COMPONENT_VIEW.md`, which stays **exactly as approved at v0.5**, with corrections **C-1** and clarification **C-2** as recorded there. The v0.5 approval is **for the D-24 slice only** and is **version-specific**: "any later revision needs fresh review and approval". Revising that file would therefore **suspend the authorization of the D-24 work now in progress**, so the full-Phase-3 architecture is written beside it. **Nothing in v0.5 is edited, superseded or weakened here.** Where the two could be read as disagreeing, **v0.5 wins**.
 **What this document is for.** Scope §12 "Remaining during milestone 3.1" item 1 reads: *"Confirm the AD-1 component view §4 placement of later components, which every code milestone 3.2–3.7 waits for (D-22). The D-24-slice approval does not cover it."* This document is the material for that confirmation, in full rather than as the five-row table of v0.5 §4.
 **It is not the final AD-1.** The final AD-1 is a wave-4 deliverable that needs every other AD approved or deferred (3.1 plan §4). AD-2, AD-3, AD-7, AD-9 to AD-13 are unwritten, so §13 lists what the final version must still absorb.
@@ -9,6 +13,8 @@
 - **Blocker 2 fixed:** **new §7.3.1** separates the **D-24 conditions** — `infra/compose.yaml` unchanged, `--profile full` unchanged, nothing published, the inference side of B-4 unenforced under **D-25** — from the **architectural rules** that are permanent. v0.1's "overlays, never edits to `compose.yaml`" read as a permanent prohibition would make **B-4 unclosable**, since inference is a Phase 2 service defined in that file. It states what an **approved** AD-10 change may do, and the three conditions that hold regardless: not under D-24, no Phase 1 or Phase 2 behaviour change, and **Gate 4 evidence rather than a gate pass**.
 - §6 item 1 and §7.4 cross-reference §7.3.1; §6 item 5 now records the pending delivery semantics and the provisional capacity envelope.
 - **AD1P2-Q5** is restated as the §7.3.1 split rather than a blanket overlay rule.
+
+**Revision v0.7, 26 November 2026 — APPROVED.** Records the four technical sign-offs of PR #38 and the project owner's decisions on §10. **No requirement, boundary, contract, threshold, ownership, zone, placement row or gate changes:** the approval is of v0.7's text as it stands, and v0.7 adds only this record and the §10 verdict column. **Q7 is deferred**, and **§6's gaps stay open**, item 8 (no CODEOWNERS) included.
 
 **Revision v0.6, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Dev C's (Varshini's) one finding on PR #38**, documentation only. Change:
 
@@ -564,15 +570,17 @@ Until then, **everything runs on a developer's machine, on loopback or a private
 
 ## 10. Questions for the project owner
 
-| # | Question | Draft position | Decides |
-|---|---|---|---|
-| AD1P2-Q1 | Is the **§2.2 component inventory and its placement** confirmed, satisfying scope §12 item 1 and **D-22** for milestones 3.2–3.7? | Yes. It is v0.5 §4's five rows expanded, with no new capability | Owner, after Dev A, B and C review (D-22) |
-| AD1P2-Q2 | Is the **§5 six-zone trust model** adopted, extending v0.5 §2's three boundaries? | Yes | Owner |
-| AD1P2-Q3 | Is **§3.1's second responsibility rule** adopted — observation logic only in ingestion and the observation module? | Yes. It makes B-3 a rule rather than a lint | Owner, with Dev B |
-| AD1P2-Q4 | Is **§7's deployment architecture** — one host, overlays only, no redundancy, one PostgreSQL server with logical separation — adopted as the target, with §7.1's limitations stated? | Yes (F-6) | Owner, with Dev D |
-| AD1P2-Q5 | Is **§7.3.1's split** adopted — that "`compose.yaml` is not changed" is a **D-24 condition**, while "no Phase 2 service gains a `depends_on` to a Phase 3 one" and "components are added, not substituted" are **architectural rules** — so that an **approved** AD-10 change may modify inference's networking to close B-4? | Yes. Read as permanent, the overlay rule would make **B-4 unclosable**, which no approved decision says | Owner, with Dev D |
-| AD1P2-Q6 | Does confirming §2.2 **also** confirm the §8 deliverable and gate mapping, or is that a separate record? | Confirm them together: a placement without its gates could be misread as an authorization | Owner |
-| AD1P2-Q7 | Should **CODEOWNERS** be created, covering `docs/PHASE3_*.md`, `services/ingestion/` and `contracts/events/`? | Recommended by the 3.1 plan §5, and **not part of this document** | Owner, with Dev D |
+**Every question below is now DECIDED by the project owner, 26 November 2026, except Q7, which is deferred.** The decisions are relayed, not quoted.
+
+| # | Question | Draft position | Decides | **Owner decision, 26 Nov 2026** |
+|---|---|---|---|---|
+| AD1P2-Q1 | Is the **§2.2 component inventory and its placement** confirmed, satisfying scope §12 item 1 and **D-22** for milestones 3.2–3.7? | Yes. It is v0.5 §4's five rows expanded, with no new capability | Owner, after Dev A, B and C review (D-22) | **YES.** The §2.2 inventory and placement are confirmed; this is scope §12 remaining item 1 and satisfies **D-22's component-view condition** for milestones 3.2–3.7. **It authorizes no milestone** |
+| AD1P2-Q2 | Is the **§5 six-zone trust model** adopted, extending v0.5 §2's three boundaries? | Yes | Owner | **YES.** The six-zone model is adopted, extending v0.5 §2's three boundaries |
+| AD1P2-Q3 | Is **§3.1's second responsibility rule** adopted — observation logic only in ingestion and the observation module? | Yes. It makes B-3 a rule rather than a lint | Owner, with Dev B | **YES.** Observation logic lives only in ingestion and the observation module; B-3 is a rule, not a lint |
+| AD1P2-Q4 | Is **§7's deployment architecture** — one host, overlays only, no redundancy, one PostgreSQL server with logical separation — adopted as the target, with §7.1's limitations stated? | Yes (F-6) | Owner, with Dev D | **YES**, with §7.1's limitations stated as part of the decision: one host, no redundancy, no failover, one PostgreSQL server with **logical** separation only, vertical scaling, host-level backup |
+| AD1P2-Q5 | Is **§7.3.1's split** adopted — that "`compose.yaml` is not changed" is a **D-24 condition**, while "no Phase 2 service gains a `depends_on` to a Phase 3 one" and "components are added, not substituted" are **architectural rules** — so that an **approved** AD-10 change may modify inference's networking to close B-4? | Yes. Read as permanent, the overlay rule would make **B-4 unclosable**, which no approved decision says | Owner, with Dev D | **YES.** The split is adopted: "`compose.yaml` is not changed" is a **D-24 condition**, while the `depends_on` rule and "added, not substituted" are architectural. An **approved** AD-10 change may modify inference's networking to close **B-4**. **This is not that approval**, and nothing is authorized under D-24 |
+| AD1P2-Q6 | Does confirming §2.2 **also** confirm the §8 deliverable and gate mapping, or is that a separate record? | Confirm them together: a placement without its gates could be misread as an authorization | Owner | **CONFIRMED TOGETHER.** §2.2's placement and §8's deliverable and gate mapping are one record, so a placement cannot be read as an authorization |
+| AD1P2-Q7 | Should **CODEOWNERS** be created, covering `docs/PHASE3_*.md`, `services/ingestion/` and `contracts/events/`? | Recommended by the 3.1 plan §5, and **not part of this document** | Owner, with Dev D | **DEFERRED.** CODEOWNERS is recommended and is to be decided with Dev D **outside this document**. It is **not** a D-22 condition, and §6 item 8 stays open: ownership remains a team agreement and is **not enforced** |
 
 ---
 
@@ -600,15 +608,16 @@ Until then, **everything runs on a developer's machine, on loopback or a private
 
 ## 12. Approval checklist
 
-**None of these is given. This document is a DRAFT; it has been reviewed on PR #30 with changes requested, those findings are applied, and no reviewer has re-reviewed and no owner has approved it.**
+**All of these are now given, on v0.6 and v0.7.** Every review text is on PR #38, **relayed and not quoted**.
 
-- [ ] **Dev A** — review: §2.2 C-1 to C-3; §3.3's reasons for a separate service; §7.4 and §7.5 for ingestion; §6 item 1
-- [ ] **Dev B** — review: §2.2 C-4 to C-7, C-10, C-14, C-15; §3.1's second rule; §5.1's Z2 rows; §7.3's overlay rule
-- [ ] **Dev C** — review: §2.2 C-8, C-9; §3.2's web column; §4.5's degradation display; §6 items 3 and 4
-- [ ] **Project owner** — approval, with §10's questions decided. **D-22 requires review by Dev A, B and C before this approval**
-- [ ] **Second-reviewer rule (D-20)** — the lead is Dev D, not the owner, so D-20 does not bind here; the three reviews above are required by D-22 regardless
+- [x] **Dev A — APPROVED for D-22 component placement**, 26 November 2026, on v0.6: §2.2 C-1 to C-3; §3.3's reasons for a separate service; §7.4 and §7.5 for ingestion; §6 item 1. **Technical sign-off only**
+- [x] **Dev B (Anvesh) — D-22 sign-off GRANTED** on v0.6 and restated as still valid at `c8f0471`: §2.2 C-4 to C-7, C-10, C-14, C-15; §3.1's second rule; §5.1's Z2 rows; §7.3's overlay rule. Quarantine placement, C-3 prerequisites and Compose boundaries recorded satisfactory
+- [x] **Dev C (Varshini) — APPROVE on v0.6**, within the Dev C review scope: §2.2 C-8, C-9; §3.2's web column; §4.5's degradation display; §6 items 3 and 4. His §3.2 source-status finding is confirmed resolved — Express owns the published `source.status`, ingestion the internal one
+- [x] **Dev D (Nisarga) — APPROVED** §7.3 and §7.3.1's D-24, D-25, B-4 and Compose-authorization boundaries
+- [x] **Project owner — APPROVED v0.7 for the §2.2 placement and the §8 mapping**, 26 November 2026, with §10's questions decided (**Q7 deferred**). **D-22's requirement of review by Dev A, B and C is met.** **No milestone is authorized and no gate passes**
+- [x] **Second-reviewer rule (D-20)** — the lead is Dev D, not the owner, so D-20 does not bind here; the three D-22 reviews above are in regardless
 
-On approval, the decision is recorded in `docs/PHASE3_SCOPE.md` §2 and the 3.1 plan is updated (3.1 plan §5). **No gate passes. No milestone starts without its own deliverables. B-4 stays unresolved. AD-6 is not fully enforced.**
+The decision is recorded in `docs/PHASE3_SCOPE.md` §2.2.4 and §12, and the 3.1 plan is to be updated (3.1 plan §5). **No gate passes. No milestone starts without its own deliverables. B-4 stays unresolved. AD-6 is not fully enforced.** **Dev D's PR #38 approval was given on v0.5 and Dev C's on v0.6; neither has reviewed v0.7, whose only change is this record.**
 
 ---
 
