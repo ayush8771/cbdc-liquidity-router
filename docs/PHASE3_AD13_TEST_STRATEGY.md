@@ -1,6 +1,6 @@
 # AD-13: Test Strategy and Gate Evidence Templates
 
-**Status:** **DRAFT v0.2 for review. Not approved.** 26 November 2026. v0.2 adds the cross-AD verification map (§2.9), durable-handoff, replay, load and separation layers, provisional gate-timing language, and Gate 2 and Gate 4 evidence aligned with the AD-10, AD-11 and PR #30 drafts. **Lead:** Dev D. **Reviewers:** Dev A, Dev B, Dev C. **Approver:** project owner.
+**Status:** **DRAFT v0.3 for review. Not approved.** 26 November 2026. v0.3 answers Dev B's technical review of PR #31 at `d96aabe` (approve with conditions): the Gate 4 dependencies on AD-10 and AD-11 (§3.3), the scoped and relayed branch-protection record (§1), and the status of referenced documents (§1.1). v0.2 adds the cross-AD verification map (§2.9), durable-handoff, replay, load and separation layers, provisional gate-timing language, and Gate 2 and Gate 4 evidence aligned with the AD-10, AD-11 and PR #30 drafts. **Lead:** Dev D. **Reviewers:** Dev A, Dev B, Dev C. **Approver:** project owner.
 **Inputs:** gate templates need none (plan §3); the final strategy needs every other AD. **Feeds:** all gates; the 3.1 exit. **Scope source:** `docs/PHASE3_SCOPE.md` §5, §7.3, §8.2; `docs/PHASE3_AD6_ENGINE_BOUNDARY.md` §8.
 
 Part A (strategy) is a **provisional** draft built on the D-24 slice. Part B (templates) has no dependency and can be reviewed now. Nothing here passes a gate; **no gate has passed**.
@@ -15,7 +15,17 @@ Ayush (project owner and Dev A) approved the directions below on 26 November 202
 4. Reviewer references, persistence and retention stay pending coordination with Anvesh's AD-11.
 5. D-24 implementation, approvals and documented limitations are preserved.
 
-Branch protection for the D-24 slice was closed by Ayush on 26 November 2026 and is not revisited.
+**Branch protection (relayed).** The D-24 branch-protection item was reported closed by Ayush, with authenticated screenshots confirming the four required checks and mandatory approval enforcement. **That approval is relayed to Dev D, not quoted, and the screenshots are not in the repository**, so the repository holds the intended settings (`docs/PHASE3_D24_ACCEPTANCE.md` §6) but no evidence that the rule is applied. It is **scoped to `feature/phase3-platform`**. Protection of `main` is a **future, owner-controlled action**: D-24 §6 says to add `main` to the gate workflow and apply the same rule when Phase 3 merges there, and nothing about `main` changes now. This document does not revisit the D-24 item.
+
+### 1.1 Status of the documents this strategy refers to
+
+| Document | Status |
+|---|---|
+| AD-1 component view v0.5, AD-4 v0.2, AD-6 v0.2 | Approved for the D-24 slice only (25 November 2026); in `docs/` |
+| AD-5 adapter contract, AD-8 budgets, AD-6 Part 2 (T-11 to T-18) and the other Part 2 companions | **DRAFT v0.1, unreviewed**, in PR #30 (read at `5f78500`), not in the repository baseline; every cited identifier may change |
+| AD-2 | Unwritten; Dev B's provisional proposals relayed |
+| AD-10, AD-11 | Unwritten; Dev B's provisional proposals relayed |
+| AD-3, AD-12 | This branch's drafts (v0.3), unapproved |
 
 ## 2. Part A: test strategy `[provisional]`
 
@@ -152,9 +162,23 @@ Evidence is **measured or recorded**, never inferred. A relayed approval is labe
 | **1 PPO approval** | Activating `ppo_projected` on any served path | Dev A; Dev C | Checkpoint identity, hash and registry entry (`approved_checkpoints.json` is empty today); its Stage 1F results; confirmation that the served artifact is `ppo_projected`, not raw PPO (D-10); permitted UI wording (§4.2). Open Phase 1 item: whether the projection is formally adopted; Gate 1 may pass with `ppo_projected` labelled experimental | `[DEP: owner's checkpoint choice]` |
 | **2 Cognee readiness** | Writes to the knowledge layer from any Phase 3 pipeline | Dev A; Dev B | Real cited knowledge base (Phase 1 item; one assumed fact today); a retrieval-quality measurement (none exists); the review-queue design (AD-12); a written decision on P5; A-4 rules and the cap-sync test. **Provisionally** (Dev B's AD-11 proposals, none approved): authenticated reviewer references, durable review records, logical storage and privilege separation, category-specific retention and append-only refusal records, each with a test once AD-11 is approved | `[DEP: AD-12; AD-11; Phase 1 knowledge work]` |
 | **3 Provider approval, per provider** | That provider's data in any environment, recorded samples and fixtures included (D-17) | Dev A; Dev B (the licence and terms decision is the owner's) | Licence or terms permitting this use including storage and display; streaming or polled; rate limits and cost; reliability and outage history; retention and redistribution limits; scraping decided per site. Hard boundary: no live FX or news source is presented as bridge liquidity or congestion telemetry | `[DEP: AD-5; AD-11 retention]`; no provider evaluated |
-| **4 Production security** | Exposure beyond the private development environment, including staging, LAN, tunnels, public demo URLs (D-16) | Dev B; Dev C; Dev D | Milestone 3.2 complete (identity provider, dev mode removed, httpOnly cookies, strict CSP, secrets management); authorization and rate limits tested; encryption in transit; audit trail of input data, model version, request, allocation and response; monitoring and alerting; backup and recovery exercised, all gathered inside the private environment. **Alignment with AD-10 `[DEP: AD-10, unwritten]`:** B-4 on both sides, with T-5 run on the inference side and T-13 (not run today; D-25 waives enforcement for the D-24 slice only and is not Gate 4 evidence); T-11 egress allowlists for any provider adapter; AD-8's recovery drills as the "recovery exercised" evidence; AD-8's boundary-violation alert as monitoring evidence. How inference egress is closed is open (AD-3 §10, X-5) | `[DEP: AD-10; AD-11; milestones 3.2, 3.7]` |
+| **4 Production security** | Exposure beyond the private development environment, including staging, LAN, tunnels, public demo URLs (D-16) | Dev B; Dev C; Dev D | Milestone 3.2 complete (identity provider, dev mode removed, httpOnly cookies, strict CSP, secrets management); authorization and rate limits tested; encryption in transit; audit trail of input data, model version, request, allocation and response; monitoring and alerting; backup and recovery exercised, all gathered inside the private environment. **Alignment with AD-10 `[DEP: AD-10, unwritten]`:** B-4 on both sides, with T-5 run on the inference side and T-13 (not run today; D-25 waives enforcement for the D-24 slice only and is not Gate 4 evidence); T-11 egress allowlists for any provider adapter; AD-8's recovery drills as the "recovery exercised" evidence; AD-8's boundary-violation alert as monitoring evidence. How inference egress is closed is open (AD-3 §10, X-5). **Further AD-10 and AD-11 dependencies, including B-4's open status, are in §3.3** | `[DEP: AD-10; AD-11; milestones 3.2, 3.7]` |
 
 The Gate 3 and Gate 2 rows must not be filled with D-24 results: they concern providers and knowledge content, which D-24 does not touch.
+
+### 3.3 Gate 4 dependencies on AD-10 and AD-11 `[PROVISIONAL]`
+
+Evidence Gate 4 would need beyond the scope list, each blocked on a document that is **unwritten** (AD-10, AD-11). No test below exists, and none is run or claimed.
+
+| # | Evidence | What a test must show | Depends on |
+|---|---|---|---|
+| G4-1 | **Separate security-event logging that preserves Q19** | The Phase 2 audit rule (Q19, closed) writes an audit row only together with a persisted record, in the same transaction, and a rejected request (401, 403, 405, 422) creates **none** (`docs/PHASE2_API_CONTRACT.md` §6.2; `docs/TEAM_REVIEW_RESOLUTION.md`). Security events such as failed sign-in, rejected streams and boundary violations therefore need their own log. A test: a rejected request leaves no audit row **and** leaves a security-event record, with no token or payload in it | `[DEP: AD-10, AD-11]` |
+| G4-2 | **Database-role and privilege verification** | Connecting as each role: the observation role cannot read or write Phase 2 tables and the reverse; append-only tables refuse update and delete; the review and refusal records are append-only. Foreign-key, join and view separation is AD-6 Part 2 T-14, a different check | `[DEP: AD-11, AD-10]` |
+| G4-3 | **Positive controls for inference isolation, and security regression probes** | T-13 (inference egress) is **not run**. When it runs, a probe that cannot reach a host proves nothing unless a positive control shows the probe can reach an allowed peer, the way T-2 uses positive controls first (D-24 §2). The existing ingestion probe (`infra/scripts/probe_ingestion_isolation.py`) is the model. Probes are repeated on each change as security regression tests | `[DEP: AD-10]` |
+| G4-4 | **Cookie-session authentication, origin validation and applicable CSRF controls** | Today development tokens are used (A-1). When httpOnly cookie sessions exist, origin validation must hold on the stream route and on mutating routes, and CSRF protection must be shown for the state-changing routes it applies to. Whether it applies to the read-only stream is an AD-10 decision. Not implemented; nothing is claimed | `[DEP: AD-10; milestone 3.2]` |
+| G4-5 | **Owner-controlled `main` branch protection** | Protection of `main` is an owner action, recorded as evidence when taken. It is separate from the relayed `feature/phase3-platform` item (§1) | Owner |
+
+**B-4 stays open.** It is not closed by this document, by D-24 evidence or by any draft. It closes only with an authorized implementation, runtime evidence (T-5 on the inference side and T-13, with positive controls) and **formal owner closure**. D-25 waives enforcement for the D-24 slice only, and is not Gate 4 evidence (AD-3 §10, X-5).
 
 ## 4. Limitations of this document
 

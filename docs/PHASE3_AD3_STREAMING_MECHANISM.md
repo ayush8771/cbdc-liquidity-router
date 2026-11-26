@@ -1,6 +1,6 @@
 # AD-3: Streaming Mechanism Decision Record
 
-**Status:** **DRAFT v0.2 for review. Not approved.** 26 November 2026. v0.2 records Dev B's provisional AD-2 and AD-11 proposals (relayed), the backend-mediated PostgreSQL candidate, durable-handoff requirements, and the conflicts found in review of PR #30 (§10). **Lead:** Dev D. **Reviewer:** Dev B (the PostgreSQL option). **Approver:** project owner.
+**Status:** **DRAFT v0.3 for review. Not approved.** 26 November 2026. v0.3 answers Dev B's technical review of PR #31 at `d96aabe` (approve with conditions): event identity versus semantic deduplication (§5.1 H-2), the extended alternatives comparison (§5), the corrected spike citation, and a table separating drafts from approved documents (§1.1). v0.2 records Dev B's provisional AD-2 and AD-11 proposals (relayed), the backend-mediated PostgreSQL candidate, durable-handoff requirements, and the conflicts found in review of PR #30 (§10). **Lead:** Dev D. **Reviewer:** Dev B (the PostgreSQL option). **Approver:** project owner.
 **Inputs:** AD-2 (unwritten), F-6. **Feeds:** AD-11; milestone 3.4. **Scope source:** `docs/PHASE3_SCOPE.md` §3 Workstream B, §6, §7.3; `docs/PHASE3_MILESTONE_3_1_PLAN.md` §3.
 
 This record **chooses no final streaming mechanism.** It fixes a provisional position and the criteria that will decide the rest once AD-2 exists. The plan's 3.1 exit condition, "AD-3 is recorded as the roadmap §6 streaming decision", is **not met** by this draft.
@@ -14,6 +14,18 @@ Ayush (project owner and Dev A) approved the directions below on 26 November 202
 3. Timestamp-based gap detection is proposed as **indicative, not guaranteed, loss detection**, with **no event contract change** (§6).
 4. Reviewer references, persistence and retention stay pending coordination with Anvesh's AD-11.
 5. D-24 implementation, approvals and documented limitations are preserved.
+
+### 1.1 Status of the documents this record refers to
+
+| Document | Status | Repository location |
+|---|---|---|
+| AD-1 component view v0.5, AD-4 v0.2, AD-6 v0.2 | **Approved for the D-24 slice only** (25 November 2026) | `docs/PHASE3_AD1_COMPONENT_VIEW.md`, `PHASE3_AD4_EVENT_ENVELOPE.md`, `PHASE3_AD6_ENGINE_BOUNDARY.md` |
+| AD-5 adapter contract, AD-8 budgets, AD-1, AD-4 and AD-6 Part 2 companions | **DRAFT v0.1, unreviewed, unapproved**, in PR #30 (read at `5f78500`). **Not part of the repository baseline** until merged | Branch `docs/phase3-architecture-ad1-ad4-ad5-ad6-ad8`, not on `feature/phase3-platform` |
+| AD-2 requirements | **Unwritten.** Dev B's provisional proposals were relayed | None |
+| AD-10 threat model, AD-11 persistence and audit | **Unwritten.** Dev B's provisional AD-11 proposals were relayed | None |
+| AD-7, AD-9 | Unwritten | None |
+
+Every `[DEP: AD-n]` below depends on the row above. Citations of PR #30 documents are to unmerged text and may change.
 
 ## 2. Provisional position
 
@@ -48,7 +60,7 @@ Anvesh (Dev B) gave provisional AD-2 and AD-11 proposals. They reached Dev D as 
 | Peak | 200 events/s for 60 s | 100 events/s for up to 10 s (§6.2) | **Conflict** `[OPEN: AD-2]` (X-1) |
 | Browser streams | 60 | 20 in total, 3 per user (§6.3; the slice's AD-1 §3.5 values) | **Conflict** `[OPEN: AD-2, AD-8]` (X-1) |
 | Delivery | At-least-once, durable | No recovery-point objective in v1 (§8.1); "never dropped" (§3.1) | **Conflict** `[OPEN]` (X-2) |
-| Persistence | Idempotent | Five-part key, 300 s dedup window, null-timestamp case undefined (AD-5 §5, §8) | **Open** (X-3) |
+| Persistence | Idempotent | Five-part semantic key, 300 s dedup window, null-timestamp case undefined (AD-5 §5, §8) | **Open** (X-3). Event-identity idempotency is §5.1 H-2(a); the semantic key stays with AD-5 |
 | Replay | 24-hour consumer replay | None | Absent from every draft (X-4) |
 | Browser reconnect | Snapshot-based | Snapshot replaces state, no `Last-Event-ID` (AD-1 §3.3; AD-8 §3.4) | Agree |
 | Ordering | Per source and subject | By `source_timestamp` (AD-5 §8.3) | Compatible; replay order needs a storage sequence (§5.1 H-3) |
@@ -66,13 +78,19 @@ Anvesh (Dev B) gave provisional AD-2 and AD-11 proposals. They reached Dev D as 
 | | A. HTTP poll + SSE (D-24 baseline) | B. PostgreSQL queue with LISTEN/NOTIFY | C. Dedicated broker |
 |---|---|---|---|
 | New operational dependency | None | None; PostgreSQL already runs for the backend | Yes `[OPEN: which]` |
-| Durability, replay | None by design | Needs table-backed events; notifications alone are not durable (documented PostgreSQL behaviour, not measured here) | Depends on the product |
+| Acknowledgement | None. The consumer polls `GET /v1/latest` and nothing tells ingestion what was received | A position the backend requests and then acknowledges (§5.1 H-1), which needs a new ingestion interface version; or table-based acknowledgement | Broker-native, by product `[OPEN]` |
+| Producer retention | The latest event per pair, in memory; intermediate events are overwritten | A bounded buffer in ingestion; an in-memory buffer loses unacknowledged entries on a crash and counts overflow (§5.1 H-1) | Retention in the broker, by product and configuration `[OPEN]` |
+| Durable acceptance | None. Nothing is stored; a restart may lose state (AD-1 §3) | Row committed before acknowledgement (§5.1 H-5), so acceptance is durable from the backend onward only | By product; durability settings `[OPEN]` |
+| Replay | None. No event id is sent and `Last-Event-ID` is ignored (AD-1 §3.2) | Replay from stored rows within a window (24 h proposed, Dev B). Notifications alone are not durable (documented PostgreSQL behaviour, not measured here), so rows are the source | By product `[OPEN]` |
+| Overload and backpressure | The poller never waits for a stream; a slow browser keeps the newest update per subject (AD-1 §3.5) | Bounded buffer with counted overflow; write rate against shared PostgreSQL; browser coalescing as in A | Broker queue limits; consumer lag `[OPEN]` |
+| Capacity | Designed and soaked at 2 events/s over four pairs; nothing higher is measured | Unmeasured. Targets conflict (AD-3 §10 X-1) | Unmeasured |
+| Failure recovery | Restart loses state; values age out; a new snapshot resyncs the browser (AD-1 §3.3, §3.4) | Storage failure and full outage differ (§5.1 H-7); recovery by handoff position and replay `[OPEN]` | Broker restart and client resume `[OPEN]` |
 | Ordering | `source_timestamp` rules (AD-1 §3.4) | `[DEP: AD-2]` | `[DEP: AD-2]` |
 | Fit with F-6 | Yes | Yes | Adds a service to the single host |
 | Isolation (AD-1 §3.6 and §6 item 5: ingestion has no volume, secret or route to PostgreSQL) | Preserved | **Depends on the producer boundary**, not on a fixed answer: if the queue is written by the backend (which already uses PostgreSQL) after it validates what it receives from ingestion, ingestion's isolation is unchanged; if ingestion itself wrote to PostgreSQL, AD-1 §3.6 and the AD-6 boundaries would change and need approval. Which side produces is `[OPEN]` `[DEP: AD-2, AD-11]` | New network and credential design |
 | Evidence available | D-24, measured | None; a disposable spike is needed | None; a spike is needed |
 
-Qualitative only. Nothing here is a measurement. Spikes are disposable, run outside the project's Compose stack, and are not merged as the mechanism before AD-3 is approved (plan §risks). Option B's compatibility with ingestion's isolation turns on which component produces into the queue (AD-1 §3.6). Per Dev B, **backend-mediated persistence is the first evaluation candidate** (§5.1). The owner and Dev B still decide the producer with AD-11.
+Qualitative only. Nothing here is a measurement. **As built, D-24 polling cannot meet the broader durability and replay requirements** (acknowledgement, producer retention, durable acceptance, replay). That is a **limitation for a future architecture, not a defect in accepted D-24**, whose approved slice states no durability, replay or broker (AD-1 §3). The final mechanism and every numerical target stay provisional. Spikes are disposable, run outside the project's Compose stack, and are not merged as the mechanism before AD-3 is approved (`docs/PHASE3_MILESTONE_3_1_PLAN.md` §5; scope §6). Option B's compatibility with ingestion's isolation turns on which component produces into the queue (AD-1 §3.6). Per Dev B, **backend-mediated persistence is the first evaluation candidate** (§5.1). The owner and Dev B still decide the producer with AD-11.
 
 ### 5.1 First candidate: PostgreSQL, backend-mediated `[PROVISIONAL]` `[DEP: AD-2, AD-11]`
 
@@ -83,7 +101,7 @@ Requirements any durable handoff must meet, all proposed:
 | # | Requirement |
 |---|---|
 | H-1 | **Handoff position.** Ingestion keeps a bounded, ordered buffer of validated envelopes with an opaque position; the backend requests "after position" and the next request acknowledges the previous one. Ingestion discards only acknowledged entries or on overflow. Overflow is **counted loss**, never silent. Buffer bound `[OPEN]`. **A bounded buffer alone cannot guarantee durable delivery.** If it is in memory, an ingestion crash or restart loses every unacknowledged entry, and an overflow loses the oldest or newest by rule. Both are loss windows, bounded only by the acknowledgement lag and the buffer size. Closing them would need a durable spool inside ingestion, which conflicts with its no-volume, read-only posture (AD-1 §3.6) and so changes that isolation, or an upstream source that can backfill (a Gate 3 question). Until one is chosen, H-1 gives **at-least-once delivery between acknowledged points only**, not durability from the source. `[OPEN: spool or accepted loss window]` `[PROVISIONAL]` The D-24 `GET /v1/latest` returns only the latest event per pair and cannot carry this, so it needs a new ingestion interface version. **That is a change needing its own approval; this document makes none, and the D-24 contract and the AD-4 envelope are untouched** |
-| H-2 | **Idempotent persistence.** A uniqueness rule on the idempotency key makes redelivery a no-op. It must **not** depend on the in-memory `dedup_window` (300 s in the AD-8 draft), which is shorter than a 24 h replay window. Sources with a null `source_timestamp` cannot be idempotent across restarts (X-3) |
+| H-2 | **Idempotent persistence, by event identity.** Two different things must stay apart. **(a) Event-identity idempotency**, owned here: a uniqueness rule on `event_id` makes redelivery of the **same event** a no-op. The same `event_id` arriving with **different immutable content** is a **conflict**: it is rejected and counted, the first is kept, and it is never overwritten (AD-1 §3.4; AD-4 §2, events are immutable). Which fields the comparison covers, such as the whole envelope or the payload hash, `[OPEN: AD-5, AD-11]`. **(b) Semantic deduplication**, owned by AD-5: whether two events with different IDs are the same observation of the same subject. That key is subject-aware and its form (the AD-5 draft proposes a five-part key) is **not finalized here** and stays `[DEP: AD-5]`. H-2 neither adopts nor replaces it. Persistence must **not** depend on the in-memory `dedup_window` (300 s in the AD-8 draft), which is shorter than a 24 h replay window. Sources with a null `source_timestamp` cannot be idempotent across restarts (X-3) |
 | H-3 | **Storage sequence.** Replay order per source and subject needs a monotonic sequence assigned **at persistence**. It is a storage attribute, not an envelope field. `source_timestamp` still decides the current value (AD-4 §5) |
 | H-4 | **Replay.** Consumers replay stored rows from a position within a window; Dev B proposes 24 hours. Retention by category `[PENDING: AD-11]` |
 | H-5 | **Persist before acknowledging.** At-least-once means a consumer may see duplicates and must be idempotent |
@@ -150,7 +168,7 @@ The smallest mechanism that meets the approved requirements; operational cost on
 |---|---|
 | AD-2 requirements | `[DEP: Dev B]` unwritten |
 | Persistence, retention, audit shape | `[DEP: AD-11, Anvesh]` |
-| Idempotency key (proposed `source_id`, `source_timestamp`, `payload_hash`, scope Workstream B) and ordering beyond the slice | `[DEP: AD-5]` |
+| Semantic deduplication key (scope Workstream B proposes `source_id`, `source_timestamp`, `payload_hash`; the AD-5 draft proposes a five-part key) and ordering beyond the slice | `[DEP: AD-5]`, not finalized here. Event-identity idempotency and same-ID conflicts: §5.1 H-2 |
 | Gap-detection factor and counters' home | `[OPEN]` |
 | Queue producer boundary (§5) | Backend-mediated first candidate, provisional `[DEP: AD-2, AD-11]` |
 | Handoff position, buffer bound, replay window, backlog (§5.1) | `[OPEN]` |
@@ -166,4 +184,4 @@ Between Dev B's relayed proposals, the PR #30 drafts (unmerged and unreviewed, r
 | X-2 | Delivery: "never dropped", a 99.9% delivery target and "no recovery-point objective" sit beside newest-per-subject coalescing | AD-8 §3.1, §6.1, §6.3, §8.1; §5.2 | `[OPEN: AD-8, AD-3]` |
 | X-3 | Idempotency: the key includes `payload_sha256`, yet a conflict is defined as the same key with a different hash; `event_id` for null `source_timestamp` is undefined; the in-memory window is not a persistence rule | AD-5 §5, §8.1, §8.2; AD-4 Part 2 §3.2 | `[OPEN: AD-5, AD-11]` |
 | X-4 | Replay: 24 h proposed, no mechanism in any draft, dedup window 300 s | §3.1; AD-8 §3.5 | `[OPEN: AD-2, AD-3]` |
-| X-5 | **B-4:** AD-1 Part 2 §7.3 says `infra/compose.yaml` is unchanged by Phase 3 (overlays only), but inference sits on the default network with internet access, so closing B-4 on the inference side needs a network change in `compose.yaml` or an overlay that removes inference from the default network (unverified that Compose permits it). `infra/compose.yaml` is **not** T-7 protected (`PROTECTED` in `e2e/p3_safeguards.py` does not list `infra/`), but it is in the `phase3-observations.yml` trigger paths, so an edit needs the full acceptance run and the Compose static tests. D-25 is unchanged; B-4 stays unresolved until AD-10. **No change is made or proposed here** | AD-1 Part 2 §7.3; AD-6 Part 2 §3; D-25 | `[OPEN: AD-10]` |
+| X-5 | **B-4:** AD-1 Part 2 §7.3 says `infra/compose.yaml` is unchanged by Phase 3 (overlays only), but inference sits on the default network with internet access, so closing B-4 on the inference side needs a network change in `compose.yaml` or an overlay that removes inference from the default network (unverified that Compose permits it). `infra/compose.yaml` is **not** T-7 protected (`PROTECTED` in `e2e/p3_safeguards.py` does not list `infra/`), but it is in the `phase3-observations.yml` trigger paths, so an edit needs the full acceptance run and the Compose static tests. D-25 is unchanged; **B-4 stays open** until an authorized implementation, runtime evidence and formal owner closure (AD-10; AD-13 §3.3). **No change is made or proposed here** | AD-1 Part 2 §7.3; AD-6 Part 2 §3; D-25 | `[OPEN: AD-10]` |
