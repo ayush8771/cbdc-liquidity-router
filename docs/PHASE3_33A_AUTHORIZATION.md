@@ -1,10 +1,16 @@
 # Phase 3.3-A: Implementation Authorization Request (synthetic-only adapter foundation)
 
-**Status: v1.2, 27 November 2026 — OWNER AUTHORIZATION RECORDED, and complete for this scope.** This document was a request; it is now the **record** of the project owner's authorization of the bounded 3.3-A scope, given on 26 November 2026 and relayed in session, **not quoted**. **All four technical sign-offs and both D-23 reviews are in** (§10.2), and the owner has decided **AD1P2-Q1 to Q7**, **AD5-Q1 to Q11**, **AD-12** and the **synthetic-only part of AD-8** (§§3–6), and approved **§7's scope, §8's twelve exclusions and §9's nineteen acceptance criteria**, **in full** — on **27 November 2026** the owner **granted AD4P2-Q2 for Phase 3.3-A only**, which closes the last open clause of criterion 8.
+**Status: v1.3, 27 November 2026 — IMPLEMENTATION AUTHORIZED TO BEGIN, within this scope and nothing else (§14).** This document was a request; it is now the **record** of the project owner's authorization of the bounded 3.3-A scope, given on 26 November 2026 and relayed in session, **not quoted**. **All four technical sign-offs and both D-23 reviews are in** (§10.2), and the owner has decided **AD1P2-Q1 to Q7**, **AD5-Q1 to Q11**, **AD-12** and the **synthetic-only part of AD-8** (§§3–6), and approved **§7's scope, §8's twelve exclusions and §9's nineteen acceptance criteria**, **in full** — on **27 November 2026** the owner **granted AD4P2-Q2 for Phase 3.3-A only**, which closes the last open clause of criterion 8.
 
 **The last open prerequisite is now closed, and strictly bounded:** **AD4P2-Q2** — AD-4 Part 2 §3.4 item 3, "one active generator configuration per `source_id`" — is **GRANTED for Phase 3.3-A only**, as a registry configuration rule **on the registry-selected synthetic adapter path**, so §6.1 adopts it and **criterion 8's third clause is authorized** within that bound (§13.3). **This grants nothing beyond 3.3-A:** **AD-4 Part 2 is not approved as a document**, it remains a DRAFT with no technical review, and **AD4P2-Q1 and Q3 to Q7 stay undecided**. **The approved C-1 `event_id` derivation is unchanged**, **no envelope field changes**, **the D-24 generator path keeps its exemption and its behaviour**, and **all four capability gates remain CLOSED**.
 
-**What is still true and unchanged:** **all four capability gates remain CLOSED** (D-18); **no provider, site, checkpoint or knowledge write is approved**; **the D-24 slice is untouched** and its behaviour unchanged; **milestones 3.2, 3.3-L, 3.4, 3.5, 3.6 and 3.7 are not authorized**, nor is the **3.3-S exit**, which still needs **A-4** fault injection (§1.1, §9). **Nothing is reachable outside the private development environment** (D-16). **This record does not start implementation**, and the owner has directed that none begin on it yet.
+**What is still true and unchanged:** **all four capability gates remain CLOSED** (D-18); **no provider, site, checkpoint or knowledge write is approved**; **the D-24 slice is untouched** and its behaviour unchanged; **milestones 3.2, 3.3-L, 3.4, 3.5, 3.6 and 3.7 are not authorized**, nor is the **3.3-S exit**, which still needs **A-4** fault injection (§1.1, §9). **Nothing is reachable outside the private development environment** (D-16). **Implementation of §7's scope is now authorized to begin** — the project owner gave that authorization on **27 November 2026** (§14), superseding the earlier direction that none begin on this record. **The authorization is bounded to §7's scope, §8's exclusions and §9's acceptance criteria**, and starts nothing else.
+
+**Revision v1.3, 27 November 2026 — IMPLEMENTATION AUTHORIZED TO BEGIN.** Records the project owner's authorization of **27 November 2026**, relayed in session and **not quoted**, to **start Phase 3.3-A implementation**. **It changes no requirement, scope item, exclusion, acceptance criterion, contract, schema, threshold, derivation, envelope field, ownership, D-24 behaviour or gate state, and it widens nothing.** Changes:
+
+- **New §14** records the authorization, its bounds and what it does not do.
+- **The statements that no implementation is authorized to begin are marked superseded** where they appear (the header, §2.1's superseded note, §10.3's preamble and closing paragraph, §13.3). Every other clause of those passages stands.
+- **Still unchanged and in force:** the **approved C-1 derivation**, the **D-24 generator exemption** and the D-24 slice's behaviour, **§11's provisional items**, **§12's residual risks**, **AD-4 Part 2's DRAFT status** with **AD4P2-Q1 and Q3 to Q7 undecided**, **AD-8's partial approval** with **F-5 provisional and exit criterion 9 unmet**, and the fact that **all four capability gates remain CLOSED**, **no provider, site, checkpoint or knowledge write is approved**, **milestones 3.2, 3.3-L, 3.4, 3.5, 3.6 and 3.7 are not authorized** and the **3.3-S exit is not reached**, because **A-4 is not exercised**.
 
 **Revision v1.2, 27 November 2026 — DEPENDENCY RECORDS CORRECTED (Dev B, PR #39).** Applies Anvesh's CHANGES_REQUESTED review of `5ec87b4`, whose text is on the pull request and is **relayed, not quoted**. His review states that the owner decisions, the 3.3-A scope, the deferrals, the D-24 preservation and the closed capability gates are satisfactory, and that all earlier Dev B sign-offs are accurately recorded; the one blocker was that §1's **Depends on** list and §2's table still cited **superseded draft versions**. **Documentation only. No requirement, scope item, exclusion, acceptance criterion, contract, schema, threshold, derivation, envelope field, ownership, D-24 behaviour or gate state changes, and the 3.3-A authorization is not widened.** Changes:
 
@@ -123,7 +129,7 @@ Scope §7.1 defines milestone 3.3 with two exits, **3.3-S** (synthetic) and **3.
 
 **This table is a historical snapshot, taken on `feature/phase3-platform` at `002cefe`, before the owner's decisions of 26 and 27 November 2026. It is not the current approval state.** It is kept unrewritten as the record of what the repository held when this request was written. **For the current state, see §10.3** (all eleven rows closed), the **Depends on** list in §1, and scope §§2.2.4 and 2.2.5. Where the two differ, **§10.3 wins**.
 
-**Current approval state, in one line:** **AD-1 Part 2 v0.7, AD-5 v0.8, AD-12 v0.4 (Part A) and AD-4 v0.2 extended to 3.3 are APPROVED**; **AD-8 v0.8 is partially approved, synthetic rows only**; **AD-4 Part 2 and AD-6 Part 2 stay DRAFT**; **D-22's component-view condition is satisfied** and **F-1's three documents for milestone 3.3 are approved**. **No gate passes, all four capability gates remain CLOSED, the D-24 slice is unchanged, and no implementation is authorized to begin.**
+**Current approval state, in one line:** **AD-1 Part 2 v0.7, AD-5 v0.8, AD-12 v0.4 (Part A) and AD-4 v0.2 extended to 3.3 are APPROVED**; **AD-8 v0.8 is partially approved, synthetic rows only**; **AD-4 Part 2 and AD-6 Part 2 stay DRAFT**; **D-22's component-view condition is satisfied** and **F-1's three documents for milestone 3.3 are approved**. **No gate passes, all four capability gates remain CLOSED and the D-24 slice is unchanged.** **Implementation of §7's scope is authorized to begin** as of 27 November 2026 (§14); nothing beyond it is.
 
 | Document | State on `feature/phase3-platform` at `002cefe` — **snapshot, superseded** |
 |---|---|
@@ -138,7 +144,7 @@ Scope §7.1 defines milestone 3.3 with two exits, **3.3-S** (synthetic) and **3.
 
 **Consequence, as the snapshot stood.** Of the three documents F-1 names for milestone 3.3, **AD-4 v0.2's approval has been extended to 3.3 by the owner** (§10.3 row 1), while **AD-5 and AD-12 were still drafts with no owner approval**, and **D-22 was unsatisfied**, so **F-1 was unmet**. The work was **blocked on authorization, not on design**.
 
-**Superseded — 26 and 27 November 2026.** **AD-5 v0.8 and AD-12 v0.4 (Part A) are now APPROVED** and **AD-1 Part 2 v0.7 confirms the placement**, so **F-1's three documents for milestone 3.3 are approved and D-22's component-view condition is satisfied** (§10.3 rows 1 to 4, scope §2.2.4). **§10 is complete: all eleven rows are closed** (§10.3). **What that does not do:** it **passes no gate** — all four capability gates remain **CLOSED** — approves **no provider, site, checkpoint or knowledge write**, leaves the **D-24 slice unchanged**, authorizes **no milestone 3.2–3.7** and **no 3.3-S exit**, and **starts no implementation**: the owner has directed that none begin on this record.
+**Superseded — 26 and 27 November 2026.** **AD-5 v0.8 and AD-12 v0.4 (Part A) are now APPROVED** and **AD-1 Part 2 v0.7 confirms the placement**, so **F-1's three documents for milestone 3.3 are approved and D-22's component-view condition is satisfied** (§10.3 rows 1 to 4, scope §2.2.4). **§10 is complete: all eleven rows are closed** (§10.3). **What that does not do:** it **passes no gate** — all four capability gates remain **CLOSED** — approves **no provider, site, checkpoint or knowledge write**, leaves the **D-24 slice unchanged**, authorizes **no milestone 3.2–3.7** and **no 3.3-S exit**, and, **as that note stood, started no implementation**. **Superseded on 27 November 2026 in that last respect only:** the owner has authorized **§7's implementation** to begin (§14). Every other clause of this note stands.
 
 ### 2.1 Milestone, placement and ownership (Varshini B1)
 
@@ -567,7 +573,7 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 
 **Every row is now closed.** Rows 1 to 8 and 11 closed on 26 November 2026, and **row 9 closed in full on 27 November 2026**, when the owner granted **AD4P2-Q2 for Phase 3.3-A only** and criterion 8's third clause became authorized (§13.3). Under Route A a **technical sign-off closes only the technical half** of a row whose kind is "Technical sign-off, then owner approval", and every row below states which halves are in.
 
-**What being closed does not mean.** Route A's §10.1 item 4 still holds: these approvals are of the **specific readings §§3–6 state**. **No gate passes, no provider or site is approved, no capability is activated, the D-24 slice is unchanged, and implementation has not been authorized to begin** — the owner has directed that it not start on this record. "Technical sign-off" is a named reviewer's approval; "owner approval" is the project owner's.
+**What being closed does not mean.** Route A's §10.1 item 4 still holds: these approvals are of the **specific readings §§3–6 state**. **No gate passes, no provider or site is approved, no capability is activated, and the D-24 slice is unchanged.** **Implementation of §7's scope, and of nothing else, is authorized to begin** as of 27 November 2026 (§14), superseding this paragraph's earlier statement that it was not. "Technical sign-off" is a named reviewer's approval; "owner approval" is the project owner's.
 
 | # | Item | Kind | Who | Current state |
 |---|---|---|---|---|
@@ -585,7 +591,7 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 
 **Rows 1 to 4 are the F-1 and D-22 core, and all four are CLOSED.** Rows 5, 6, 7, 8, 10 and 11 are closed too — row 7 for the **synthetic rows only**, row 11 **as a deferral**. **Row 9 is closed in full** since the 27 November grant of **AD4P2-Q2 for 3.3-A only**, which authorizes criterion 8's "one active generator configuration per `source_id`" within that scope (§13.3). **Eleven rows, all eleven closed.** A row closed by a technical sign-off alone is marked as such and is **not** an owner approval.
 
-**The rows are complete, and the owner has directed that implementation not begin on this record.** When it is begun, the work is §7's and nothing else. **No gate passes, no provider becomes approved, no capability is activated, the D-24 slice is unchanged, and 3.3-L stays blocked on Gate 3.** **A-4 is not exercised, so the 3.3-S exit is not reached** (§1.1).
+**The rows are complete, and the owner authorized implementation to begin on 27 November 2026** (§14), superseding the earlier direction that it not start on this record. **The work is §7's and nothing else.** **No gate passes, no provider becomes approved, no capability is activated, the D-24 slice is unchanged, and 3.3-L stays blocked on Gate 3.** **A-4 is not exercised, so the 3.3-S exit is not reached** (§1.1).
 
 ## 11. What stays provisional, deliberately
 
@@ -636,7 +642,7 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 - **The decision does not extend beyond 3.3-A.** Milestones 3.2, 3.3-L, 3.4, 3.5, 3.6 and 3.7 are **not authorized**, nor is the **3.3-S exit**; carrying the rule into any of them needs a fresh decision.
 - **The approved C-1 `event_id` derivation `UUIDv5(namespace, seed | pair | sequence | source_timestamp)` is unchanged**, and **no envelope field, schema, contract or threshold changes.** The rule is configuration only. **The C-1 residual risk stays open** (AD-5 §14 item 5, AD-4 Part 2 §3.4, AD-12 §9), and the **Anvesh 2 correction in §6.1 still holds**: two `source_id`s separate dedup state and do **not** prevent an `event_id` collision.
 - **The D-24 slice is untouched.** The env-configured D-24 generator has no registry record and no allocation entry, so it is **exempt from this rule as it is from the start-up refusal** (§6.1), and criterion 8 asserts that exemption.
-- **No gate passes. All four capability gates remain CLOSED** (D-18), **no provider, site, checkpoint or knowledge write is approved**, and **no implementation is authorized to begin** — the owner has directed that none begin on this record.
+- **No gate passes. All four capability gates remain CLOSED** (D-18), and **no provider, site, checkpoint or knowledge write is approved**. **This grant started no implementation; the separate authorization of 27 November 2026 does, for §7's scope only** (§14).
 
 **The option not taken**, recorded for the history: **strike the clause** — drop the rule from §6.1 and criterion 8's third clause from the authorized scope, the **seed-allocation mitigations 1 to 3 and the rest of criterion 8 standing on their own**, at the cost of the dedup-state separation between two generator configurations.
 
@@ -688,4 +694,29 @@ All four gates stay closed. **Route A is longer than Route B would have been, an
 
 **Dev B's two recommendations are recorded, not acted on as approvals:** accepting `provenance_class`, `derived_from`, `derivation` and `source_timestamp_basis` as identity-bearing, and accepting `raw_sha256`'s exclusion. Both remain `[PROPOSED]` pending **AD5-Q8**.
 
-**Nisarga's technical sign-off is recorded, and it is not an authorization.** It satisfies **D-20** (§10.3 row 8) and closes row 6, from **Dev D's perspective only**. It is not a D-23 review of AD-12, not an owner approval, and not implementation authorization. Applying a reviewer's finding is likewise not that reviewer's sign-off. **Nine of §10.3's eleven rows remain open**, including the entire F-1/D-22 core and every owner approval. Dev B must still confirm §8.2b.1's matrix; the owner must still decide §§3–6 and approve §§7–9. **No gate passes, and 3.3-A may not begin.**
+**Nisarga's technical sign-off is recorded, and it is not an authorization.** It satisfies **D-20** (§10.3 row 8) and closes row 6, from **Dev D's perspective only**. It is not a D-23 review of AD-12, not an owner approval, and not implementation authorization. Applying a reviewer's finding is likewise not that reviewer's sign-off. **Nine of §10.3's eleven rows remain open**, including the entire F-1/D-22 core and every owner approval. Dev B must still confirm §8.2b.1's matrix; the owner must still decide §§3–6 and approve §§7–9. **No gate passes, and 3.3-A may not begin.** *(Historical, as of v0.4; superseded — §10.3's eleven rows are now all closed and §7's implementation is authorized, §14.)*
+
+---
+
+## 14. Implementation start authorization (project owner, 27 November 2026)
+
+**The project owner authorized the start of Phase 3.3-A implementation on 27 November 2026.** The decision was relayed in session and is **not quoted**; no separate approval document exists. It confirms the owner decisions recorded on PR #39 and supersedes, in this one respect only, every earlier statement in this document that no implementation was authorized to begin.
+
+### 14.1 What is authorized
+
+**Exactly §7's scope, under §8's exclusions, evidenced by §9's acceptance criteria:** the **local-only, synthetic-only** adapter foundation, the registry, the deterministic harness and the associated acceptance tests. §7 is the **complete and exclusive** scope: §7.1's new files, §7.2's three changed files, §7.3's untouched-by-rule list and §7.4's packaging and CI position. Work outside it needs a fresh authorization.
+
+### 14.2 Conditions the owner restated
+
+- **Existing D-24 behaviour, contracts and the approved C-1 derivation must remain unchanged.** The generator path stays the default, no registry record selects the adapter path by default, and the D-24 generator keeps its registry and seed-allocation exemption (§6.1, criterion 8).
+- **Real providers, durable streaming, unauthorized deployment changes and every other excluded capability stay out of scope** (§8's twelve exclusions, unamended — including no CI, Docker, Compose or packaging change).
+- **All four capability gates remain CLOSED** (D-18). No provider, site, checkpoint or knowledge write is approved, and nothing is reachable outside the private development environment (D-16).
+- **The 3.3-S exit is not achieved.** **A-4** fault injection is not exercised here, so reaching it needs this work **plus** A-4 (§1.1, §9).
+
+### 14.3 What it does not do
+
+It **passes no gate**, **approves no document** — **AD-4 Part 2 stays DRAFT** with **AD4P2-Q1 and Q3 to Q7 undecided**, and **AD-8 stays partially approved**, so **F-5's targets stay provisional and exit criterion 9 is unmet** — **authorizes no milestone 3.2, 3.3-L, 3.4, 3.5, 3.6 or 3.7**, **activates no capability** (`ppoProjected` stays disabled, the OpenAPI files stay DRAFT), and **removes none of §11's provisional items or §12's residual risks**: the authorization is of a scope that carries them.
+
+### 14.4 Recorded elsewhere
+
+`docs/PHASE3_SCOPE.md` §2.2.6 and §12, and the project instructions' Phase 3 status.
