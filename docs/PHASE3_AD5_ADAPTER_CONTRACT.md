@@ -1,7 +1,7 @@
 # AD-5: Source Adapter Contract
 
-**Status:** **DRAFT v0.2**, 26 November 2026. **Not reviewed and not approved.** Nothing here authorizes a milestone, a provider, an adapter or a gate.
-**Revision v0.2, 26 November 2026 — still DRAFT and unreviewed.** Applies Nisarga's review of PR #30. The verdicts and findings are **relayed by the project owner, not quoted**: the repository holds no text of the review. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
+**Status:** **DRAFT v0.3**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Nothing here authorizes a milestone, a provider, an adapter or a gate.
+**Revision v0.2, 26 November 2026 — still DRAFT.** Applies **Nisarga's CHANGES_REQUESTED review of PR #30**, submitted on v0.1 (`5f78500`); its text is on the pull request, not in the repository. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
 
 - **Blocker 3 fixed:** §8.1 now defines **two keys** — `observation_key` for conflicts and `idempotency_key` for duplicates — removing v0.1's unsatisfiable rule "the same key with a different `payload_sha256`", which cannot occur because the hash is inside the key. §8.2 replaces it with three outcomes: duplicate, value conflict (first kept) and identity collision (rejected). **No event identity changes:** C-1's approved derivation and AD-4 v0.2 are untouched.
 - §8.3's equal-timestamp row now points at §8.2's conflict class instead of reading as a benign tie, matching AD-1 §3.4.
@@ -9,6 +9,11 @@
 - **New §8.4:** sources with a null `source_timestamp` — the four consequences, and the D-24 slice's differing approved rule.
 - **New §8.5:** restart-safe deduplication — which transports are safe and why, what a restart loses, and the requirements it places on AD-8 and AD-3.
 - §15 gains **AD5-Q7** (delivery semantics) and **AD5-Q8** (the three-outcome model); **AD5-Q1** and **AD5-Q4** are restated against the new sections.
+
+**Revision v0.3, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Varshini's (Dev C's) CHANGES_REQUESTED review of PR #30**, whose text is on the pull request, not in the repository. It preserves Nisarga's v0.2 corrections and changes no approved D-24 contract, schema, threshold or ownership: every finding was a **documentation** inaccuracy about the existing implementation, and the corrections describe that implementation rather than proposing a change to it. Unresolved architecture decisions stay **provisional**. Changes:
+
+- **Finding 2 fixed — new §9.3:** `down` is **internal only**. The approved `stream-message.v1` schema enumerates `source.status` as exactly `starting`, `ok`, `outage`, and the deployed client validates `source` strictly, so a fourth value would **fault every open stream**. §9.3 maps the internal states onto the three published ones, keeps the distinction where it is actionable (metrics and the paged S-2 alert), and lists what publishing a distinct `down` would require — a protocol version change, a coordinated rollout, and AD-7 plus AD-9 decisions. It is **not proposed**. §9.1's inconsistent status list is corrected and §9.2 is relabelled as the **internal** machine.
+- New **AD5-Q9** on the mapping; it is explicitly provisional until the owner decides.
 
 **Lead:** Dev A. **Reviewers:** Dev B, Dev D (`docs/PHASE3_SCOPE.md` D-23). **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies: at least one of Dev B and Dev D reviews before the decision.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §3.A, §5 (Gate 3), §6, §7.1 (milestone 3.3), §7.3 (AD-5 row); F-2, F-4, F-5; D-5, D-17.
@@ -470,21 +475,21 @@ The dedup window is bounded, not unbounded: the AD-8 `dedup_window` per source, 
 
 **[PROPOSED]** Two independent things, deliberately kept apart:
 
-- **Source status** is about the **connection**: `starting`, `ok`, `degraded` or `outage`, `down`. It is not an observation, and AD-4 §1 excludes it from the envelope: "A connection status is not an observation. It belongs to AD-5."
+- **Source status** is about the **connection**. It is not an observation, and AD-4 §1 excludes it from the envelope: "A connection status is not an observation. It belongs to AD-5." **Two vocabularies exist and §9.3 maps between them:** the adapter's internal lifecycle (§3.3) and the **published status**, which on the wire is the approved closed set `starting | ok | outage`.
 - **Freshness** is about the **value**: its age against the profile, evaluated when read (AD-4 §7).
 
 They are separate because a source can be connected and silent — healthy connection, ageing value — or in outage while its last value is still fresh. Collapsing them would let a reconnection appear to refresh a value, and AD-4 §7 forbids exactly that: *a source outage does not refresh or reset age.*
 
-### 9.2 The status machine
+### 9.2 The internal status machine
 
-**[PROPOSED]** Per source; thresholds from AD-8.
+**[PROPOSED]** Per source, **inside ingestion**; thresholds from AD-8. These are **internal** states, not wire values: §9.3 maps them onto the published set.
 
-| State | Entered when | Left when |
+| Internal state | Entered when | Left when |
 |---|---|---|
 | `starting` | The adapter starts, before the first successful item | One successful item, to `ok`; a permanent fault, to `down` |
 | `ok` | At least one successful item within the expected cadence | The outage criteria below, to `outage`; a permanent fault, to `down` |
 | `outage` | Either: consecutive failures reach the AD-8 count, **or** no successful item for the AD-8 silence window — whichever comes first | One successful item, to `ok` |
-| `down` | A `failed_permanent` fault (§7.1) | An operator action only |
+| `down` | A `failed_permanent` fault (§7.1): authentication, authorization, a contract violation, a withdrawn Gate 3 decision or a registry mismatch | **An operator action only.** It never self-heals, which is why it is distinguished internally (§3.3) |
 
 AD-1 §3.1 is the D-24 instance: `starting` until the first successful poll, then `ok`; `outage` after 3 consecutive failures or 2 s without a success, whichever is first. The two-criteria form matters for a streaming transport, where a silent subscription produces no failures at all.
 
@@ -492,6 +497,34 @@ AD-1 §3.1 is the D-24 instance: `starting` until the first successful poll, the
 - Status is published to the browser as **content**, not as an HTTP status (AD-1 §3.1, §3.2): the stream opens and reports the outage.
 - Status changes are rate-limited in logs and debounced before alerting (AD-8 §7), so that a flapping source does not drown the signal.
 
+### 9.3 Mapping onto the published status: `down` is internal only
+
+**The approved wire contract is a closed three-value set.** `contracts/events/stream-message.v1.schema.json` enumerates `source.status` as exactly `starting`, `ok`, `outage`, and AD-1 §3.1 and §3.2 state the same three. The deployed client validates `source` strictly and a wrongly typed `source` is a **protocol fault** (AD-1 §3.3.3), so **adding a fourth value to that enum would fault every open stream.** §9.2's `down` is therefore **internal to ingestion and is not published as a new wire value.**
+
+**[PROPOSED]** The mapping, which keeps the approved contract exactly as it is:
+
+| Internal state (§9.2) | Published `source.status` | Rationale |
+|---|---|---|
+| `starting` | `starting` | Direct |
+| `ok` | `ok` | Direct |
+| `outage` | `outage` | Direct |
+| `down` | **`outage`** | To a *viewer*, a permanently failed source and an unreachable one are the same thing: no fresh values arrive, and the values age through `stale` to `unavailable` identically. The distinction is **operational**, not user-facing |
+| `stopping`, `stopped` (suspension or shutdown) | **`outage`** | Same reasoning |
+
+**The distinction is not lost — it is carried where it is actionable.** `down` differs from `outage` in exactly one respect: it will **never** recover without an operator (§3.3). That is an operations fact, so it surfaces in operations:
+
+- `observation_source_status` records the **internal** state as a label, so metrics distinguish all of them (AD-8 §7.1);
+- **alert S-2 is paged and S-1 is not** — AD-8 §7.3 already separates "source down (a permanent fault)" from "source outage", precisely because one self-heals and the other does not;
+- the fault class and reason code are logged (§7.1).
+
+**What publishing a distinct `down` would require, if it is ever wanted.** It is **not proposed here**:
+
+1. a new value in the `source.status` enum, which the deployed client rejects, so a **protocol version change** under AD-1 §3.2's rule that "a major version changes meaning and the path" — adding to a closed enum validated strictly is not an additive change (AD-4 Part 2 §6.2.1);
+2. a coordinated client rollout, or acceptance that older tabs fault and then stop permanently;
+3. a decision in **AD-7**, which owns the channel contract, with **AD-9** deciding what a user would see that differs from an outage;
+4. a reason to show it at all: the display difference would have to be meaningful to a pilot user, and today it is not.
+
+**This is provisional.** **AD5-Q9** (§15) puts the mapping to the owner. Until it is decided, the mapping above is what AD-5 assumes, and **the approved three-value contract is unchanged in every case.**
 ---
 
 ## 10. Plausibility bounds
@@ -602,12 +635,13 @@ A provider adapter changes exactly one thing: ingestion acquires **outbound** ac
 | AD5-Q6 | Does a provider's `withdrawn` status ever require deleting stored observations? | Only where its terms require it; §2.4 keeps history by default | Gate 3 terms; AD-11 |
 | AD5-Q7 | Which **delivery semantics** does Phase 3 require (§3.7 **H-1**)? | At-least-once, which makes §8.5's restart-safe deduplication load-bearing and is the semantics the deterministic derivations already support | **AD-2** states the requirement, **AD-3** chooses; the owner approves both |
 | AD5-Q8 | Is **§8.2's three-outcome model** adopted — duplicate, value conflict (first kept), identity collision (rejected) — with both conflict classes alertable? | Yes. Each row's behaviour is AD-1 §3.4's, unchanged | Owner, with Dev B (P-4 owns the acceptance rules) |
+| AD5-Q9 | Is **§9.3's mapping** adopted — `down` stays internal and publishes as `outage`, keeping the approved three-value `source.status` enum unchanged, with the distinction carried in metrics and the paged S-2 alert? | Yes. A fourth enum value would fault the deployed client, and the difference is operational rather than user-facing | Owner, with Dev C; a published `down` would be **AD-7**'s and **AD-9**'s |
 
 ---
 
 ## 16. Approval checklist
 
-**None of these is given. This document is DRAFT v0.1 and has not been reviewed.**
+**None of these is given. This document is a DRAFT; it has been reviewed on PR #30 with changes requested, those findings are applied, and no reviewer has re-reviewed and no owner has approved it.**
 
 - [ ] **Dev B** — review: §3.6 sink and §3.7's pending delivery semantics; §7 fault classes and `Retry-After` handling; **§8.1's two keys and §8.2's three outcomes against the P-4 acceptance rules Dev B owns**; §8.4 null timestamps; §8.5 restart safety; §9 status as content; §12 credentials
 - [ ] **Dev D** — review: §2 registry as version-controlled configuration; §12.1 container posture and egress; §13 CI obligations, fixture origin and the test-only fake provider

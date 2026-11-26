@@ -1,13 +1,20 @@
 # AD-8: Non-Functional Budgets — Latency, Freshness, Monitoring and Recovery
 
-**Status:** **DRAFT v0.2**, 26 November 2026. **Not reviewed and not approved.** Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
-**Revision v0.2, 26 November 2026 — still DRAFT and unreviewed.** Applies Nisarga's review of PR #30. The verdicts and findings are **relayed by the project owner, not quoted**: the repository holds no text of the review. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
+**Status:** **DRAFT v0.3**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists. Until the project owner approves this document, **F-5's targets stay provisional and official exit criterion 9 is unmet** (scope §2.3, §8.2 item 9).
+**Revision v0.2, 26 November 2026 — still DRAFT.** Applies **Nisarga's CHANGES_REQUESTED review of PR #30**, submitted on v0.1 (`5f78500`); its text is on the pull request, not in the repository. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
 
 - **Blocker 1 fixed:** **new §6.0** separates **G-1 event delivery** (no loss, T1 to T4) from **G-2 browser update coalescing** (convergence, T4 to T6). v0.1 stated one ≥ 99.9% delivery target while §6.3's newest-wins backpressure deliberately discards superseded updates — a contradiction. §6.1's single indicator becomes two, §6.3's backpressure is identified as G-2, and acceptance is split into **N-13** (accounting identity) and **N-14** (coalescing and convergence invariants).
 - **New §6.2.1:** the provisional capacity difference between the slice's measured 2 events/s, AD-8's 20/100 design envelope and AD-2's unwritten requirement, with a reconciliation rule — if AD-2 exceeds the envelope, AD-8 is revised, re-approved and its budgets **re-measured** before milestone 3.4.
 - §4 and §8.1 now cross-reference null source timestamps (AD-5 §8.4), restart-safe deduplication (AD-5 §8.5) and the pending delivery semantics (AD-5 §3.7). **New N-15 and N-16** accept those two.
 - §7.1 gains `stream_coalesced_updates_total`, `stream_newest_dropped_total` and `observation_unaccounted_total`; §7.3 gains alerts **G-1** and **G-2**, both of whose defect counters must stay zero.
 - §11 gains **AD8-Q7** (the G-1/G-2 split) and **AD8-Q8** (the reconciliation rule).
+
+**Revision v0.3, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Varshini's (Dev C's) CHANGES_REQUESTED review of PR #30**, whose text is on the pull request, not in the repository. It preserves Nisarga's v0.2 corrections and changes no approved D-24 contract, schema, threshold or ownership: every finding was a **documentation** inaccuracy about the existing implementation, and the corrections describe that implementation rather than proposing a change to it. Unresolved architecture decisions stay **provisional**. Changes:
+
+- **Finding 3 fixed — new §2.3.1:** distinguishes the **measured** quantity from the **proposed** one. The D-24 probe measures `emitted_at` (T2) to **frame arrival** at a programmatic SSE client, clock-skew-corrected, against AD-1 §3's approved p95 ≤ 1 s; AD-8 proposes **T1 to T6**, retrieval to render. The proposed interval is strictly wider at both ends, so the slice's passing figure is **necessary but not sufficient** and is **not evidence** for §3.1. The shared 1000 ms number is a coincidence of F-5's target, not a derivation. §3.1 and **N-1** now say so.
+- **Finding 4 fixed — §2.4 gains an explicit status block:** T6 is **not instrumented** anywhere in the slice; the client's existing `performance.now()` use is for advancing a value's age and is unaffected. It is a proposed **test-harness measurement** for N-1 and N-14 — **not** a product requirement, **not** production browser telemetry (which §7.2 already forbids and which would be AD-10's to assess), and **not** a change to the approved D-24 client. Two build options are sketched; **AD8-Q9** asks which, if either.
+- **Finding 2 fixed — §5.1:** the published `source.status` is the approved **closed three-value enum** `starting | ok | outage`. `down` is **internal** to ingestion and publishes as `outage` (AD-5 §9.3). §7.1 labels the metric with the internal set and §7.3's **S-2** is identified as the only place the distinction is actionable.
+- New **AD8-Q9** (T6 instrumentation) and **AD8-Q10** (accepting §2.3.1's distinction); new gap **1a**: §3.1 has no measurement at all until T6 exists.
 
 **Lead:** Dev A. **Reviewers:** Dev B, Dev C, Dev D (3.1 plan §3). **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies: at least one of Dev B, Dev C and Dev D reviews before the decision.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §2.3 (F-5, F-6), §7.3 (AD-8 row), §8.2 item 9, §10.2 (P2); **D-12** — "the numeric latency budget and the freshness thresholds are set in milestone 3.1".
@@ -70,6 +77,28 @@ In the single-host pilot (F-6), T1 to T5 are on **one** host and one clock, whic
 
 **[PROPOSED] F-5's "event-to-display" means delivery latency, T1 to T6.** The alternative, starting at T0, would make the budget depend on a provider's publication delay and on a third party's clock, so a provider's 3 s delay would show as a failure of our pipeline. The provider's contribution is not ignored: it is **T0 to T1**, measured and reported separately as **source delay** (§3.3), and it is what freshness and the display label already carry to the user.
 
+#### 2.3.1 This is not what the D-24 slice measures today
+
+**The existing, approved measurement is a different quantity, and its figure is not evidence for the proposed budget.** Both ends differ.
+
+| | **Measured today (approved)** | **Proposed here** |
+|---|---|---|
+| Name | **Arrival latency** | **Delivery latency** |
+| Interval | **`emitted_at` (T2) to arrival** at the SSE client | **T1 to T6**, retrieval to render |
+| Start | **T2**, envelope assembly | **T1**, `retrieved_at` |
+| End | **Arrival** of the frame at the client, before any parsing or rendering | **T6**, the value rendered in the browser |
+| Client | A **programmatic** SSE reader, `e2e/p3_stream_probe.py`, on the host | The **browser** |
+| Clocks | Two — the stack in the Docker VM, the probe on the host — so the figure is **clock-skew-corrected**, and the probe reports the raw and corrected values side by side | One host, with T6 handled by §2.4's correlated marker |
+| Budget | **p95 ≤ 1000 ms**, as AD-1 §3 states it: "display p95 ≤ 1 s from `emitted_at`, with both clocks on one host" | p95 ≤ 1000 ms (§3.1) |
+| Status | **Approved for the D-24 slice**, and AD-1 §3 calls its numbers "for the slice, not final budgets" | **Proposed**, unapproved, and **not yet instrumented** (§2.4) |
+
+**What follows from the difference:**
+
+- **The slice's passing figure does not demonstrate the proposed budget.** It omits T1 to T2 at the start and everything after arrival at the end — parsing, validation, state update and render. Those are small, but "small" is an expectation, not a measurement.
+- **The two budgets happen to carry the same 1000 ms number**, which is a coincidence of F-5's target, not a derivation. The proposed interval is strictly wider than the measured one, so meeting the measured budget is **necessary but not sufficient** for the proposed one.
+- **The slice's approved target is unchanged by this document.** AD-1 §3 keeps its own definition for as long as the slice runs; §2.3 governs the full-Phase-3 budget that AD-8 proposes.
+- **§9's N-1 therefore needs new instrumentation** (§2.4), not a re-reading of the existing probe output. Until it exists, §3.1's figures are design targets with **no** corresponding measurement, which §12 item 1 records.
+
 **[PROPOSED] AD4-Q1 is decided here, as AD-4 §11.2 directs.** Freshness **age** is measured from `source_timestamp`, with `retrieved_at` as the fallback where the source timestamp is null — which is AD-4 §7's draft position, adopted unchanged. The two decisions are consistent: age starts at T0 because it describes the value; delivery latency starts at T1 because it describes the system.
 
 ### 2.4 How each is measured
@@ -77,7 +106,22 @@ In the single-host pilot (F-6), T1 to T5 are on **one** host and one clock, whic
 **[PROPOSED]**
 
 - **T1 to T5** are differences on one host's monotonic clock, so they are exact and need no tolerance.
-- **T6** is a browser clock, so **T1 to T6 cannot be computed by subtraction across machines.** It is measured instead by a **correlated marker**: Express stamps each `update` with its own `server_time` (AD-1 §3.2 already carries this field), the client records `performance.now()` at render and reports the paired values, and the end-to-end figure is derived in the acceptance harness from a session whose clock offset was measured by a round trip at connection. In the single-host pilot the browser and the server are the same machine, as AD-1 §3 already assumes for the slice's target — "with both clocks on one host".
+- **T6** is a browser clock, so **T1 to T6 cannot be computed by subtraction across machines.** It is measured by a **correlated marker**: Express stamps each `update` with its own `server_time` (AD-1 §3.2 already carries this field), the client records a monotonic timestamp at render and reports the paired values, and the figure is derived in the acceptance harness from a session whose clock offset was measured by a round trip at connection. In the single-host pilot the browser and the server are the same machine, as AD-1 §3 already assumes for the slice's target — "with both clocks on one host".
+
+##### T6 instrumentation does not exist, and what it would be
+
+**[PROPOSED.]** To be unambiguous, because the paragraph above describes a mechanism rather than a fact:
+
+| Question | Answer |
+|---|---|
+| Is T6 instrumented in the D-24 slice? | **No.** Nothing in `services/web/src` or the browser spec measures render latency. The client's existing `performance.now()` use is for **advancing a value's age** monotonically (AD-4 §7; AD-1 §3.3), which is a different purpose and is unaffected |
+| What is being proposed, then? | A **test-harness measurement**, used only to accept §3.1's budget in **N-1** and §6.0's convergence in **N-14** |
+| Is it a product requirement? | **No.** No pilot user sees it, no UI element depends on it, and nothing in AD-9's display rules needs it |
+| Is it production telemetry from the browser? | **No, and none is proposed.** Shipping render timings from a user's browser would be new outbound data about a named pilot user, and §7.2 already forbids a metric carrying a user identity. If it is ever wanted, it is **AD-10**'s to assess and the owner's to approve |
+| Does it change the D-24 client? | **No.** Instrumenting it is a change to the **web client**, owned by **Dev C**, in a **later milestone** (3.5). This document proposes no change to the approved slice |
+| What happens until it exists? | §3.1's end-to-end figures have **no measurement**. The existing probe measures §2.3.1's narrower arrival latency, which is necessary but not sufficient |
+
+**How it would be built, if approved.** The least invasive form is a **harness-only hook**: the client exposes a render timestamp for the harness to read in a test build or behind a test-only flag, so no timing path exists in the production bundle. A second option is a Playwright-side measurement taken entirely from outside the client, which needs no client change at all but measures paint rather than state commit. **AD8-Q9** (§11) asks the owner which, if either, is wanted; **Dev C** owns the answer's implementation and **AD-13** the harness.
 - **T0 to T1** is a difference across clocks and is therefore an estimate, bounded by `clock_tolerance_ms` (§10). It is reported as a distribution, never as a precise per-event number, and it is **never** used to judge the pipeline.
 - **Percentiles** are computed over a stated window and a stated sample, both reported with the figure. A p95 over 20 events is not a p95.
 
@@ -96,7 +140,9 @@ In the single-host pilot (F-6), T1 to T5 are on **one** host and one clock, whic
 | p99 | ≤ 2000 ms | One slow GC or one backpressure event must not count as a breach |
 | Hard ceiling | 5000 ms | Beyond this the event is **late**, counted as a breach, and still delivered — never dropped. A dropped event would make the panel silently wrong, which is worse than a slow one |
 
-Conditions: the §6.2 event-rate envelope, the §6.3 concurrency limits, one host, a warm process. Measured over a window of at least 300 s with at least 500 delivered events, which is the soak the D-24 acceptance harness already runs (`docs/PHASE3_D24_ACCEPTANCE.md` §1, a 300-second soak).
+Conditions: the §6.2 event-rate envelope, the §6.3 concurrency limits, one host, a warm process. Measured over a window of at least 300 s with at least 500 delivered events — the same shape as the soak the D-24 acceptance harness already runs (`docs/PHASE3_D24_ACCEPTANCE.md` §1, a 300-second soak).
+
+**These figures are proposed and unmeasured.** The existing soak measures §2.3.1's **arrival latency** — `emitted_at` to frame arrival at a programmatic SSE client, clock-skew-corrected, against AD-1 §3's approved p95 ≤ 1 s — which is a **narrower interval at both ends** than T1 to T6. Meeting it is necessary but not sufficient here, and the end-to-end figures above have no corresponding measurement until **T6 instrumentation exists** (§2.4), which it does not. **The slice's own approved target is unchanged.**
 
 ### 3.2 Segment budgets
 
@@ -214,10 +260,12 @@ For the synthetic source the bounds are the generator's declared range, so a gen
 |---|---|---|---|
 | Is the value old? | `fresh` / `stale` | **Express**, on the server clock, at evaluation | Age against `stale_after_ms` (AD-4 §7) |
 | Is the value too old to show? | `unavailable` | **Express**, and the browser as age advances | Age against `unavailable_after_ms` |
-| Is the source connected? | `starting` / `ok` / `outage` / `down` | **Ingestion** (AD-5 §9) | §3.5's outage criteria |
+| Is the source connected? | **Published:** `starting` / `ok` / `outage` — the approved closed enum (AD-1 §3.1, §3.2; `stream-message.v1.schema.json`). **Internally** ingestion also distinguishes `down`, a permanent fault, which publishes as `outage` (AD-5 §9.3) | **Ingestion** (AD-5 §9) | §3.5's outage criteria |
 | What does the user see? | The label | **AD-4 §8.1**, first match wins | The above, plus class, transport and Gate 3 status |
 
 **Freshness and source status are separate** (AD-5 §9.1), and the display shows both: AD-1 §3.3 requires source `outage` to be shown separately from a disconnected stream.
+
+**The published status set is not extended by this document.** `down` is an internal ingestion state and is **never a fourth wire value**: the deployed client validates `source` strictly, so adding to the enum would fault every open stream (AD-5 §9.3; AD-4 Part 2 §6.2.1). The distinction is carried in operations instead, which is why §7.1 labels `observation_source_status` with the **internal** state and §7.3 pages **S-2** for a permanent fault while leaving **S-1** unpaged for a recoverable outage. Publishing a distinct `down` would be an **AD-7** protocol change and an **AD-9** display decision, neither of which is proposed.
 
 ### 5.2 Boundary semantics
 
@@ -352,7 +400,7 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | `observation_source_delay_ms` | Histogram | `source_id` | §3.3 |
 | `observation_events_total` | Counter | `source_id`, `outcome` (`validated`, `quarantined`, `rejected`, `duplicate`, `late`, `conflict`) | §6.1 |
 | `observation_quarantine_total` | Counter | `source_id`, `reason` (the AD-4 §6 codes) | §4.4 |
-| `observation_source_status` | Gauge | `source_id`, `status` | §5.1 |
+| `observation_source_status` | Gauge | `source_id`, `status` (the **internal** set of AD-5 §9.2, including `down`, which is not a wire value) | §5.1; AD-5 §9.3 |
 | `observation_adapter_faults_total` | Counter | `source_id`, `class` (the AD-5 §7.1 classes) | §7.3 |
 | `observation_breaker_state` | Gauge | `source_id` | AD-5 §7.4 |
 | `observation_value_age_ms` | Gauge | `source_id`, `subject` | §4 |
@@ -382,7 +430,7 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | L-1 | Delivery latency breach | p95 of `observation_delivery_latency_ms` > 1000 ms for 5 min | Warning |
 | L-2 | Severe latency breach | p99 > 5000 ms for 5 min, or any event past the hard ceiling | Error |
 | S-1 | Source outage | `observation_source_status` = `outage` for > 3 × `expected_interval_ms`, and at least 60 s | Warning |
-| S-2 | Source down | status = `down`, that is a permanent fault: authentication, authorization or contract violation | **Error, paged.** It never self-heals (AD-5 §3.3) |
+| S-2 | Source down | **internal** status = `down`, that is a permanent fault: authentication, authorization or contract violation | **Error, paged.** It never self-heals (AD-5 §3.3), and it is indistinguishable from `outage` on the wire (AD-5 §9.3), so the alert is the only place the difference is actionable |
 | S-3 | Retry storm | `observation_adapter_faults_total` with class `rate_limited` rising for 10 min | Error |
 | Q-1 | Quarantine rate | > 5% of a source's events quarantined over 15 min | Warning |
 | Q-2 | Conflict loop | any `conflict` outcome for the same subject twice in 5 min | **Error.** The C-1 defect presented exactly this way, and it failed silently in a counter (AD-1 §3.4.1) |
@@ -445,7 +493,7 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 
 | # | Criterion | Method |
 |---|---|---|
-| N-1 | §3.1's p50, p95, p99 and the hard ceiling are met at the §6.2 sustained rate | A ≥ 300 s soak with ≥ 500 events, reporting the window and the sample size with every percentile (§2.4) |
+| N-1 | §3.1's p50, p95, p99 and the hard ceiling are met at the §6.2 sustained rate | A ≥ 300 s soak with ≥ 500 events, reporting the window and the sample size with every percentile (§2.4). **Blocked on T6 instrumentation** (§2.4, **AD8-Q9**): until it exists, only §2.3.1's arrival latency can be measured, and N-1 cannot be claimed |
 | N-2 | §3.2's segment budgets are met, and a breach is attributed to a segment | Per-segment histograms from one host's clock |
 | N-3 | §3.1 is met during a §6.2 burst, and recovers within 10 s of its end | Burst injection by the AD-12 harness |
 | N-4 | §3.4's reconnect p95 is met from each recoverable cause, and the excluded states are **not** counted | The AD-1 §3.7 client fault catalogue |
@@ -493,6 +541,8 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | AD8-Q6 | Does **AD4-Q1** stand as decided in §2.3 — age from `source_timestamp`, falling back to `retrieved_at`? | Yes, AD-4 §7's draft position unchanged | Owner. AD-4 §11.2 names AD-8 as the decider |
 | AD8-Q7 | Are the **two delivery guarantees** of §6.0 adopted — G-1 no event loss, G-2 convergence with superseded updates coalesced — with separate indicators and separate acceptance (**N-13**, **N-14**)? | Yes. One target for both is a contradiction: the pipeline must not lose an event while the channel is designed to discard superseded ones | Owner, with Dev B and Dev C |
 | AD8-Q8 | Is **§6.2.1's reconciliation rule** adopted — if AD-2's requirement exceeds the §6.2 envelope, AD-8 is revised and re-approved, and its budgets re-measured, **before** milestone 3.4 begins? | Yes. A budget measured under one envelope is not evidence under a larger one | Owner, with Dev B (AD-2's lead) |
+| AD8-Q9 | Is **T6 render instrumentation** wanted, and in which form — a harness-only hook in a test build, a Playwright-side paint measurement needing no client change, or neither (keeping §2.3.1's arrival latency as the only measured figure)? | A harness-only hook, because it measures state commit rather than paint. **No production browser telemetry**, which §2.4 and §7.2 both exclude | Owner, with **Dev C** who owns the client and **Dev D** who owns the harness |
+| AD8-Q10 | Is **§2.3.1's distinction** accepted — that the slice's approved `emitted_at`-to-arrival figure is **not** evidence for the proposed T1-to-T6 budget, so §3.1 stays unmeasured until T6 exists? | Yes. The proposed interval is strictly wider at both ends; the shared 1000 ms figure is a coincidence of F-5's target, not a derivation | Owner |
 
 ---
 
@@ -501,6 +551,7 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 | # | Gap | Closed by |
 |---|---|---|
 | 1 | **Every figure here is a design target, not a measurement**, except where it restates an approved slice figure or a measured D-24 runtime. Nothing in §3, §4 or §6 has been load-tested. **§6.2's envelope is provisional and AD-2's requirement is unwritten** (§6.2.1) | §9's tests, in milestones 3.5 and 3.7; **AD-2** for the requirement |
+| 1a | **T6 is not instrumented** (§2.4), so §3.1's end-to-end budget has **no measurement at all**. The only measured latency is §2.3.1's narrower arrival latency, against the slice's own approved target | **AD8-Q9**; Dev C in milestone 3.5; **AD-13** for the harness |
 | 2 | **No durability or replay is decided**, so §8.1 has no recovery-point objective for observations, **G-1 has no store to deliver into** (§6.0), and the delivery semantics **H-1 to H-6** are pending (AD-5 §3.7). Today a coalesced update is genuinely gone, because there is no observation store | **AD-2**, **AD-3**; **AD-11** for the store |
 | 3 | **Provider-specific freshness values cannot be finalized**, because no provider is approved and no documentation has been read for one. §4.2 gives category defaults only | **Gate 3**, per provider; then a registry record under AD-5 §2.2 |
 | 4 | **The metric and alert mechanism is unchosen.** §7 specifies names, labels and conditions, not a stack | Milestone 3.7; AD-10 for anything exposed |
@@ -513,7 +564,7 @@ The D-24 slice runs at **2 events/s** across four pairs (AD-1 §3), so the envel
 
 ## 13. Approval checklist
 
-**None of these is given. This document is DRAFT v0.1 and has not been reviewed.**
+**None of these is given. This document is a DRAFT; it has been reviewed on PR #30 with changes requested, those findings are applied, and no reviewer has re-reviewed and no owner has approved it.**
 
 - [ ] **Dev B** — review: §3.2's Express segments; **§6.0's G-1/G-2 split and §6.3's backpressure against AD-1 §3.5**; **§6.2.1's reconciliation rule, as AD-2's lead**; §7's metrics and labels on the Express side; §8.1's dependence on AD-5 §3.7 and §8.5; §8.2's shutdown budget against `lifecycle.ts`
 - [ ] **Dev C** — review: §3.2's wire-to-render segment; §3.4's reconnect definition and exclusions; **§6.0's G-2 convergence invariants and N-14's test method**; §5.3's display invariants; §4's browser-side monotonic age rule and the null-timestamp label

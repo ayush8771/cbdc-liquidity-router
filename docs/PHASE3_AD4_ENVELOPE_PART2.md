@@ -1,7 +1,13 @@
 # AD-4 Part 2: Event Identity, Canonical Hashing, Validation and Cross-Service Compatibility
 
-**Status:** **DRAFT v0.1**, 26 November 2026. **Not reviewed and not approved.**
+**Status:** **DRAFT v0.2**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists.
 **Relationship to AD-4 v0.2:** this is an **additive companion** to `docs/PHASE3_AD4_EVENT_ENVELOPE.md`, which stays **exactly as approved**. AD-4 **v0.2 is approved for the D-24 slice only** (25 November 2026, scope §2.2.3), and that approval is **version-specific**: a revision of v0.2 would need fresh review and a fresh owner approval before the D-24 slice could continue on it (AD-4 status line; AD-1 status line). Revising the approved file would therefore **suspend the authorization of work now in progress**, so this document is written beside it instead. **Nothing in AD-4 v0.2 is edited, superseded or reinterpreted here.** Where the two could be read as disagreeing, **v0.2 wins**, and the disagreement is a defect in this document.
+**Revision v0.2, 26 November 2026 — still DRAFT, and not re-reviewed.** Applies **Varshini's (Dev C's) CHANGES_REQUESTED review of PR #30**, whose text is on the pull request, not in the repository. It preserves Nisarga's v0.2 corrections and changes no approved D-24 contract, schema, threshold or ownership: every finding was a **documentation** inaccuracy about the existing implementation, and the corrections describe that implementation rather than proposing a change to it. Unresolved architecture decisions stay **provisional**. Changes:
+
+- **Finding 1 fixed — new §6.2.1:** the deployed client is **lenient only about additive unknowns** (an unknown `type`, an unknown extra field — ignored, though `stream_seq` still counts) and **strict about structure**. A violation is a **protocol fault**: abort and reconnect, and three faults without 60 s of valid streaming become a **permanent stopped state**. The strict list is reproduced from the approved AD-1 §3.3.3, including `snapshot.values` being exactly the four pairs in order, the `update` pair allowlist, `profile` validation and the two size limits.
+- **§6.2's web-consumer row and §6.4's rollout order are corrected.** v0.1's "the consumer may lag, because it is lenient" is true only for additive changes. A change to the subject set or order, the update allowlist, or `profile`'s shape **faults every open tab** and, after three faults, stops them — so it needs a coordinated rollout or a protocol major version, not a minor bump.
+- **A consequence now recorded:** the four-pair allowlist is a **wire-compatibility constraint**, not only an ingestion one, so adding a fifth FX pair is a protocol change. New **AD4P2-Q7** and gap **4a** carry it to AD-7 and AD-5 §6.3.
+
 **Lead:** Dev A. **Reviewers:** Dev B, Dev C, Dev D (the AD-4 reviewer set). **Approver:** project owner. Dev A is also the approver, so the second-reviewer rule (D-20) applies.
 **Scope source:** `docs/PHASE3_SCOPE.md` v1.4 §3.A, §3.B, §7.3 (AD-4 row), §10.1; D-9, D-15, D-17; AD4-Q1 to AD4-Q8.
 **Feeds:** AD-5, AD-7, AD-9, AD-11, AD-12; milestones 3.3 to 3.6.
@@ -229,10 +235,37 @@ Each hop is a place two implementations can disagree, which is why §4.3's parit
 |---|---|---|---|
 | Ingestion (producer) | Emits exactly one declared version | n/a | n/a |
 | Express (first boundary) | **Strict:** rejects unknown fields | **Rejects** | **Rejects** |
-| Web (consumer) | Ignores unknown message fields | Ignores unknown fields and event types | **Unavailable, and stops** (AD-1 §3.2) |
+| Web (consumer) | **Lenient only about additive unknowns; strict about structure** (§6.2.1) | Ignores unknown fields and event types, and still validates structure | **Unavailable, and stops** (AD-1 §3.2) |
 | Store (AD-11) | Keeps the version with the record | Stores it, does not interpret | Stores it, does not interpret |
 
-**Why the boundary is strict and the consumer is lenient.** A strict boundary is a security control: it stops an unexpected field from reaching the browser or the store. A lenient consumer is an upgrade control: it lets the producer and Express be upgraded before every browser tab is reloaded. Reversing either would be a defect.
+**Why the boundary is strict.** It is a security control: it stops an unexpected field from reaching the browser or the store.
+
+**Why the consumer is only *partly* lenient.** Leniency is an upgrade control — it lets the producer and Express be upgraded before every browser tab is reloaded — but it applies **only to additive unknowns**. The deployed D-24 client validates structure strictly and treats a violation as a protocol fault. §6.2.1 states exactly where the line falls, because getting it wrong would make a rollout plan that breaks every open tab look safe.
+
+#### 6.2.1 What the deployed client is lenient about, and what it is not
+
+**[Approved, AD-1 §3.3.3.]** This subsection **describes the existing D-24 client**; it proposes no change to it and changes no approved contract. The client "trusts nothing it is sent", and a validation failure is a **protocol fault**: the stream is aborted and reconnected, and **three faults without 60 s of valid streaming between them become a permanent stopped state** (AD-1 §3.3.2).
+
+| Client behaviour | Cases |
+|---|---|
+| **Lenient — ignored, not a fault** | An unknown `type`; an unknown extra field. The message is ignored but **its `stream_seq` still counts**, so the sequence check keeps working |
+| **Strict — a protocol fault** | A `Content-Type` not starting `text/event-stream`, even with status 200; a `data:` line that is not one JSON object; a missing or wrongly typed `protocol_version`, `type`, `stream_seq`, `server_time` or `source`; a `type` that does not match the SSE event name; a `stream_seq` that is not an integer, not 1 on the first message, or not exactly one more than the last; a first message that is not `snapshot`; a second `snapshot` on one connection; **`values` that is not exactly the four pairs in order**; **an `update` whose pair is outside the allowlist**; a missing, malformed, out-of-order or null-`unavailable_after_ms` `profile`; a `freshness` field that disagrees with the recomputed state; either size limit exceeded (65,536-byte payload, 131,072-byte parser buffer, clarification **C-2**) |
+| **Stops, with no reconnect** | A `protocol_version` whose major part is not `1` — AD-4 §9's unknown-major rule, applied in the browser |
+| **Per value, leaving the rest of the message usable** | A value whose envelope is not `usage: display_only`, `provenance_class: synthetic`, `transport: synthetic`, a `source_id` beginning `synthetic.`, `validation.status: validated`, and an `fx_rate` payload whose currencies are the value's own pair — **including an unknown value in those four safety fields** — is shown as **Unavailable** with no number, counted and logged. This is AD-4 §8.1 rule 1 applied in the browser |
+
+**The consequence for §6.4's rollout order.** A change is safe to deploy ahead of the client **only if it is additive in a way the strict list above does not see**:
+
+| Change | Safe ahead of the client? |
+|---|---|
+| A new optional field on a message, or a new message `type` | **Yes.** Both are in the lenient row |
+| A new optional envelope field, or a new `event_type` the client does not display | **Yes**, by the same rows |
+| **A fifth subject, or a different subject order, in `snapshot.values`** | **No.** `values` must be exactly the four pairs in order, so the deployed client faults. It needs a coordinated rollout or a protocol major version |
+| **A new pair in an `update`** | **No.** Outside the allowlist is a fault |
+| **Any change to `profile`'s shape, ordering, or a null `unavailable_after_ms`** | **No.** Each is a fault in this slice, and the client never substitutes defaults |
+| A changed value in `usage`, `provenance_class`, `transport` or `validation.status` | Not a stream fault, but that **value** becomes Unavailable — so it is a silent loss of display, which §6.2's safety-field rule intends |
+| A major `protocol_version` | **No**, by design: the client stops |
+
+**The pair allowlist is therefore a wire-compatibility constraint, not only an ingestion one.** AD-1 §3.4's four-pair allowlist is enforced in the schema, in Express and in the browser, so adding a fifth FX pair is a **protocol change**, not a configuration change. AD-5 §6.3's `subjects` allowlist and AD-7's channel contract have to account for that; §9's **AD4P2-Q7** raises it.
 
 ### 6.3 The channel's version is not the envelope's
 
@@ -257,7 +290,9 @@ An envelope travels inside a channel message unchanged — AD-1 §3.2 requires `
 | A change to `usage`, `provenance_class`, `transport` or `validation.status` values | A **major** version, a new schema file, and — for `usage` — the full AD-6 §7 list, which is **not planned or authorized** |
 | A new `validation` reason code | A minor bump; consumers must treat an unknown reason as a reason to **withhold**, never to display |
 
-**Deployment order for a minor bump:** schema and vectors, then Express's validator, then ingestion's producer, then the web consumer. Express must accept the new form before ingestion emits it; the consumer may lag, because it is lenient (§6.2).
+**Deployment order for a minor bump:** schema and vectors, then Express's validator, then ingestion's producer, then the web consumer. Express must accept the new form before ingestion emits it.
+
+**The consumer may lag only for an additive change** (§6.2.1): a new optional field, a new message `type`, or a new `event_type` it does not display. A change to `snapshot.values`' subject set or order, to the `update` pair allowlist, or to `profile`'s shape is a **protocol fault in the deployed client**, so it is not a minor bump in practice — it needs a coordinated rollout, or a protocol major version and a new path. Treating such a change as "minor, consumers are lenient" would fault every open tab and, after three faults, stop them permanently.
 
 ### 6.5 Compatibility test obligations
 
@@ -311,6 +346,7 @@ An envelope travels inside a channel message unchanged — AD-1 §3.2 requires `
 | 2 | **AD4-Q5 — where the schema lives — is still Dev D's to decide** and stays open in AD-4 §11.2. AD-1 §3.7 (P-8) records the slice's location and check, and `check_event_contracts.py` now exists | Dev D |
 | 3 | **AD4-Q7 — storage separation and the reviewer-reference format** — is open | **AD-11**, **AD-12** |
 | 4 | **The canonicalizer is ASCII-limited** and cannot hash non-ASCII announcement text | §7.3, before the first announcement adapter |
+| 4a | **The subject set is fixed at four pairs on the wire** (§6.2.1), so growing it is a protocol change. The consequences for AD-5 §6.3's `subjects` allowlist and for AD-7's channel contract are not worked out here | **AD-7**; **AD4P2-Q7** |
 | 5 | **Multi-source derivation is deferred beyond envelope v1** (**AD4-Q8**, owner-decided), so an FX cross or an inversion across two providers is rejected | A future AD-4 major version |
 | 6 | **The distribution mechanism is unchosen**, so §6.1's hop 2 has no concrete behaviour and no durability | **AD-2**, **AD-3** |
 | 7 | **No provider is approved**, so §7's three types have no source and every V-3 Gate 3 check has nothing to pass | **Gate 3**, per provider |
@@ -328,12 +364,13 @@ An envelope travels inside a channel message unchanged — AD-1 §3.2 requires `
 | AD4P2-Q4 | Is the §5.2 **monotonic restriction** — no component may ever upgrade a validation status — adopted as an invariant? | Yes | Owner |
 | AD4P2-Q5 | Are the §5.3 **new rejection codes** (`OVERSIZE`, `EVENT_TYPE_NOT_PERMITTED`, `SUBJECT_NOT_PERMITTED`) added to the AD-4 catalogue, and does adding them require an AD-4 minor revision? | Add them. Whether the approved AD-4 file is revised, or they live here until AD-4's next version, is the owner's call | Owner; affects AD-4 v0.2's version-specific approval |
 | AD4P2-Q6 | Is §6.4's deployment order — schema and vectors, Express, ingestion, web — adopted as the rule for a minor bump? | Yes: a strict boundary must accept a form before a producer emits it | Owner, with Dev B and Dev D |
+| AD4P2-Q7 | Is the **subject set a wire-compatibility constraint** (§6.2.1)? Adding a fifth FX pair faults the deployed client, so it would need a coordinated rollout or a protocol major version, not a configuration change | Yes, for as long as the client validates `values` as exactly the four pairs in order. Loosening it is **AD-7's** to propose, not AD-4's | Owner, with Dev C and Dev B |
 
 ---
 
 ## 10. Approval checklist
 
-**None of these is given. This document is DRAFT v0.1 and has not been reviewed.**
+**None of these is given. This document is a DRAFT; it has been reviewed on PR #30 with changes requested, those findings are applied, and no reviewer has re-reviewed and no owner has approved it.**
 
 - [ ] **Dev B** — review: §5.1 and §5.2 at the Express boundary; §6.2's strict-boundary obligations; §6.4's deployment order; §4.3's TypeScript parity obligations
 - [ ] **Dev C** — review: §5.2's browser row; §6.2's consumer leniency and the unknown-major behaviour; §7.3's untrusted-text handling in the UI

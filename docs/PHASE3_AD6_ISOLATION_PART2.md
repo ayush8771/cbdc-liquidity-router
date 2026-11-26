@@ -1,9 +1,9 @@
 # AD-6 Part 2: Engine Isolation — Full Phase 3 Enforcement and Verification
 
-**Status:** **DRAFT v0.2**, 26 November 2026. **Not reviewed and not approved.**
+**Status:** **DRAFT v0.2**, 26 November 2026. **Review state:** reviewed on PR #30 — **CHANGES_REQUESTED by Nisarga (26 Nov, on v0.1) and by Varshini, Dev C (26 Nov)** — and **NOT APPROVED**. The findings of both rounds are applied; **neither reviewer has re-reviewed**, and no owner approval exists.
 **Relationship to AD-6 v0.2:** this is an **additive companion** to `docs/PHASE3_AD6_ENGINE_BOUNDARY.md`, which stays **exactly as approved**. AD-6 **v0.2 is approved for the D-24 slice only** (25 November 2026, scope §2.2.3), **subject to D-25**, and that approval is **version-specific**. Revising the approved file would require fresh review and a fresh owner approval before the D-24 slice could continue, so this document is written beside it. **Nothing in AD-6 v0.2 is edited, superseded, weakened or reinterpreted here.** Where the two could be read as disagreeing, **v0.2 wins**.
 **The rule is unchanged:** *no observation may influence an engine request or an engine result* (AD-6 §1; D-9, D-15).
-**Revision v0.2, 26 November 2026 — still DRAFT and unreviewed.** Applies Nisarga's review of PR #30. The verdicts and findings are **relayed by the project owner, not quoted**: the repository holds no text of the review. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
+**Revision v0.2, 26 November 2026 — still DRAFT.** Applies **Nisarga's CHANGES_REQUESTED review of PR #30**, submitted on v0.1 (`5f78500`); its text is on the pull request, not in the repository. Nothing in it approves this document, and no approved decision, contract, threshold, ownership or gate moves. Changes:
 
 - §3 item 3 now records **what closing B-4 will take**: a change to inference's networking that the D-24 overlay cannot express, permitted only under an approved AD-10 change, per `docs/PHASE3_AD1_ARCHITECTURE.md` §7.3.1. **B-4 stays unresolved**, T-5 stays ingestion-only, and **AD-6 is still not fully enforced**.
 
@@ -215,7 +215,7 @@ A value from a legitimate bridge telemetry source, should one ever exist, follow
 
 ## 10. Approval checklist
 
-**None of these is given. This document is DRAFT v0.1 and has not been reviewed.**
+**None of these is given. This document is a DRAFT; it has been reviewed on PR #30 with changes requested, those findings are applied, and no reviewer has re-reviewed and no owner has approved it.**
 
 - [ ] **Dev B** — review: §2.1's Express, distribution, store and audit rows; §2.2's three shared-resource paths; T-12, T-14, T-15, T-16
 - [ ] **Dev C** — review: §5.2's 3.5 frontend risk; T-17; §5.1 R-1's UI consequences

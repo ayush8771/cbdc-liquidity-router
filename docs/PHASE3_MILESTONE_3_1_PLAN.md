@@ -53,10 +53,10 @@ Leads are approved (D-21). The reviewers of AD-2, AD-5 and AD-12, which were adj
 | AD-2 | Streaming requirements | Dev B | Dev A, Dev D | F-4, F-5 | AD-3; milestone 3.4 |
 | AD-3 | Streaming mechanism decision record | Dev D | Dev B (the PostgreSQL option) | AD-2, F-6 | AD-11; milestone 3.4 |
 | AD-4 | Event envelope and provenance schema (**v0.2 approved 25 Nov 2026 for the D-24 slice only**: `docs/PHASE3_AD4_EVENT_ENVELOPE.md`) | Dev A | Dev B, C, D | — | AD-5, AD-7, AD-9, AD-11, AD-12; milestone 3.3 |
-| AD-5 | Source adapter contract (**DRAFT v0.2, 26 Nov 2026, not reviewed**: `docs/PHASE3_AD5_ADAPTER_CONTRACT.md`) | Dev A | Dev B, Dev D | F-2, F-4, AD-4 | AD-12; milestone 3.3 |
+| AD-5 | Source adapter contract (**DRAFT v0.3, 26 Nov 2026, in review**: `docs/PHASE3_AD5_ADAPTER_CONTRACT.md`) | Dev A | Dev B, Dev D | F-2, F-4, AD-4 | AD-12; milestone 3.3 |
 | AD-6 | Live-data-to-engine boundary (**v0.2 approved 25 Nov 2026 for the D-24 slice only**, subject to D-25, B-4 unresolved: `docs/PHASE3_AD6_ENGINE_BOUNDARY.md`) | Dev A | Dev B, Dev C | — (records D-9 and D-15) | AD-9; milestone 3.5 |
 | AD-7 | Real-time channel contract | Dev B | Dev C, Dev D | F-3, AD-4, AD-10 | Milestone 3.5 |
-| AD-8 | Non-functional budgets (**DRAFT v0.2, 26 Nov 2026, not reviewed**: `docs/PHASE3_AD8_BUDGETS.md`) | Dev A | Dev B, C, D | F-5, F-6 | AD-9; milestones 3.5, 3.7; exit criterion 9 |
+| AD-8 | Non-functional budgets (**DRAFT v0.3, 26 Nov 2026, in review**: `docs/PHASE3_AD8_BUDGETS.md`) | Dev A | Dev B, C, D | F-5, F-6 | AD-9; milestones 3.5, 3.7; exit criterion 9 |
 | AD-9 | Fallback and degradation spec | Dev C | Dev A, Dev B | AD-4, AD-6, AD-8 | Milestone 3.5 |
 | AD-10 | Threat model and exposure plan | Dev B | Dev C, Dev D | F-3, F-6, AD-1 component view | AD-7, AD-11; milestone 3.2; the Gate 4 checklist |
 | AD-11 | Audit trail and persistence proposal | Dev B | Dev A, Dev D | AD-3, AD-4, AD-10 | Milestones 3.2 and 3.7 |
@@ -122,4 +122,4 @@ Milestone 3.1 exits when:
 
 The D-24-slice approvals of 25 November 2026 do not exit 3.1: AD-2, AD-3, AD-5, AD-7 to AD-13 and the final AD-1 are still outstanding, and the component view's §4 placement is unconfirmed.
 
-The drafts of 26 November 2026 do not exit 3.1 either. Each is **DRAFT and unapproved** — AD-5, AD-8, AD-1 Part 2 and AD-6 Part 2 at **v0.2** after a review round, AD-4 Part 2 at v0.1 — so AD-5 and AD-8 are not yet approved deliverables, the companion documents approve nothing, and the component view's §4 placement stays **unconfirmed** until the project owner confirms it — which `docs/PHASE3_AD1_ARCHITECTURE.md` is the material for, not a substitute for.
+The drafts of 26 November 2026 do not exit 3.1 either. Each is **DRAFT and unapproved** after two review rounds on PR #30 — AD-5, AD-8 and AD-1 Part 2 at **v0.3**, AD-4 Part 2 at **v0.2**, AD-6 Part 2 at **v0.2** — so AD-5 and AD-8 are not yet approved deliverables, the companion documents approve nothing, and the component view's §4 placement stays **unconfirmed** until the project owner confirms it — which `docs/PHASE3_AD1_ARCHITECTURE.md` is the material for, not a substitute for. Both rounds were **documentation corrections only**: no approved contract, schema, threshold or ownership moved, and the unresolved architecture decisions — the streaming mechanism, delivery semantics, capacity, published source status and T6 instrumentation — remain **provisional**.
