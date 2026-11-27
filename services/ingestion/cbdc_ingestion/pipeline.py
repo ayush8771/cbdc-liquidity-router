@@ -75,6 +75,19 @@ from .status import SourceStatus
 # something did.
 SOURCE_ID_UNRESOLVED = "adapter_source_id_not_representable_in_envelope"
 
+# The reason code a **failing sink** carries. It names the sink, not the data:
+# the observation was admitted, bounded, built, validated and classified, and
+# only the publication failed, so blaming the item would misreport the fault.
+#
+# **Why this is handled at all.** `ServiceSink.publish` cannot raise on the
+# shipped path — the channel names are fixed and `LatestStore.apply` returns a
+# bool. But the sink is an **interface**, AD-2 and AD-3 are drafts, and the
+# in-memory implementation is this slice's choice and not a template (§8 item
+# 5). An unguarded publish would let one sink fault end the whole service tick
+# and lose every later item in the batch **with no counter moved at all** —
+# exactly the silent loss AD-5 §3.7 and acceptance criterion 14 forbid.
+SINK_UNAVAILABLE = "sink_unavailable"
+
 
 def admit(record: SourceRecord, observation: NormalizedObservation) -> None:
     """Admission against the record (AD-5 §3.4, §2.2).
@@ -171,14 +184,14 @@ class SourcePipeline:
             try:
                 admit(record, observation)
             except AdapterFault as fault:
-                self._fault(adapter, sink, result, fault)
+                self._fault(adapter, sink, result, fault, now_ms=retrieved_at_ms)
                 continue
 
             # --- plausibility: a quarantine, never a rejection or a clamp ----
             reason = self.plausibility.check(
                 observation.event_type, observation.subject, observation.payload["rate"])
             if reason is not None:
-                sink.publish("quarantine", reason)
+                self._report(sink, "quarantine", reason)
                 result.quarantined += 1
                 result.reasons.append(reason)
                 continue
@@ -187,12 +200,12 @@ class SourcePipeline:
                 event = build_envelope(record, observation, seed=self.seed,
                                        retrieved_at_ms=retrieved_at_ms)
             except AdapterFault as fault:
-                self._fault(adapter, sink, result, fault)
+                self._fault(adapter, sink, result, fault, now_ms=retrieved_at_ms)
                 continue
 
             # The builder's own AD-4 §6 verdict, e.g. FUTURE_SOURCE_TIMESTAMP.
             if event["validation"]["status"] != "validated":
-                sink.publish("quarantine", ",".join(event["validation"]["reasons"]))
+                self._report(sink, "quarantine", ",".join(event["validation"]["reasons"]))
                 result.quarantined += 1
                 continue
 
@@ -201,7 +214,7 @@ class SourcePipeline:
                 # C-b: rejected and counted; the first is kept (AD-2 R-8).
                 result.collisions += 1
                 result.reasons.append("identity_collision:" + ",".join(detail))
-                sink.publish("faults", "identity_collision")
+                self._report(sink, "faults", "identity_collision")
                 continue
             if outcome == DUPLICATE:
                 # D: discarded, not rejected and not quarantined.
@@ -211,10 +224,23 @@ class SourcePipeline:
                 # C-a: the first is kept; this one does not become current.
                 result.conflicts += 1
                 result.reasons.append("value_conflict")
-                sink.publish("faults", "value_conflict")
+                self._report(sink, "faults", "value_conflict")
                 continue
 
-            if sink.publish("observations", event):
+            try:
+                became_current = sink.publish("observations", event)
+            except Exception:  # noqa: BLE001 - any sink defect, counted not raised
+                # Criterion 14's "never neither": the event is counted, the
+                # reason names the sink, and the classification is **withdrawn**
+                # so a redelivery in the same run is not discarded as a
+                # duplicate of something no consumer received.
+                self.dedup.forget(event)
+                result.rejected += 1
+                result.reasons.append(SINK_UNAVAILABLE)
+                self.status.record_failure(retrieved_at_ms)
+                continue
+
+            if became_current:
                 result.published += 1
                 self.status.record_success(retrieved_at_ms)
             else:
@@ -226,8 +252,27 @@ class SourcePipeline:
         self.status.tick(retrieved_at_ms)
         return result
 
+    def _report(self, sink: ServiceSink, channel: str, reason: str) -> bool:
+        """Publishes a **reason code** to the quarantine or faults channel.
+
+        Best effort, and deliberately so. The counter in `AdapterRunResult` is
+        the accounting; this is the *report* of it. If the reporting channel
+        itself fails, losing the count of a bad value would be worse than losing
+        the report, so the failure is swallowed here and the caller's counter
+        still moves. An unknown channel name is a programming error and still
+        raises — that one is not a sink fault.
+        """
+        if channel not in ("quarantine", "faults"):
+            raise ValueError(f"_report covers the reason channels only, not {channel!r}")
+        try:
+            sink.publish(channel, reason)
+            return True
+        except Exception:  # noqa: BLE001 - the count is what must survive
+            return False
+
     def _fault(self, adapter: Adapter, sink: ServiceSink,
-               result: AdapterRunResult, fault: AdapterFault) -> None:
+               result: AdapterRunResult, fault: AdapterFault,
+               *, now_ms: int = 0) -> None:
         """Records one fault, and lets the adapter's own classifier decide.
 
         An **item** fault changes no adapter state: one bad item does not
@@ -236,11 +281,11 @@ class SourcePipeline:
         successful item and no passage of time can clear.
         """
         adapter._record_fault(fault)
-        sink.publish("faults", fault.reason)
+        self._report(sink, "faults", fault.reason)
         result.rejected += 1
         result.reasons.append(fault.reason)
         if not fault.item_level:
-            self.status.record_failure(0, permanent=fault.permanent)
+            self.status.record_failure(now_ms, permanent=fault.permanent)
 
 
 def run_cycle(adapter: Adapter, record: SourceRecord, sink: ServiceSink, *,

@@ -284,6 +284,42 @@ class DedupIndex:
             self.counters[ACCEPTED] += 1
             return ACCEPTED, ()
 
+    def forget(self, event: dict) -> bool:
+        """Removes an accepted event from all three indexes. Returns whether it was there.
+
+        **Why an accepted event is ever withdrawn.** `classify` records the event
+        *before* the service publishes it, because it must: a duplicate has to be
+        recognized before it reaches the sink, not after. If the publication then
+        fails, the index is left asserting that an event was seen which no
+        consumer ever received — and the **next delivery of that same
+        observation would be discarded as a duplicate**, so the value would be
+        lost for the whole run. Within `within_run` scope that is the one
+        retry-safety property this index still owes.
+
+        Only the caller that accepted the event may withdraw it, and only for its
+        own failed publish. It is **not** a rollback of a rejection: a C-b, a D
+        and a C-a each keep the first arrival, which is never withdrawn.
+        """
+        event_id = event.get("event_id")
+        obs_key = observation_key(event)
+        idem_key = (obs_key, event.get("payload_sha256"))
+        with self._lock:
+            entry = self._by_event_id.get(event_id)
+            if entry is None:
+                return False
+            # Only withdraw the entries this very event owns. A later event
+            # sharing the observation key would have been a D or a C-a and so
+            # never became an entry, but the check costs nothing and makes the
+            # method safe to call out of order.
+            for index, key in ((self._by_event_id, event_id),
+                               (self._by_idempotency, idem_key),
+                               (self._by_observation, obs_key)):
+                if index.get(key) is entry:
+                    del index[key]
+            if self.counters[ACCEPTED] > 0:
+                self.counters[ACCEPTED] -= 1
+            return True
+
     def snapshot(self) -> dict:
         with self._lock:
             return {"counters": dict(self.counters), "entries": len(self._by_event_id),

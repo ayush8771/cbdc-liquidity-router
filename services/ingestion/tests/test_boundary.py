@@ -14,6 +14,7 @@ slice (AD-1 §6 item 5, D-25). The import rules for the backend's own modules
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -25,7 +26,20 @@ from cbdc_ingestion.generator import FxGenerator
 from .conftest import SEED, SERVICE_ROOT, START_MS
 
 PACKAGE = SERVICE_ROOT / "cbdc_ingestion"
-SOURCES = sorted(PACKAGE.glob("*.py"))
+# **Recursive, deliberately.** A top-level glob would leave the whole `adapters/`
+# subpackage unchecked — `base.py`, `registry.py`, `context.py`, `faults.py` and
+# every adapter — which is precisely the code acceptance criterion 12 names ("the
+# adapter package imports nothing from `src/`, `services/inference/` or any
+# database client"). The boundary is only as wide as the file set it is asserted
+# over, so the set is the package.
+SOURCES = sorted(PACKAGE.rglob("*.py"))
+
+
+def module_name(path: Path) -> str:
+    """The importable name for a source file anywhere in the package."""
+    relative = path.relative_to(PACKAGE.parent).with_suffix("")
+    parts = [part for part in relative.parts if part != "__init__"]
+    return ".".join(parts)
 
 # Modules a component that talks to nothing has no business importing. `http.server`
 # is the one network module it does use: it *serves* a private endpoint and never
@@ -69,7 +83,11 @@ def imported_names(path: Path) -> set:
 
 
 def test_there_are_sources_to_check():
-    assert len(SOURCES) >= 8, SOURCES
+    """A floor, so a glob that silently stopped matching fails instead of
+    vacuously passing. Raised past the top-level count, which is what caught the
+    subpackage being excluded in the first place."""
+    assert len(SOURCES) >= 20, SOURCES
+    assert any(path.parent.name == "adapters" for path in SOURCES),         "the adapters subpackage must be inside the boundary check (criterion 12)"
 
 
 @pytest.mark.parametrize("path", SOURCES, ids=lambda p: p.name)
@@ -88,21 +106,54 @@ def test_the_package_imports_nothing_from_phase_1_or_inference_at_runtime():
     for path in SOURCES:
         if path.name == "__main__.py":
             continue  # it would run the server
-        importlib.import_module(f"cbdc_ingestion.{path.stem}" if path.stem != "__init__"
-                                else "cbdc_ingestion")
+        importlib.import_module(module_name(path))
     leaked = [name for name in sys.modules
               if name == "src" or name.startswith(("src.", "cbdc_inference", "torch"))]
     assert leaked == [], leaked
 
 
+# Plain substrings: none of these has an innocent reading in this component.
+SUSPICIOUS = ("https://", "http://localhost", "api_key", "apikey", "secret", "password",
+              "bearer")
+
+# `Authorization` needs a pattern rather than a substring. The **HTTP header** is
+# forbidden; the English word is not, and `registry.py` legitimately cites "the
+# Phase 3.3-A authorization" in a refusal message. The header only ever appears
+# as a quoted string or a header line, so that is what is matched — a substring
+# check here would flag the citation and, worse, would invite someone to delete
+# the control rather than the citation.
+HEADER_PATTERN = re.compile(r"""["']Authorization["']|Authorization\s*:""", re.IGNORECASE)
+
+# `token` likewise: a credential token is forbidden, but the word appears in
+# ordinary technical prose. Matched where it would name a value.
+TOKEN_PATTERN = re.compile(r"""(access|auth|bearer|api|refresh|id)[_-]?token|token["']?\s*[:=]""",
+                           re.IGNORECASE)
+
+
 def test_no_source_names_an_external_host_or_a_credential():
-    """There is no provider URL, token, key or password anywhere in the component."""
-    suspicious = ("https://", "http://localhost", "api_key", "apikey", "secret", "password",
-                  "token", "Authorization", "Bearer")
+    """There is no provider URL, token, key or password anywhere in the component.
+
+    Asserted over the **whole** package, the `adapters/` subpackage included: a
+    credential reaching the component would most plausibly arrive in an adapter,
+    which is exactly where a top-level-only glob was not looking.
+    """
     for path in SOURCES:
         code = code_only(path)
-        for needle in suspicious:
-            assert needle.lower() not in code.lower(), f"{path.name} mentions {needle!r}"
+        for needle in SUSPICIOUS:
+            assert needle not in code.lower(), f"{path.name} mentions {needle!r}"
+        assert HEADER_PATTERN.search(code) is None, f"{path.name} names the Authorization header"
+        assert TOKEN_PATTERN.search(code) is None, f"{path.name} names a token value"
+
+
+def test_the_host_and_token_patterns_actually_match_what_they_claim():
+    """The two patterns are narrower than a substring search, so they are tested
+    against both a breach and the innocent text they must not flag. Without this
+    a typo in either pattern would make the control above silently vacuous."""
+    assert HEADER_PATTERN.search("headers = {'Authorization': 'x'}")
+    assert HEADER_PATTERN.search("raw = 'Authorization: Bearer x'")
+    assert HEADER_PATTERN.search("the Phase 3.3-A authorization §8 items 1 and 2") is None
+    assert TOKEN_PATTERN.search("access_token = resolve()")
+    assert TOKEN_PATTERN.search("a tokenized stream of values") is None
 
 
 def test_every_event_is_display_only_with_no_bridge_state_field(envelope_schema):
@@ -124,10 +175,43 @@ def test_every_event_is_display_only_with_no_bridge_state_field(envelope_schema)
     assert envelope_schema["properties"]["usage"]["const"] == "display_only"
 
 
+# Every way this package could write, delete or move a file. **Reading is not
+# here**, deliberately: §7.4 puts the registry records inside the package and
+# `adapters/registry.py` reads them at startup, which is the approved
+# arrangement. The claim this control makes is that nothing is **written** — the
+# store is in memory and a restart may lose it (AD-1 §3), and the container root
+# filesystem is read-only (P-6).
+WRITE_NEEDLES = ("write_text", "write_bytes", "os.remove", "os.rename", "os.replace",
+                 "os.makedirs", "shutil", "mkdir", "unlink", "touch", "NamedTemporary",
+                 "mkstemp", "mkdtemp")
+# `open(...)` is permitted for reading only, so the mode is what is checked.
+OPEN_FOR_WRITING = re.compile(r"""open\([^)]*["'][rwax+bt]*[wax+]""")
+
+
 def test_the_component_writes_no_file():
-    """`open` for writing appears nowhere: the store is in memory and a restart
-    may lose it (AD-1 §3), and the container root filesystem is read-only (P-6)."""
+    """No write, no delete, no rename, anywhere in the package."""
     for path in SOURCES:
         code = code_only(path)
-        for needle in ("open(", "write_text", "Path(", "os.remove", "shutil"):
-            assert needle not in code, f"{path.name} touches the filesystem: {needle}"
+        for needle in WRITE_NEEDLES:
+            assert needle not in code, f"{path.name} writes to the filesystem: {needle}"
+        assert OPEN_FOR_WRITING.search(code) is None, f"{path.name} opens a file for writing"
+
+
+def test_the_write_pattern_actually_matches_a_write():
+    """The mode-aware check is narrower than forbidding `open(` outright, so both
+    sides are asserted: a write mode is caught and a read mode is allowed."""
+    assert OPEN_FOR_WRITING.search("open(path, 'w')")
+    assert OPEN_FOR_WRITING.search("open(path, 'ab')")
+    assert OPEN_FOR_WRITING.search("open(path, 'r')") is None
+    assert OPEN_FOR_WRITING.search("open(path, encoding='utf-8')") is None
+
+
+def test_the_only_files_the_package_reads_are_its_own_registry_records():
+    """Reading is authorized, but **only** the two registry files inside the
+    package (§7.4). Asserted so an approved read cannot quietly become a read of
+    a mounted path, a config file or a fixture — AD-1 §1 forbids mounting project
+    files, and this is the control that would notice."""
+    readers = [path for path in SOURCES if "read_text" in code_only(path)]
+    assert [path.name for path in readers] == ["registry.py"], readers
+    code = code_only(PACKAGE / "adapters" / "registry.py")
+    assert "SOURCES_PATH" in code and "ALLOCATIONS_PATH" in code
