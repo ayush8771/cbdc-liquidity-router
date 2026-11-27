@@ -66,6 +66,10 @@ AUTHORIZED_TRANSPORTS = ("synthetic",)
 # The AD-4 §5 bases. A synthetic generator is its own provider, so it observes.
 TIMESTAMP_BASES = ("observed", "published", "none")
 
+# The AD-8 §5.2 shutdown budget, as the default for every terminal path so a
+# cancel observed mid-`start` is bounded by the same deadline as `stop()`.
+DEFAULT_SHUTDOWN_DEADLINE_MS = 2000
+
 
 class AdapterStateError(RuntimeError):
     """An operation was attempted from a state AD-5 §3.3 does not permit."""
@@ -158,6 +162,11 @@ class Adapter(ABC):
         self._state_lock = threading.RLock()
         self._context: Optional[AdapterContext] = None
         self._last_fault: Optional[AdapterFault] = None
+        # The terminal path is entered by whichever of `stop()` and a cancel
+        # observed mid-`start` arrives first, and is run **once**: the flag is
+        # the claim, and the event is how the loser learns the winner finished.
+        self._cleanup_claimed = False
+        self._cleanup_done = threading.Event()
 
     # ------------------------------------------------------------------- state
     @property
@@ -207,7 +216,9 @@ class Adapter(ABC):
             if self._state != "created":
                 return self._state
             self._context = context
-        self._transition("starting")
+            # Atomic with the check above: a `stop()` interleaved between them
+            # would leave this transition starting from `stopped` and raise.
+            self._transition("starting")
         if context.cancelled:
             return self._cancel_during_start()
         try:
@@ -223,11 +234,39 @@ class Adapter(ABC):
 
     def _cancel_during_start(self) -> str:
         """Nothing acquired, nothing left running, and the adapter is `stopped`."""
+        return self._shutdown(DEFAULT_SHUTDOWN_DEADLINE_MS)
+
+    def _shutdown(self, deadline_ms: int) -> str:
+        """The one terminal path: `stopping`, `_stop()` **once**, then `stopped`.
+
+        Both `stop()` and a cancel observed mid-`start` arrive here, possibly
+        concurrently and in either order, so the path is claimed under the lock
+        and run by the claimant alone. Without that claim, a `stop()` that
+        completed while `_start` blocked would leave the resuming `_start` to
+        attempt `stopped -> stopping` — not an AD-5 §3.3 transition — and to run
+        `_stop()` a second time.
+
+        `_stop()` is called with the lock **released**: it may join a worker
+        thread, and that worker reads `self.state`, so holding the lock across
+        it would deadlock. The loser instead waits on the completion event,
+        bounded by the same budget, so it never blocks indefinitely and still
+        returns the settled state rather than a transient one.
+        """
+        with self._state_lock:
+            claimed = not self._cleanup_claimed
+            if claimed:
+                self._cleanup_claimed = True
+                if self._state not in ("stopping", "stopped"):
+                    self._transition("stopping")
+        if not claimed:
+            self._cleanup_done.wait(max(0.0, deadline_ms / 1000.0))
+            return self.state
         try:
-            self._stop()
+            self._stop(deadline_ms=deadline_ms)
         finally:
-            self._transition("stopping")
-            self._transition("stopped")
+            with self._state_lock:
+                self._transition("stopped")
+            self._cleanup_done.set()
         return self.state
 
     def produce(self) -> Sequence[NormalizedObservation]:
@@ -277,13 +316,17 @@ class Adapter(ABC):
             "reason": None if fault is None else fault.fault_class.value,
         }
 
-    def stop(self, *, deadline_ms: int = 2000) -> str:
+    def stop(self, *, deadline_ms: int = DEFAULT_SHUTDOWN_DEADLINE_MS) -> str:
         """Releases everything, **idempotently**, within the AD-8 budget.
 
         Safe from **any** state, including `created`, mid-`start` and after
         `failed_permanent` (AD-5 §3.2, §5.2; acceptance criterion 15). It is
         cooperative: the cancellation signal is set and the adapter returns.
         Nothing is killed.
+
+        Safe **concurrently with `start()`** as well: a `stop()` that completes
+        while `_start` blocks does not make the resuming `_start` raise, and
+        does not get its `_stop()` run twice. See `_shutdown`.
         """
         with self._state_lock:
             if self._state == "stopped":
@@ -291,12 +334,7 @@ class Adapter(ABC):
             context = self._context
         if context is not None:
             context.cancellation.cancel()
-        self._transition("stopping")
-        try:
-            self._stop(deadline_ms=deadline_ms)
-        finally:
-            self._transition("stopped")
-        return self.state
+        return self._shutdown(deadline_ms)
 
     # ------------------------------------------------------- fault bookkeeping
     def _record_fault(self, fault: AdapterFault) -> str:
@@ -327,7 +365,7 @@ class Adapter(ABC):
         """The due raw items, already normalized. The default produces nothing."""
         return ()
 
-    def _stop(self, *, deadline_ms: int = 2000) -> None:
+    def _stop(self, *, deadline_ms: int = DEFAULT_SHUTDOWN_DEADLINE_MS) -> None:
         """Release the transport. The default releases nothing."""
 
 

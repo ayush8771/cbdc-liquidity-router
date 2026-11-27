@@ -384,3 +384,177 @@ def test_the_service_stops_its_adapters_and_records_the_stopped_status(service):
     assert service.state == "stopped"
     for snapshot in service.internal_statuses().values():
         assert snapshot["state"] == "stopped"
+
+
+# ========================= criterion 15, concurrently: stop() racing a blocked start
+class _BlockingStartProbe(Adapter):
+    """A probe whose `_start` and `_stop` block on **events**, not on sleeps.
+
+    This is what makes the start/stop race deterministic rather than timing
+    dependent: the test opens the window by waiting for `entered_start`, acts
+    while `_start` is provably still inside, and closes it by setting
+    `release_start`. No assertion depends on how long anything takes.
+    """
+
+    SOURCE_ID = "synthetic.blocking_start_probe"
+    # A generous bound so a hung probe fails the test instead of hanging the
+    # suite. It is never reached on a passing run: every wait is already
+    # satisfied by the event the test sets.
+    GUARD_S = 10.0
+
+    def __init__(self) -> None:
+        super().__init__(self.SOURCE_ID)
+        self.entered_start = threading.Event()
+        self.release_start = threading.Event()
+        self.entered_stop = threading.Event()
+        self.release_stop = threading.Event()
+        self.release_stop.set()  # blocking `_stop` is opt-in, per test
+        self.stop_calls: list = []
+
+    def describe(self) -> AdapterDescription:
+        return AdapterDescription(
+            adapter_id="blocking_start_probe", transports=("synthetic",),
+            event_types=("fx_rate",), subjects=(EURUSD,),
+            required_registry_fields=("source_id", "transport", "provenance_class", "subjects"),
+            emits_timestamp_basis="observed", production_mode="poll")
+
+    def _start(self, context: AdapterContext) -> None:
+        self.entered_start.set()
+        assert self.release_start.wait(self.GUARD_S), "the test never released _start"
+
+    def _stop(self, *, deadline_ms: int = SHUTDOWN_BUDGET_MS) -> None:
+        self.stop_calls.append(deadline_ms)
+        self.entered_stop.set()
+        assert self.release_stop.wait(self.GUARD_S), "the test never released _stop"
+
+    def normalize(self, raw) -> NormalizedObservation:  # pragma: no cover - unused
+        raise NotImplementedError
+
+
+def _call(fn, box, key):
+    """Runs `fn` on a thread, capturing its return **or** its exception."""
+    def target():
+        try:
+            box[key] = fn()
+        except BaseException as exc:  # noqa: BLE001 - the test asserts on it
+            box[key + "_exc"] = exc
+    thread = threading.Thread(target=target, name=key, daemon=True)
+    thread.start()
+    return thread
+
+
+def test_a_stop_that_completes_while_start_blocks_raises_nothing():
+    """The race Nisarga identified: `_start` blocks, a concurrent `stop()` runs
+    to `stopped`, and `_start` then resumes and observes the cancel.
+
+    Before the fix the resuming `_start` attempted `stopped -> stopping`, which
+    AD-5 §3.3 does not permit, and `start()` raised `AdapterStateError` out of a
+    perfectly ordinary shutdown. The window is held open by `entered_start`, so
+    the interleaving is forced, not hoped for.
+    """
+    adapter = _BlockingStartProbe()
+    cancellation = CancellationSignal()
+    box: dict = {}
+
+    starter = _call(lambda: adapter.start(_context(adapter.SOURCE_ID, cancellation)), box, "start")
+    assert adapter.entered_start.wait(adapter.GUARD_S), "_start was never entered"
+
+    assert adapter.stop(deadline_ms=SHUTDOWN_BUDGET_MS) == "stopped"
+    adapter.release_start.set()
+    starter.join(adapter.GUARD_S)
+
+    assert starter.is_alive() is False
+    assert "start_exc" not in box, f"start() raised {box.get('start_exc')!r}"
+    assert box["start"] == "stopped", box["start"]
+    assert adapter.state == "stopped"
+
+
+def test_the_racing_stop_runs_the_cleanup_exactly_once():
+    """Exactly-once cleanup, which the same race broke in the other direction:
+    the winning `stop()` released the transport and the resuming `_start`
+    released it a **second** time."""
+    adapter = _BlockingStartProbe()
+    box: dict = {}
+    starter = _call(
+        lambda: adapter.start(_context(adapter.SOURCE_ID, CancellationSignal())), box, "start")
+    assert adapter.entered_start.wait(adapter.GUARD_S)
+
+    adapter.stop()
+    adapter.release_start.set()
+    starter.join(adapter.GUARD_S)
+
+    assert adapter.stop_calls == [SHUTDOWN_BUDGET_MS], adapter.stop_calls
+
+
+def test_a_stop_arriving_mid_cleanup_waits_and_does_not_duplicate_it():
+    """The mirror ordering: the cancel observed mid-`start` claims the terminal
+    path first, and a `stop()` arriving while `_stop` is still running must
+    neither run `_stop` again nor return a transient state.
+
+    The cancel is set before `_start` is released, so the resuming `_start`
+    takes the claim; `entered_stop` then proves the claimant is inside `_stop`
+    before the losing `stop()` is issued.
+    """
+    adapter = _BlockingStartProbe()
+    cancellation = CancellationSignal()
+    adapter.release_stop.clear()
+    box: dict = {}
+
+    starter = _call(lambda: adapter.start(_context(adapter.SOURCE_ID, cancellation)), box, "start")
+    assert adapter.entered_start.wait(adapter.GUARD_S)
+    cancellation.cancel()
+    adapter.release_start.set()
+    assert adapter.entered_stop.wait(adapter.GUARD_S), "the cancel path never reached _stop"
+
+    stopper = _call(lambda: adapter.stop(deadline_ms=SHUTDOWN_BUDGET_MS), box, "stop")
+    adapter.release_stop.set()
+    starter.join(adapter.GUARD_S)
+    stopper.join(adapter.GUARD_S)
+
+    assert starter.is_alive() is False and stopper.is_alive() is False
+    assert "start_exc" not in box, f"start() raised {box.get('start_exc')!r}"
+    assert "stop_exc" not in box, f"stop() raised {box.get('stop_exc')!r}"
+    assert box["start"] == "stopped" and box["stop"] == "stopped", box
+    assert len(adapter.stop_calls) == 1, adapter.stop_calls
+
+
+def test_start_and_stop_issued_simultaneously_never_produce_a_state_error():
+    """Both operations released from the **same barrier**, repeatedly, so the
+    interleavings include the narrow window between `start()`'s `created` check
+    and its `starting` transition. Whatever the order, the outcome is one of the
+    two documented ones — `stopped`, or the refusal to restart a stopped adapter
+    — and never an `AdapterStateError` out of the terminal path.
+
+    The barrier is the synchronisation; nothing here sleeps or retries.
+    """
+    for attempt in range(50):
+        adapter = _BlockingStartProbe()
+        adapter.release_start.set()  # `_start` does not block in this test
+        gate = threading.Barrier(3)
+        box: dict = {}
+
+        def starter_fn():
+            gate.wait(adapter.GUARD_S)
+            return adapter.start(_context(adapter.SOURCE_ID, CancellationSignal()))
+
+        def stopper_fn():
+            gate.wait(adapter.GUARD_S)
+            return adapter.stop()
+
+        starter = _call(starter_fn, box, "start")
+        stopper = _call(stopper_fn, box, "stop")
+        gate.wait(adapter.GUARD_S)
+        starter.join(adapter.GUARD_S)
+        stopper.join(adapter.GUARD_S)
+
+        assert starter.is_alive() is False and stopper.is_alive() is False, attempt
+        assert "stop_exc" not in box, f"stop() raised {box['stop_exc']!r} (attempt {attempt})"
+        start_exc = box.get("start_exc")
+        if start_exc is not None:
+            # The one permitted refusal: the stop won outright, so there was
+            # nothing to start. It must carry that reason, not a transition one.
+            assert isinstance(start_exc, AdapterStateError), repr(start_exc)
+            assert "not restarted in process" in str(start_exc), str(start_exc)
+        assert box["stop"] == "stopped"
+        assert adapter.state == "stopped"
+        assert len(adapter.stop_calls) == 1, adapter.stop_calls
