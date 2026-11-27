@@ -10,11 +10,12 @@ Two things are asserted, and the first matters more than the second:
    its one unresolved item — `pipeline.build_envelope`'s `source_id` refusal —
    fails **loudly and by name** rather than emitting a mislabelled envelope.
 
-**What is deliberately not asserted here**, because it is not implemented:
-AD5-Q1/AD5-Q8 deduplication and conflict classification (`dedup.py`, criteria 5
-and 5a), the internal status machine (`status.py`, criterion 6) and the
-plausibility bounds (criterion 16). Their suites do not exist yet, and this one
-does not stand in for them.
+**What is deliberately not asserted here**, because each has its own suite:
+AD5-Q1/AD5-Q8 deduplication and conflict classification (`test_idempotency.py`,
+criterion 5, and `test_envelope_validation.py`, criterion 5a), the internal
+status machine (`test_status_machine.py`, criterion 6) and the plausibility
+bounds (`test_plausibility.py`, criterion 16). This suite does not stand in for
+them, and they do not re-assert the wiring checked here.
 """
 from __future__ import annotations
 

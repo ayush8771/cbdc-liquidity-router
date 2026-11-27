@@ -81,6 +81,7 @@ class IngestionService:
         self._registry_path = registry_path
         self._allocations_path = allocations_path
         self._adapters: list = []
+        self._pipelines: list = []
         self._sink = None
         self._state = "starting"
         self._state_lock = threading.Lock()
@@ -142,7 +143,11 @@ class IngestionService:
         # Nothing is killed and no thread is terminated from outside.
         for adapter, _record, _seed in self._adapters:
             adapter.stop(deadline_ms=2000)
+        for _adapter, pipeline in self._pipelines:
+            pipeline.status.record_stopping()
+            pipeline.status.record_stopped()
         self._adapters = []
+        self._pipelines = []
         self._set_state("stopped")
         logger.info("ingestion stopped: %s", self.store.counters())
 
@@ -230,24 +235,45 @@ class IngestionService:
                 cancellation=CancellationSignal(), metrics=NullMetrics(),
             )
             adapter.start(context)
+            # One pipeline per source, held across cycles: the dedup index and
+            # the plausibility baseline must survive from one tick to the next,
+            # or neither would ever see a second observation.
+            from .pipeline import SourcePipeline
+
+            pipeline = SourcePipeline(record, seed=allocation.seed,
+                                      now_ms=self.clock.now_ms())
             self._adapters.append((adapter, record, allocation.seed))
+            self._pipelines.append((adapter, pipeline))
             logger.info("adapter started: source_id=%s adapter_id=%s state=%s",
                         record.source_id, record.adapter_id, adapter.state)
 
     def _tick_adapters(self, now_ms: Optional[int] = None) -> int:
-        """One production cycle per started adapter. A no-op when none is."""
-        if not self._adapters:
-            return 0
-        from .pipeline import run_cycle
+        """One production cycle per started adapter. A no-op when none is.
 
+        Each cycle runs on the source's **own** `SourcePipeline`, so the dedup
+        index and the plausibility baseline carry across ticks.
+        """
+        if not self._pipelines:
+            return 0
+        at_ms = self.clock.now_ms() if now_ms is None else now_ms
         published = 0
-        for adapter, record, seed in self._adapters:
-            result = run_cycle(adapter, record, self._sink, seed=seed,
-                               retrieved_at_ms=self.clock.now_ms() if now_ms is None else now_ms)
+        for adapter, pipeline in self._pipelines:
+            result = pipeline.run_cycle(adapter, self._sink, retrieved_at_ms=at_ms)
             published += result.published
             for reason in result.reasons:
-                self._log_adapter_reason(record.source_id, reason)
+                self._log_adapter_reason(pipeline.record.source_id, reason)
         return published
+
+    def internal_statuses(self) -> dict:
+        """Each source's **internal** status (AD-5 §9.2), for logs and metrics.
+
+        **Not a wire body, and never serialized into one.** `/v1/latest`'s shape
+        is closed by `ingestion-latest.v1.schema.json` and carries no status
+        field; the published `source.status` is Express's, derived from its own
+        poll (AD-1 §3.2). This accessor exists so the state can reach a log
+        field and a metric label, which is all §9.2 permits.
+        """
+        return {p.record.source_id: p.status.snapshot() for _adapter, p in self._pipelines}
 
     def _log_adapter_reason(self, source_id: str, reason: str) -> None:
         """Rate-limited, and the reason code only — never a payload (AD-1 §3.4)."""

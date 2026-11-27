@@ -15,12 +15,17 @@ implementation of AD-4, and two implementations eventually disagree
 | Envelope construction and canonical hashing | **Delegated to the unchanged `envelope.py`**, which is untouched by rule (authorization §7.3) |
 | Schema validation | **Delegated to the unchanged `validation.py`**, through `LatestStore.apply` |
 | Publication to the sink | **Implemented** |
-| Deduplication and conflict classification (AD5-Q1, AD5-Q8) | **Not here.** `dedup.py` is its own authorized file with its own acceptance criteria (5, 5a), and is **not yet written** |
-| The internal status machine (AD-5 §9.2) | **Not here.** `status.py`, acceptance criterion 6, **not yet written** |
-| Plausibility bounds (authorization §5.5) | **Not here.** Acceptance criterion 16, **not yet written** |
+| Deduplication and conflict classification (AD5-Q1, AD5-Q8) | **Implemented**, in `dedup.py`: C-b, then D, then C-a, over an `event_id`-keyed index |
+| Plausibility bounds (authorization §5.5) | **Implemented**, in `plausibility.py`: a breach **quarantines**, never rejects and never clamps |
+| The internal status machine (AD-5 §9.2) | **Implemented**, in `status.py`, **in process only** — a metric label and a log field, never a wire body |
 
-Until those three exist, this pipeline is **not** the complete §3.4 path, and it
-says so rather than appearing to be one.
+**Where the plausibility check sits, and why there.** It runs on the
+**normalized value, before the envelope is built**. A quarantined observation is
+counted by reason on the sink's `quarantine` channel and never reaches
+`observations`, so it is never served and never becomes the ordering watermark.
+The alternative — building the envelope and then rewriting its `validation`
+block — would mean this module editing an envelope `envelope.py` produced, which
+is the second AD-4 implementation AD-5 §3.1 forbids.
 
 ---
 
@@ -53,8 +58,17 @@ from . import SOURCE_ID
 from .adapters.base import Adapter, AdapterRunResult, NormalizedObservation
 from .adapters.faults import AdapterFault, FaultClass
 from .adapters.registry import SourceRecord
+from .dedup import (
+    DEDUP_WINDOW_MS,
+    DUPLICATE,
+    IDENTITY_COLLISION,
+    VALUE_CONFLICT,
+    DedupIndex,
+)
 from .envelope import build_fx_event, fx_payload
+from .plausibility import PlausibilityGuard
 from .sink import ServiceSink
+from .status import SourceStatus
 
 # The reason code the `source_id` refusal carries. Named so that a log line and
 # a metric label say which unresolved item stopped the path, not merely that
@@ -110,45 +124,133 @@ def build_envelope(record: SourceRecord, observation: NormalizedObservation,
         source_timestamp_ms=observation.source_timestamp_ms)
 
 
+class SourcePipeline:
+    """The per-source service-side state: dedup index, bounds and status.
+
+    One instance per `source_id`, matching the one-adapter-per-source rule
+    (AD-5 §3.1). It holds counters, four decimal strings and the dedup index's
+    bounded entries — **never a payload and never an envelope**.
+    """
+
+    def __init__(self, record: SourceRecord, *, seed: int, now_ms: int = 0) -> None:
+        self.record = record
+        self.seed = int(seed)
+        self.dedup = DedupIndex(window_ms=DEDUP_WINDOW_MS)
+        self.plausibility = PlausibilityGuard(record.plausibility)
+        self.status = SourceStatus(
+            record.source_id,
+            expected_interval_ms=record.freshness_profile.expected_interval_ms,
+            now_ms=now_ms)
+
+    def run_cycle(self, adapter: Adapter, sink: ServiceSink, *,
+                  retrieved_at_ms: Optional[int] = None) -> AdapterRunResult:
+        """One production cycle: produce, admit, bound-check, build, classify, publish.
+
+        **No accounting is lost** (acceptance criterion 14): every observation
+        ends as exactly one of published, quarantined, rejected, duplicate,
+        conflict or a recorded fault — **never both and never neither**.
+
+        Ordering of the steps is not arbitrary:
+
+        1. **admit** against the record, so an unlisted type or subject never
+           reaches a bound or an index;
+        2. **plausibility**, on the normalized value, so a quarantined value
+           never becomes an envelope that must then be withheld;
+        3. **build**, by the unchanged `envelope.py`;
+        4. **classify** (C-b, D, C-a), which needs the built envelope because
+           `event_id` and `payload_sha256` are its fields;
+        5. **publish** only what came out `accepted`.
+        """
+        record, result = self.record, AdapterRunResult()
+        observations: Sequence[NormalizedObservation] = adapter.produce()
+        if retrieved_at_ms is None:
+            retrieved_at_ms = adapter._context.now_ms() if adapter._context else 0
+
+        for observation in observations:
+            result.produced += 1
+            try:
+                admit(record, observation)
+            except AdapterFault as fault:
+                self._fault(adapter, sink, result, fault)
+                continue
+
+            # --- plausibility: a quarantine, never a rejection or a clamp ----
+            reason = self.plausibility.check(
+                observation.event_type, observation.subject, observation.payload["rate"])
+            if reason is not None:
+                sink.publish("quarantine", reason)
+                result.quarantined += 1
+                result.reasons.append(reason)
+                continue
+
+            try:
+                event = build_envelope(record, observation, seed=self.seed,
+                                       retrieved_at_ms=retrieved_at_ms)
+            except AdapterFault as fault:
+                self._fault(adapter, sink, result, fault)
+                continue
+
+            # The builder's own AD-4 §6 verdict, e.g. FUTURE_SOURCE_TIMESTAMP.
+            if event["validation"]["status"] != "validated":
+                sink.publish("quarantine", ",".join(event["validation"]["reasons"]))
+                result.quarantined += 1
+                continue
+
+            outcome, detail = self.dedup.classify(event, retrieved_at_ms)
+            if outcome == IDENTITY_COLLISION:
+                # C-b: rejected and counted; the first is kept (AD-2 R-8).
+                result.collisions += 1
+                result.reasons.append("identity_collision:" + ",".join(detail))
+                sink.publish("faults", "identity_collision")
+                continue
+            if outcome == DUPLICATE:
+                # D: discarded, not rejected and not quarantined.
+                result.duplicates += 1
+                continue
+            if outcome == VALUE_CONFLICT:
+                # C-a: the first is kept; this one does not become current.
+                result.conflicts += 1
+                result.reasons.append("value_conflict")
+                sink.publish("faults", "value_conflict")
+                continue
+
+            if sink.publish("observations", event):
+                result.published += 1
+                self.status.record_success(retrieved_at_ms)
+            else:
+                # The store withheld it by its own AD-1 §3.4 rules (late, or a
+                # duplicate of the current value). Counted, never silent.
+                result.duplicates += 1
+
+        # The silence criterion, which no failure reports (AD-5 §9.2).
+        self.status.tick(retrieved_at_ms)
+        return result
+
+    def _fault(self, adapter: Adapter, sink: ServiceSink,
+               result: AdapterRunResult, fault: AdapterFault) -> None:
+        """Records one fault, and lets the adapter's own classifier decide.
+
+        An **item** fault changes no adapter state: one bad item does not
+        discard a good response. A **permanent** one sends the adapter to
+        `failed_permanent` and the internal status to `down`, which no
+        successful item and no passage of time can clear.
+        """
+        adapter._record_fault(fault)
+        sink.publish("faults", fault.reason)
+        result.rejected += 1
+        result.reasons.append(fault.reason)
+        if not fault.item_level:
+            self.status.record_failure(0, permanent=fault.permanent)
+
+
 def run_cycle(adapter: Adapter, record: SourceRecord, sink: ServiceSink, *,
               seed: int, retrieved_at_ms: Optional[int] = None) -> AdapterRunResult:
-    """One production cycle: produce, admit, build, publish, count.
+    """One cycle on a throwaway pipeline, for callers holding no state.
 
-    **No accounting is lost** (acceptance criterion 14): every observation ends
-    as exactly one of published, quarantined, rejected or a recorded fault —
-    never both and never neither.
-
-    **No deduplication or conflict classification happens here.** `dedup.py` is
-    not yet written, so a redelivery on this path is handled only by the
-    existing store's ordering and duplicate rules, which are AD-1 §3.4's and not
-    AD-5 §8.2's. That difference is stated, not hidden.
+    It builds a fresh `SourcePipeline` per call, so **its dedup index and its
+    plausibility baseline start empty every time**. That makes it unsuitable for
+    a running service, which must carry both across cycles; `service.py` holds a
+    `SourcePipeline` per source instead. Kept for single-cycle tests.
     """
-    result = AdapterRunResult()
-    observations: Sequence[NormalizedObservation] = adapter.produce()
-    if retrieved_at_ms is None:
-        retrieved_at_ms = adapter._context.now_ms() if adapter._context else 0
-    for observation in observations:
-        result.produced += 1
-        try:
-            admit(record, observation)
-            event = build_envelope(record, observation, seed=seed,
-                                   retrieved_at_ms=retrieved_at_ms)
-        except AdapterFault as fault:
-            # The adapter's own classifier decides what this does to its state:
-            # an item fault changes none, a permanent one stops it for good.
-            adapter._record_fault(fault)
-            sink.publish("faults", fault.reason)
-            result.rejected += 1
-            result.reasons.append(fault.reason)
-            continue
-        if event["validation"]["status"] != "validated":
-            sink.publish("quarantine", ",".join(event["validation"]["reasons"]))
-            result.quarantined += 1
-            continue
-        if sink.publish("observations", event):
-            result.published += 1
-        else:
-            # Counted, never silent (AD-5 §3.7). The store's own counters say
-            # which rule withheld it; this one says that one was withheld.
-            result.duplicates += 1
-    return result
+    return SourcePipeline(record, seed=seed).run_cycle(
+        adapter, sink, retrieved_at_ms=retrieved_at_ms)
