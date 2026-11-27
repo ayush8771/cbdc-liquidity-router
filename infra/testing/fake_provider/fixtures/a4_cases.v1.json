@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "limits": {"max_body_bytes": 4096, "chunk_bytes": 1024},
+  "cases": [
+    {"case_id": "A4-OK-01", "expect": "accepted", "status": 200, "content_type": "application/json", "body": "{\"items\": [{\"subject\": \"EURUSD\", \"value\": \"1.0800\"}]}"},
+    {"case_id": "A4-RL-01", "expect": "rate_limited", "status": 429, "content_type": "text/plain", "body": "", "retry_after": "7"},
+    {"case_id": "A4-RL-02", "expect": "rate_limited", "status": 429, "content_type": "text/plain", "body": ""},
+    {"case_id": "A4-RL-03", "expect": "rate_limited", "status": 429, "content_type": "text/plain", "body": "", "retry_after": "soon"},
+    {"case_id": "A4-5XX-01", "expect": "provider_unavailable", "status": 503, "content_type": "text/plain", "body": ""},
+    {"case_id": "A4-AUTH-01", "expect": "auth_failure", "status": 401, "content_type": "text/plain", "body": ""},
+    {"case_id": "A4-REDIR-01", "expect": "contract_violation", "status": 302, "content_type": "text/plain", "body": "", "location": "/elsewhere"},
+    {"case_id": "A4-CT-01", "expect": "contract_violation", "status": 200, "content_type": "text/html", "body": "<p>not json</p>"},
+    {"case_id": "A4-MAL-01", "expect": "contract_violation", "status": 200, "content_type": "application/json", "body": "{\"items\": [ oops"},
+    {"case_id": "A4-BIG-01", "expect": "contract_violation", "status": 200, "content_type": "application/json", "body_repeat": {"unit": "x", "count": 100000}},
+    {"case_id": "A4-TRUNC-01", "expect": "transient_network", "status": 200, "content_type": "application/json", "body": "{\"items\": [", "declared_length": 500},
+    {"case_id": "A4-CLOSE-01", "expect": "transient_network", "close_on_connect": true}
+  ]
+}
