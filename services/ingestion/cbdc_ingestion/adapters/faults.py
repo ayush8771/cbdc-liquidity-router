@@ -4,14 +4,18 @@ Every fault is classified, because the classification decides the retry
 (AD-5 §7.1). Retrying a 401 forever burns a provider's rate limit and hides a
 configuration fault; retrying a 503 is correct.
 
-**The network members are defined and unexercised in Phase 3.3-A**
-(`docs/PHASE3_33A_AUTHORIZATION.md` §7.1): a synthetic source has no transport,
-so `transient_network`, `provider_unavailable`, `rate_limited` and
-`auth_failure` cannot arise here. They are defined now so that the classes an
-adapter may raise are fixed by the contract rather than by whichever adapter is
-written first, and so that A-4 fault injection has names to use when it is
-authorized. **No backoff, no circuit breaker and no `Retry-After` handling is
-implemented here:** those are AD-5 §7.2 and §7.4, which need a transport.
+**The network members were defined and unexercised in Phase 3.3-A**
+(`docs/PHASE3_33A_AUTHORIZATION.md` §7.1), because a synthetic source has no
+transport. **They are exercised now**, under the Phase 3.3-S A-4 work: the
+in-process transport seam (`transport.py`) lets a scripted fake provider produce
+each of them, and `tests/test_a4_faults.py` asserts every class in this module.
+
+**Still true, and still the point of this module:** the classes an adapter may
+raise are fixed by the contract rather than by whichever adapter is written
+first. **No backoff, no circuit breaker and no `Retry-After` handling is
+implemented *here*:** those are AD-5 §7.2 and §7.4 and live in `retry.py`, on
+**explicitly labelled simulation parameters** (`simulation.py`), because AD-8
+§3.5's `poll` column is unapproved.
 
 **Item faults are not adapter faults.** `item_invalid` rejects one item and
 `item_implausible` quarantines one item; neither changes the adapter's state,
@@ -62,9 +66,12 @@ assert PERMANENT_FAULTS | RECOVERABLE_FAULTS | ITEM_FAULTS == set(FaultClass)
 assert not (PERMANENT_FAULTS & RECOVERABLE_FAULTS)
 assert not (ITEM_FAULTS & (PERMANENT_FAULTS | RECOVERABLE_FAULTS))
 
-# The classes a synthetic source can actually reach in Phase 3.3-A. A synthetic
-# adapter has no network and no credential, so only a defect in this component
-# and the two item-level outcomes are reachable.
+# The classes a synthetic source reaches **with no transport at all** — the
+# Phase 3.3-A arrangement, which is still the service default: no network and no
+# credential, so only a defect in this component and the two item-level outcomes
+# are reachable. The A-4 transport seam does not change this set, because it does
+# not change the generator path; it adds an adapter that is reachable only from
+# the A-4 suite and the demonstration.
 SYNTHETIC_REACHABLE = frozenset({FaultClass.INTERNAL}) | ITEM_FAULTS
 
 

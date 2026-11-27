@@ -35,6 +35,20 @@ EURUSD = ("EUR", "USD", "mid")
 OUTCOME_COUNTERS = ("published", "quarantined", "rejected", "duplicates",
                     "collisions", "conflicts", "late")
 
+# Counters that are **not** per-observation outcomes and so are deliberately
+# outside the conservation law, because the law is stated over what a cycle
+# **produced**. Both count faults drained from the adapter, and in neither case
+# did an observation reach the cycle: a 503, a redirect or an oversized body
+# yields no item at all, and an item the adapter refused in `normalize` never
+# became a `NormalizedObservation`, so `produced` never counted it. Summing
+# either into the law would therefore break a law that holds.
+#
+# The item faults `pipeline._fault` records are a different thing and **are** in
+# the law, under `rejected`: those items did reach the cycle. Their queue entries
+# are drained and discarded at the end of `run_cycle` precisely so that the next
+# cycle cannot count them a second time here.
+NON_OUTCOME_COUNTERS = ("faults", "item_faults")
+
 
 def accounted(result: AdapterRunResult) -> int:
     return sum(getattr(result, name) for name in OUTCOME_COUNTERS)
@@ -340,9 +354,34 @@ def test_the_law_holds_over_a_mixed_batch(record):
 def test_the_counter_set_is_closed(record):
     """The law is stated over `OUTCOME_COUNTERS`, so it is only as strong as that
     tuple being complete. Asserted against the dataclass itself: a new outcome
-    field fails here until it is added to the law."""
+    field fails here until it is added to the law.
+
+    A field may instead be declared a **non-outcome** counter, and the two sets
+    together must still account for every field — so a new counter cannot be
+    added without a decision about which it is. Leaving it out of both still
+    fails here, which is the property that matters.
+    """
     fields = set(AdapterRunResult.__dataclass_fields__) - {"produced", "reasons"}
-    assert fields == set(OUTCOME_COUNTERS), fields
+    assert fields == set(OUTCOME_COUNTERS) | set(NON_OUTCOME_COUNTERS), fields
+    assert not set(OUTCOME_COUNTERS) & set(NON_OUTCOME_COUNTERS), "a counter is one or the other"
+
+
+def test_the_non_outcome_counters_are_excluded_for_a_reason_that_holds():
+    """The exclusion above is only honest if those counters really cannot move
+    while `produced` does not. Asserted on the live path rather than by comment:
+    a transport fault must count a fault and produce **nothing**, leaving the
+    conservation law over the produced items intact.
+    """
+    from .a4_support import case, pipeline_for, scripted_adapter
+
+    pipeline, sink = pipeline_for()
+    adapter, context, _ = scripted_adapter([case("A4-04").step])
+    result = pipeline.run_cycle(adapter, sink, retrieved_at_ms=START_MS)
+
+    assert result.produced == 0
+    assert result.faults == 1, "the transport fault must reach a counter"
+    assert_conserved(result)
+    assert accounted(result) == 0, "no observation was produced, so none is accounted"
 
 
 # ------------------------------------------------- the withdrawal primitive itself

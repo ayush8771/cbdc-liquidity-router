@@ -119,7 +119,25 @@ def _shipped_synthetic_fx() -> SyntheticFxAdapter:
 # `test_registry.py::test_every_adapter_subclass_is_in_the_shared_contract_suite`
 # asserts the list is complete against the package's `Adapter` subclasses, so an
 # adapter cannot be shipped with a suite of its own that quietly tests less.
+def _simulated_transport_fx():
+    """The A-4 adapter, on a repeating clean script.
+
+    A-1 admits no private suite: the transport-seam adapter passes the **same**
+    shared contract suite as the shipped one, so the seam cannot be a way to
+    define weaker semantics. It is imported lazily so that `adapter_cases`
+    stays importable by suites that do not need the A-4 wiring.
+    """
+    from .a4_support import repeating_delivery_adapter_factory
+
+    return repeating_delivery_adapter_factory()
+
+
+# (id, factory). Extended as adapters are added;
+# `test_registry.py::test_every_adapter_subclass_is_in_the_shared_contract_suite`
+# asserts the list is complete against the package's `Adapter` subclasses, so an
+# adapter cannot be shipped with a suite of its own that quietly tests less.
 ADAPTERS = [
     ("contract_probe", _ContractProbe),
     ("synthetic_fx", _shipped_synthetic_fx),
+    ("simulated_transport_fx", _simulated_transport_fx),
 ]
