@@ -26,6 +26,7 @@ import pytest
 
 from cbdc_ingestion.adapters.faults import FaultClass
 from cbdc_ingestion.adapters.simulation import SIMULATION_TIMING as P
+from cbdc_ingestion.clock import ManualClock
 from cbdc_ingestion.plausibility import VALUE_OUT_OF_RANGE
 from cbdc_ingestion.status import OUTAGE_CONSECUTIVE_FAILURES, published_status
 
@@ -259,6 +260,70 @@ def test_a_quarantined_value_does_not_count_as_a_transport_failure():
 
 
 # --------------------------------------------------- D-24 is unaffected by a fault
+def test_the_default_d24_path_never_reaches_the_a4_fault_accounting():
+    """**The A-4 accounting is unreachable from the default path, asserted by
+    trip-wire rather than by inspection.**
+
+    A-4 added `Adapter.drain_faults()`, `SourcePipeline._account_drained()` and
+    a third `status.record_failure` call site. All three sit on the
+    **registry-selected adapter** path, which `IngestionService.tick()` enters
+    only when `self._adapters` is non-empty — and `_start_adapters()` runs only
+    when a source was named (authorization 7.2). With none named, the default
+    D-24 generator runs exactly as before.
+
+    The two existing default-path tests assert the *state* (`_adapters == []`),
+    which would still hold if some other caller reached the drain. This asserts
+    the *behaviour*: every A-4 entry point is patched to record its own call,
+    the default service is ticked until the generator has actually applied
+    events, and not one of them fires. Without this, a later change that gave
+    the generator loop a pipeline would alter D-24's source status silently.
+    """
+    from cbdc_ingestion.adapters import base as base_module
+    from cbdc_ingestion.pipeline import SourcePipeline
+    from cbdc_ingestion.service import IngestionService
+
+    calls = []
+    original = {
+        "drain": base_module.Adapter.drain_faults,
+        "account": SourcePipeline._account_drained,
+        "construct": SourcePipeline.__init__,
+    }
+
+    def trip(name, wrapped):
+        def recorder(self, *args, **kwargs):
+            calls.append(name)
+            return wrapped(self, *args, **kwargs)
+        return recorder
+
+    base_module.Adapter.drain_faults = trip("drain", original["drain"])
+    SourcePipeline._account_drained = trip("account", original["account"])
+    SourcePipeline.__init__ = trip("construct", original["construct"])
+    try:
+        clock = ManualClock(START_MS)
+        service = IngestionService(SEED, clock=clock, start_ms=START_MS)
+        service.start(run_loop=False)
+        try:
+            # The shipped default: no source named, so no registry is read.
+            assert service.sources == ()
+            assert service._adapters == [] and service._pipelines == []
+
+            applied = sum(service.tick(clock.advance_ms(1_000)) for _ in range(20))
+            # The control. A path that produced nothing would pass vacuously.
+            assert applied > 0, "the default generator applied no event to tick at all"
+        finally:
+            service.stop()
+    finally:
+        base_module.Adapter.drain_faults = original["drain"]
+        SourcePipeline._account_drained = original["account"]
+        SourcePipeline.__init__ = original["construct"]
+
+    assert calls == [], (
+        "the default D-24 path reached A-4 fault accounting: "
+        f"{sorted(set(calls))}. The drain, its accounting and the third "
+        "record_failure call site belong to the registry-selected adapter path "
+        "only (authorization 7.2; the generator stays the default).")
+
+
 def test_a_failed_adapter_leaves_the_last_held_value_served_and_schema_valid(
         latest_schema, envelope_schema):
     """§4.3's table, asserted: an adapter reaching `down` while the service runs
