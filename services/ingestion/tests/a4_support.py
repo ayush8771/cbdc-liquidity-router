@@ -117,9 +117,10 @@ TRANSPORT_CASES = (
     TransportCase("A4-01", CloseOnConnect(), FaultClass.TRANSIENT_NETWORK,
                   "closed_on_connect", False, "AD-5 §7.1",
                   "a provider that closes immediately on connect"),
-    TransportCase("A4-02", TruncatedStream(values=_clean()), FaultClass.TRANSIENT_NETWORK,
+    TransportCase("A4-02", TruncatedStream(values=_clean()), FaultClass.PROVIDER_UNAVAILABLE,
                   "truncated_stream", False, "AD-5 §7.1",
-                  "a body that ends mid-stream is a connection failure, not a shape one"),
+                  "a body that ends mid-stream is a connection failure, not a shape one; "
+                  "AD-5 §7.1 puts a stream the provider closed under provider_unavailable"),
     TransportCase("A4-03", StatusFault(500), FaultClass.PROVIDER_UNAVAILABLE,
                   "server_error", False, "AD-5 §7.1", ""),
     TransportCase("A4-04", StatusFault(503), FaultClass.PROVIDER_UNAVAILABLE,
@@ -158,6 +159,10 @@ TRANSPORT_CASES = (
                                             if k != "rate"}]),
                   FaultClass.ITEM_INVALID, "missing_rate", False, "AD-5 §7.1",
                   "one bad item does not discard a good response"),
+    TransportCase("A4-19", Deliver(values=[dict(_clean()[0], base="JPY", quote="USD")]),
+                  FaultClass.ITEM_INVALID, "unlisted_subject", False, "Target A",
+                  "a well-formed item for a subject the adapter does not declare: "
+                  "one item's fault, never the response's, and never permanent"),
     # --- the clean control ----------------------------------------------------
     TransportCase("A4-17", Deliver(values=_clean()), None, "", False, "AD-5 §7.1",
                   "the control: without it the fault assertions would also pass "

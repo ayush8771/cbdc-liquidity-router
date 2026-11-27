@@ -61,14 +61,14 @@ Treat the following as fixed. A change here is a change to this document first.
 | `pipeline_for(…)` | Returns `(SourcePipeline, ServiceSink)` over the **shipped** registry record |
 | `clean_values(sequence)` | The wire items the **unchanged** generator would produce |
 
-**Case ids are stable.** `A4-01` … `A4-18` keep their meaning. A case may gain
+**Case ids are stable.** `A4-01` … `A4-19` keep their meaning. A case may gain
 assertions; it is never renumbered, and a new case appends an id. Bind a matrix
 to the id, not to the index.
 
 | id | Subject | Class | Authority |
 |---|---|---|---|
 | A4-01 | provider closes immediately on connect | `transient_network` | AD-5 §7.1 |
-| A4-02 | truncated stream | `transient_network` | AD-5 §7.1 |
+| A4-02 | truncated stream (the provider closed it) | `provider_unavailable` | AD-5 §7.1, **Target A** |
 | A4-03 | 500 | `provider_unavailable` | AD-5 §7.1 |
 | A4-04 | 503 | `provider_unavailable` | AD-5 §7.1 |
 | A4-05 | 429 with a valid `Retry-After` | `rate_limited` | AD-5 §7.1 |
@@ -81,10 +81,11 @@ to the id, not to the index.
 | A4-12 | unknown payload protocol version | `contract_violation` | **slice** |
 | A4-13 | more items than the allowlist permits | `contract_violation` | **slice** |
 | A4-14 | two items for one subject | `contract_violation` | **slice** |
-| A4-15 | an unlisted status (418) | `contract_violation` | **slice** |
+| A4-15 | an unsupported 4xx (418) | `contract_violation` (permanent) | **slice**, **Target A** |
 | A4-16 | item missing a required field | `item_invalid` | AD-5 §7.1 |
 | A4-17 | the clean control | — | — |
 | A4-18 | a successful poll carrying nothing | — | AD-5 §9.2 |
+| A4-19 | a well-formed item for an undeclared subject | `item_invalid` (not permanent) | **Target A** |
 
 **`authority` matters.** `AD-5 §7.1` means the document names the class.
 **`slice`** means AD-5 §7.3 lists the condition without naming a class and this
@@ -93,6 +94,76 @@ scope chose one — each is a *shape* failure, which retrying cannot fix, so
 `WHOLE_RESPONSE_CLASSES` in `response.py` is where that change lands, and a test
 asserts the table covers every §7.3 condition so the choice cannot be made
 silently by omission. **Please review these five rows specifically.**
+
+### Target A classification decisions (applied)
+
+The owner's Target A decisions have now been applied, and this table reflects
+them. Four rows changed or were added; everything else is as Dev B reviewed it.
+
+- **A4-02 → `provider_unavailable`.** A stream the provider closed mid-answer is
+  the provider failing, which is the row AD-5 §7.1 gives it; `transient_network`
+  is reserved for a failure on our side of the connection (DNS, a reset, a read
+  timeout). **Both classes are recoverable**, so the retry, the adapter state and
+  the internal status are unchanged — only the reason an operator reads changes.
+  The reason code stays `truncated_stream`.
+- **A4-11 … A4-14 stay permanent `contract_violation`.** Confirmed, not changed:
+  these are genuine whole-response faults about the response's *shape*, which
+  retrying cannot fix. Their `authority` stays `slice`.
+- **A4-15 is now a partition, not a single fall-through.** An **unsupported 4xx**
+  (204, 404, 418, 451 …) stays a **permanent** `contract_violation`. **408** is
+  `transient_network`, the one 4xx that says nothing about the configuration.
+  **Every remaining 5xx** (501, 505-599) is a **recoverable**
+  `provider_unavailable` rather than falling through to a permanent class, so an
+  unlisted gateway fault can no longer retire a source for ever. `STATUS_CLASSES`
+  in `response.py` now covers 5xx in full, so only a non-5xx reaches the default.
+- **A4-19 is new.** A well-formed item for a subject the adapter does not declare
+  is **one item's** fault: a **non-permanent `item_invalid`**, reason
+  `unlisted_subject`, raised by the adapter's `normalize`. It changes no adapter
+  state and no source status. **This moves where the verdict is made:** such an
+  item previously passed §7.3's checks and was refused by the *service's*
+  admission, landing on the `rejected` counter. It is now refused by the adapter
+  and lands on `item_faults`. Criterion 14's conservation law is unaffected —
+  `produced + item_faults` still equals what the provider delivered — but a
+  matrix that asserted `rejected == 1` for this input must now assert
+  `item_faults`. `test_a4_conformance_matrix.py`'s mixed-sequence case was
+  updated accordingly.
+
+### Defects fixed (D-1, D-2)
+
+Both defects Dev B's review reproduced are fixed, and
+`tests/test_a4_defect_regressions.py` is the regression evidence (7 tests).
+
+- **D-1, a half-open breaker that never resolved.** `allow()` admits exactly one
+  probe and marks it in flight; only `record_success` or `record_failure`
+  released it. A probe could end as **neither**: an empty response, a response
+  whose every item was invalid, or a poll the backoff or ceiling gate held back
+  *after* the breaker had already admitted it. The probe then stayed in flight
+  for ever and every later poll was refused, so the source could never recover
+  however healthy the provider became.
+  **Fix:** a third report, `CircuitBreaker.release_probe(now_ms)`, called at all
+  four of those exits in `_produce`. It returns the breaker to `open` with a
+  **fresh cooldown**, so the next probe is admitted one cooldown later. It is
+  deliberately *not* a release into `half_open`, which would re-admit a probe on
+  the very next cycle and turn the inconclusive case into a tight poll loop
+  against §7.4's "exactly one probe". No failure is recorded, so the sliding
+  window, `opened_count` and the threshold are untouched: an inconclusive probe
+  is not a failed one. It is a no-op when no probe is in flight, so a caller on
+  the normal closed path may call it unconditionally. The new counter is
+  `probes_released`, an **attribute**: it is kept out of `snapshot()`, whose key
+  set `tests/test_a4_breaker.py` pins exactly.
+- **D-2, malformed items escalated to a whole-response rejection.** §7.3's
+  one-item-per-subject check built each subject with
+  `(i.get("base"), i.get("quote"), i.get("rate_type"))`, so two items that each
+  *lacked* their subject fields both became `(None, None, ...)`, collided, and
+  discarded the **entire** response — including the good items in it. That is
+  precisely what §7.1's "one bad item does not discard a good response" forbids,
+  and a missing required field is `item_invalid` (A4-16).
+  **Fix:** only items that carry all three subject fields enter the duplicate
+  comparison (`SUBJECT_FIELDS` in `response.py`). An item with no subject has
+  nothing to compare and is passed through to item-level validation, which
+  rejects it as `item_invalid`. A genuine repeated subject is still a
+  whole-response rejection, including when other items in the same response lack
+  a subject — asserted directly.
 
 Two classes are not in the scripted catalogue, on purpose:
 

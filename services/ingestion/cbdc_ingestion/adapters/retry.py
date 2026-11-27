@@ -233,6 +233,9 @@ class CircuitBreaker:
         self.opened_count = 0
         self.probes_admitted = 0
         self.refusals = 0
+        # Probes that ended without a verdict (D-1). Not in `snapshot()`, whose
+        # key set is pinned by `tests/test_a4_breaker.py`; read as an attribute.
+        self.probes_released = 0
 
     @property
     def state(self) -> str:
@@ -279,6 +282,41 @@ class CircuitBreaker:
             self._failures = []
             self._opened_ms = None
             self._probe_in_flight = False
+            return self._state
+
+    def release_probe(self, now_ms: int) -> str:
+        """An admitted probe that ended **without a verdict** (D-1).
+
+        A probe is admitted by `allow()` and then, instead of succeeding or
+        failing, may end in a way that is neither: an empty response, a response
+        whose every item is invalid, or a poll the backoff or ceiling gate held
+        back after the breaker had already let it through. None of those is "one
+        successful item" (AD-5 §7.2, §9.2), so `record_success` would be a lie,
+        and none is a failed poll, so `record_failure` would be one too.
+
+        Without this third report the probe stays in flight for ever and
+        `allow()` refuses every later poll, which is the half-open wedge: the
+        source can never recover, however healthy the provider becomes.
+
+        The breaker therefore returns to `open` with a **fresh cooldown**, so the
+        next probe is admitted one cooldown later. Deliberately not a release
+        into `half_open`: that would re-admit a probe on the very next cycle and
+        turn the inconclusive case into a tight poll loop, which is what §7.4's
+        "exactly one probe" exists to prevent. No failure is recorded, so the
+        sliding window and `opened_count` are untouched and an inconclusive probe
+        never counts towards the threshold.
+
+        A no-op unless a probe is actually in flight, so a caller on the normal
+        closed path may call it unconditionally.
+        """
+        now_ms = int(now_ms)
+        with self._lock:
+            if self._state != "half_open" or not self._probe_in_flight:
+                return self._state
+            self._state = "open"
+            self._opened_ms = now_ms
+            self._probe_in_flight = False
+            self.probes_released += 1
             return self._state
 
     def record_failure(self, now_ms: int) -> str:

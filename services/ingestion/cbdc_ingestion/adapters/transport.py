@@ -147,8 +147,15 @@ def read_body(response: TransportResponse,
         collected.append(chunk)
     if response.truncated:
         # A body that ends mid-stream is a *connection* failure, not a shape
-        # failure: the provider may be perfectly well configured. AD-5 §7.1 puts
-        # "connection reset, read timeout" under `transient_network`, so this is
+        # failure: the provider may be perfectly well configured, so this is
         # recoverable and is retried with backoff.
-        raise AdapterFault(FaultClass.TRANSIENT_NETWORK, "truncated_stream", source_id="")
+        #
+        # **A4-02, Target A classification.** AD-5 §7.1 puts "a stream closed by
+        # the provider" under `provider_unavailable` and reserves
+        # `transient_network` for a failure on *our* side of the connection —
+        # DNS, a reset, a read timeout. A truncated body is the provider ending a
+        # stream it had already begun answering, so it is the former. Both
+        # classes are recoverable, so the retry is unchanged; the class is what
+        # an operator reads, and it should say the provider is the one failing.
+        raise AdapterFault(FaultClass.PROVIDER_UNAVAILABLE, "truncated_stream", source_id="")
     return b"".join(collected)

@@ -59,24 +59,48 @@ WHOLE_RESPONSE_CLASSES = {
     "unknown_protocol_version": (FaultClass.CONTRACT_VIOLATION, "slice"),
     "too_many_items": (FaultClass.CONTRACT_VIOLATION, "slice"),
     "duplicate_subject_in_response": (FaultClass.CONTRACT_VIOLATION, "slice"),
-    "truncated_stream": (FaultClass.TRANSIENT_NETWORK, "AD-5 §7.1"),
+    "truncated_stream": (FaultClass.PROVIDER_UNAVAILABLE, "AD-5 §7.1"),
 }
 
 # AD-5 §7.1's status rows. Ranges rather than codes where the document gives a
 # range, so an unlisted 5xx is not treated as a success.
+#
+# **A4-15, Target A classification.** The rows below are ordered and
+# non-overlapping, and the fall-through at the end of `classify_status` is now
+# reached by a 4xx only:
+#
+# - **An unsupported 4xx is permanent.** A provider answering 404, 418 or 451 on
+#   an observation endpoint is misconfigured — a wrong path, a withdrawn
+#   endpoint, a refused region — and no amount of retrying fixes a
+#   misconfiguration. `contract_violation`, which needs an operator.
+# - **408 is `transient_network`.** A request timeout is the one 4xx that says
+#   nothing about the configuration: the request was fine and did not complete
+#   in time, which is precisely AD-5 §7.1's "read timeout" row.
+# - **Every remaining 5xx is a recoverable `provider_unavailable`.** 5xx is the
+#   provider reporting its own failure, so 501 and 505-599 are treated like 500
+#   and 502-504 rather than falling through to a permanent class. Classifying an
+#   unlisted 5xx as permanent would retire a source for ever over a transient
+#   gateway fault, which is the opposite of what §7.1's partition is for.
 STATUS_CLASSES = (
     (200, 200, None, "ok"),
     (301, 308, FaultClass.CONTRACT_VIOLATION, "redirect_not_allowed"),
     (401, 401, FaultClass.AUTH_FAILURE, "unauthorized"),
     (403, 403, FaultClass.AUTH_FAILURE, "forbidden"),
+    (408, 408, FaultClass.TRANSIENT_NETWORK, "request_timeout"),
     (429, 429, FaultClass.RATE_LIMITED, "rate_limited"),
     (500, 500, FaultClass.PROVIDER_UNAVAILABLE, "server_error"),
+    (501, 501, FaultClass.PROVIDER_UNAVAILABLE, "server_unavailable"),
     (502, 504, FaultClass.PROVIDER_UNAVAILABLE, "server_unavailable"),
+    (505, 599, FaultClass.PROVIDER_UNAVAILABLE, "server_unavailable"),
 )
 
 # The required fields of one simulated wire item. A missing field is an **item**
 # rejection, not a whole-response one: the response's shape is fine.
 ITEM_FIELDS = ("base", "quote", "rate", "rate_type", "at_ms", "sequence")
+
+# The three fields that identify one item's subject. A whole-response duplicate
+# check can only compare items that carry all three (D-2).
+SUBJECT_FIELDS = frozenset({"base", "quote", "rate_type"})
 
 
 def classify_status(status: int) -> tuple:
@@ -84,7 +108,9 @@ def classify_status(status: int) -> tuple:
 
     An unlisted code is `contract_violation`: a provider answering 204 or 418 on
     an observation endpoint is misconfigured, and retrying a misconfiguration
-    forever is what §7.1's permanent classes exist to prevent.
+    forever is what §7.1's permanent classes exist to prevent. Because the table
+    above covers 5xx in full, only a 4xx (and an unlisted 1xx/2xx/3xx) can reach
+    this line, which is what makes the permanent class the right default here.
     """
     status = int(status)
     for low, high, fault_class, reason in STATUS_CLASSES:
@@ -152,7 +178,16 @@ def read_response(response: TransportResponse, *, source_id: str,
         raise _fault("too_many_items", source_id)
     if allowed_subjects is not None and len(items) > len(tuple(allowed_subjects)):
         raise _fault("too_many_items", source_id)
-    subjects = [(i.get("base"), i.get("quote"), i.get("rate_type")) for i in items]
+    # Only an item that actually *states* a subject can be "two items for the
+    # same subject" (D-2). An item missing one of its subject fields has no
+    # subject to compare, and a missing required field is `item_invalid` (AD-5
+    # §7.1, catalogue case A4-16); two such items are two item faults, not a
+    # whole-response duplicate. Comparing `.get()` tuples made them collide on
+    # `(None, None, ...)` and discarded the good items in the same response,
+    # which is exactly what §7.1's "one bad item does not discard a good
+    # response" forbids. Item-level validation still rejects each of them.
+    subjects = [(i["base"], i["quote"], i["rate_type"]) for i in items
+                if SUBJECT_FIELDS <= i.keys()]
     if len(set(subjects)) != len(subjects):
         raise _fault("duplicate_subject_in_response", source_id)
 

@@ -74,6 +74,7 @@ def test_the_conditions_ad5_names_are_attributed_to_ad5_and_not_to_the_slice():
 def test_a_truncated_stream_is_recoverable_while_a_shape_failure_is_not():
     """The split that matters for the retry: a connection that ended early may
     succeed next time, a malformed body will not."""
+    assert WHOLE_RESPONSE_CLASSES["truncated_stream"][0] is FaultClass.PROVIDER_UNAVAILABLE
     assert not is_permanent(WHOLE_RESPONSE_CLASSES["truncated_stream"][0])
     for reason in ("wrong_content_type", "unparsable_body", "redirect_not_allowed",
                    "response_body_too_large", "unknown_protocol_version",
@@ -99,14 +100,41 @@ def test_each_ad5_7_1_status_row_maps_to_its_class(status, fault_class, reason):
     assert classify_status(status) == (fault_class, reason)
 
 
-@pytest.mark.parametrize("status", [204, 418, 451, 599])
-def test_an_unlisted_status_is_a_contract_violation_not_a_success(status):
-    """A provider answering 204 on an observation endpoint is misconfigured, and
-    retrying a misconfiguration for ever is what the permanent classes prevent."""
+@pytest.mark.parametrize("status", [204, 404, 418, 451])
+def test_an_unsupported_4xx_is_a_permanent_contract_violation(status):
+    """A4-15, Target A: a provider answering 204 or 418 on an observation
+    endpoint is misconfigured, and retrying a misconfiguration for ever is what
+    the permanent classes prevent. Only a non-5xx can reach the fall-through."""
     fault_class, reason = classify_status(status)
     assert fault_class is FaultClass.CONTRACT_VIOLATION
     assert reason == f"unexpected_status_{status}"
     assert is_permanent(fault_class)
+
+
+@pytest.mark.parametrize("status", [501, 505, 520, 599])
+def test_an_unlisted_5xx_is_a_recoverable_provider_unavailable(status):
+    """A4-15, Target A: 5xx is the provider reporting its own failure, so an
+    unlisted one is retried rather than retiring the source for ever."""
+    fault_class, reason = classify_status(status)
+    assert fault_class is FaultClass.PROVIDER_UNAVAILABLE
+    assert reason == "server_unavailable"
+    assert not is_permanent(fault_class)
+
+
+def test_a_request_timeout_is_transient_network_and_recoverable():
+    """A4-15, Target A: 408 is the one 4xx that says nothing about the
+    configuration, and is AD-5 §7.1's "read timeout" row."""
+    fault_class, reason = classify_status(408)
+    assert fault_class is FaultClass.TRANSIENT_NETWORK
+    assert reason == "request_timeout"
+    assert not is_permanent(fault_class)
+
+
+def test_no_5xx_falls_through_to_the_permanent_default():
+    """The property A4-15 rests on: the table covers 5xx in full."""
+    for status in range(500, 600):
+        fault_class, _ = classify_status(status)
+        assert fault_class is FaultClass.PROVIDER_UNAVAILABLE, status
 
 
 def test_the_status_table_is_ordered_and_non_overlapping():
@@ -154,8 +182,9 @@ def test_a_truncated_body_is_refused_even_when_it_is_small_and_parsable():
     response = TransportResponse(chunks=body(clean_values()), truncated=True)
     with pytest.raises(AdapterFault) as raised:
         read_body(response, P)
-    assert raised.value.fault_class is FaultClass.TRANSIENT_NETWORK
+    assert raised.value.fault_class is FaultClass.PROVIDER_UNAVAILABLE,         "A4-02, Target A: a stream the provider closed is the provider failing"
     assert raised.value.reason == "truncated_stream"
+    assert not is_permanent(raised.value.fault_class), "still recoverable"
 
 
 # ------------------------------------------------------------------ read_response
@@ -231,6 +260,35 @@ def test_two_items_for_one_subject_in_one_response_is_refused():
     first = clean_values()[0]
     with pytest.raises(AdapterFault, match="duplicate_subject_in_response"):
         read_response(ok([first, dict(first, rate="2.300000")]), source_id=SOURCE,
+                      allowed_subjects=SUBJECTS, profile=P)
+
+
+@pytest.mark.parametrize("missing", [("base",), ("quote",), ("rate_type",),
+                                     ("base", "quote"),
+                                     ("base", "quote", "rate_type")])
+def test_items_without_a_subject_are_not_a_whole_response_duplicate(missing):
+    """D-2. Items that do not state a subject cannot be "two items for the same
+    subject": they have no subject to compare. They are passed through to
+    item-level validation, which rejects each one as `item_invalid`, so the good
+    items in the same response survive (AD-5 §7.1)."""
+    values = clean_values()
+    broken = [{k: v for k, v in item.items() if k not in missing}
+              for item in values[:2]]
+
+    items, _ = read_response(ok(broken + values[2:]), source_id=SOURCE,
+                             allowed_subjects=SUBJECTS, profile=P)
+
+    assert len(items) == len(values), "every item is handed over, none discarded"
+
+
+def test_a_genuine_duplicate_is_still_refused_when_other_items_lack_a_subject():
+    """The D-2 fix must not blind the check: a real repeated subject in the same
+    response is still a whole-response rejection."""
+    values = clean_values()
+    subjectless = {k: v for k, v in values[0].items() if k != "base"}
+    repeated = [values[1], dict(values[1], rate="2.300000")]
+    with pytest.raises(AdapterFault, match="duplicate_subject_in_response"):
+        read_response(ok([subjectless] + repeated), source_id=SOURCE,
                       allowed_subjects=SUBJECTS, profile=P)
 
 

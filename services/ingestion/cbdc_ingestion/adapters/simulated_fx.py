@@ -173,6 +173,10 @@ class SimulatedTransportFxAdapter(Adapter):
 
         # Gate 2: the computed backoff (AD-5 §7.2).
         if self.next_attempt_ms is not None and now_ms < self.next_attempt_ms:
+            # The breaker has already admitted this poll as its probe, so the
+            # probe must be released or it stays in flight for ever and every
+            # later poll is refused (D-1).
+            self.breaker.release_probe(now_ms)
             self.deferrals[DEFERRED_BACKOFF] += 1
             self._count(DEFERRED_BACKOFF)
             return ()
@@ -181,6 +185,7 @@ class SimulatedTransportFxAdapter(Adapter):
         # (AD-5 §7.4: "the provider's limit is a cliff, not a target").
         if self.last_request_ms is not None and \
                 now_ms - self.last_request_ms < self.profile.min_request_interval_ms:
+            self.breaker.release_probe(now_ms)
             self.deferrals[DEFERRED_CEILING] += 1
             self._count(DEFERRED_CEILING)
             return ()
@@ -209,6 +214,10 @@ class SimulatedTransportFxAdapter(Adapter):
         # `status.tick` is what notices it.
         if not items:
             self.backoff.on_connect_success()
+            # Neither a success nor a failure, so a half-open probe that ended
+            # here has no verdict to report; releasing it is what lets a later
+            # cooldown admit another one (D-1).
+            self.breaker.release_probe(now_ms)
             return ()
 
         # **One bad item does not discard a good response** (AD-5 §7.1, §7.3).
@@ -230,7 +239,9 @@ class SimulatedTransportFxAdapter(Adapter):
             # The response was well formed and the items were not. That is
             # neither a transport success nor a transport failure: nothing
             # resets, nothing opens the breaker, and the silence criterion is
-            # left to notice that no item arrived.
+            # left to notice that no item arrived. The probe is still released,
+            # because an unreported probe would wedge the breaker (D-1).
+            self.breaker.release_probe(now_ms)
             return ()
 
         # One successful item is what resets the counter and closes the breaker.
@@ -288,6 +299,17 @@ class SimulatedTransportFxAdapter(Adapter):
                                source_id=self.source_id) from None
         if raw["rate_type"] != RATE_TYPE:
             raise AdapterFault(FaultClass.ITEM_INVALID, "unknown_rate_type",
+                               source_id=self.source_id)
+        # **A4-19, Target A classification.** A well-formed item for a subject
+        # this adapter does not declare is **one item's** problem, so it is a
+        # non-permanent `item_invalid`: the response's shape is fine, the other
+        # items in it are good, and §7.3's whole-response checks have already
+        # passed it. Rejecting the item here rather than letting it travel on to
+        # the service's admission keeps the verdict with the party that knows the
+        # subject allowlist, and keeps it out of the permanent classes — a
+        # provider adding a pair we do not consume must not retire the source.
+        if (raw["base"], raw["quote"], RATE_TYPE) not in SUBJECTS:
+            raise AdapterFault(FaultClass.ITEM_INVALID, "unlisted_subject",
                                source_id=self.source_id)
         return NormalizedObservation(
             event_type="fx_rate",

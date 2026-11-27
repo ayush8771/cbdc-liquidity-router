@@ -96,6 +96,81 @@ def test_a_failed_probe_reopens_for_a_fresh_cooldown():
     assert b.allow(after + P.breaker_cooldown_ms) is True
 
 
+def _opened(b) -> None:
+    for n in range(P.breaker_failure_threshold):
+        b.record_failure(START_MS + n)
+
+
+def test_an_inconclusive_probe_is_released_for_a_fresh_cooldown():
+    """D-1. A probe that ends with no verdict must report through the third
+    channel, or it stays in flight and `allow()` refuses every later poll."""
+    b = breaker()
+    _opened(b)
+    after = START_MS + P.breaker_cooldown_ms + 10
+    assert b.allow(after) is True and b.state == "half_open"
+
+    assert b.release_probe(after) == "open"
+
+    assert b.probes_released == 1
+    assert b.allow(after + P.breaker_cooldown_ms - 1) is False, "a fresh cooldown"
+    assert b.allow(after + P.breaker_cooldown_ms) is True, "and then another probe"
+    assert b.probes_admitted == 2
+
+
+def test_releasing_a_probe_is_neither_a_success_nor_a_failure():
+    """It must not count towards the threshold, nor clear the window, nor close
+    the breaker: an empty response is not progress (AD-5 §7.2)."""
+    b = breaker()
+    _opened(b)
+    opened_before = b.opened_count
+    failures_before = b.snapshot()["failures_in_window"]
+    after = START_MS + P.breaker_cooldown_ms + 10
+    b.allow(after)
+
+    b.release_probe(after)
+
+    assert b.opened_count == opened_before, "not an extra opening"
+    assert b.snapshot()["failures_in_window"] == failures_before, "window untouched"
+    assert b.state == "open", "and certainly not closed"
+
+
+def test_a_released_probe_does_not_bypass_the_one_probe_rule():
+    """§7.4's "exactly one probe": the release must not re-admit on the very
+    next poll, which would turn an inconclusive probe into a tight loop."""
+    b = breaker()
+    _opened(b)
+    after = START_MS + P.breaker_cooldown_ms + 10
+    b.allow(after)
+    b.release_probe(after)
+    assert b.allow(after) is False
+    assert b.allow(after + 1) is False
+
+
+def test_releasing_without_a_probe_in_flight_is_a_no_op():
+    """So a caller on the normal closed path may call it unconditionally."""
+    b = breaker()
+    assert b.state == "closed"
+    assert b.release_probe(START_MS) == "closed"
+    assert b.probes_released == 0
+    _opened(b)
+    assert b.release_probe(START_MS) == "open", "open, with no probe admitted"
+    assert b.probes_released == 0
+
+
+def test_a_released_probe_still_reaches_a_verdict_on_a_later_probe():
+    """The point of the release: recovery is still possible afterwards."""
+    b = breaker()
+    _opened(b)
+    first = START_MS + P.breaker_cooldown_ms + 10
+    b.allow(first)
+    b.release_probe(first)
+    second = first + P.breaker_cooldown_ms
+    assert b.allow(second) is True
+
+    assert b.record_success(second) == "closed"
+    assert b.allow(second + 1) is True
+
+
 def test_the_breaker_is_per_source_so_one_outage_cannot_silence_another():
     """AD-5 §7.4: "the breaker is per `source_id`, never global"."""
     registry = BreakerRegistry(P)
