@@ -19,6 +19,7 @@ children. A pattern outside that subset raises rather than being guessed at.
 """
 from __future__ import annotations
 
+import ast
 import glob
 import posixpath
 import re
@@ -181,8 +182,82 @@ def test_the_shipped_dockerfile_has_the_one_expected_copy():
     assert [s for s, _ in copy_sources(DOCKERFILE)] == [("cbdc_ingestion/",)]
 
 
-def test_the_fake_provider_is_outside_the_build_context():
+def test_the_fake_provider_exists_and_is_outside_the_build_context():
+    """The §7.1 scaffold, asserted on both halves.
+
+    `not _within(...)` alone is **vacuously true for a path that does not
+    exist**, so on its own it proved nothing about the deliverable. Existence is
+    asserted first now, exactly as the tests directory's is below.
+    """
+    assert FAKE_PROVIDER.is_dir(), (
+        f"the section 7.1 test-only fake provider scaffold is missing: {FAKE_PROVIDER}")
+    assert (FAKE_PROVIDER / "provider.py").is_file()
     assert not _within(FAKE_PROVIDER.resolve(), CONTEXT.resolve())
+
+
+# Every way the scaffold could acquire a transport. Checked against `ast` import
+# nodes, never the file's text, so the prose that says "no socket, no HTTP"
+# neither satisfies nor trips the check.
+TRANSPORT_MODULES = frozenset({
+    "socket", "ssl", "http", "urllib", "urllib3", "requests", "httpx", "aiohttp",
+    "websockets", "websocket", "asyncio", "selectors", "select", "ftplib", "smtplib",
+    "poplib", "imaplib", "telnetlib", "xmlrpc", "socketserver", "subprocess", "paramiko",
+})
+# It must couple itself neither to the component it exists to test nor to Phase 1.
+FORBIDDEN_PACKAGES = frozenset({"cbdc_ingestion", "cbdc_inference", "src", "services"})
+
+
+def test_the_fake_provider_keeps_a_4_unexercised_by_having_no_transport():
+    """No network of any kind, so the scaffold cannot exercise A-4 as it stands."""
+    modules = sorted(FAKE_PROVIDER.rglob("*.py"))
+    assert modules, "no Python module in the scaffold to check"
+    for path in modules:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                roots = [alias.name.split(".")[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                roots = [(node.module or "").split(".")[0]] if node.level == 0 else []
+            else:
+                continue
+            for root in roots:
+                assert root not in TRANSPORT_MODULES, f"{path.name} imports {root}"
+                assert root not in FORBIDDEN_PACKAGES, f"{path.name} imports {root}"
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                assert "://" not in node.value, f"{path.name} names a URL"
+
+
+def test_the_transport_check_actually_catches_a_transport():
+    """Both sides, so the check above cannot pass by matching nothing."""
+    offending = ast.parse("import socket\n")
+    roots = [a.name.split(".")[0] for n in ast.walk(offending)
+             if isinstance(n, ast.Import) for a in n.names]
+    assert any(r in TRANSPORT_MODULES for r in roots)
+    clean = ast.parse("from dataclasses import dataclass\n")
+    roots = [(n.module or "").split(".")[0] for n in ast.walk(clean)
+             if isinstance(n, ast.ImportFrom)]
+    assert not any(r in TRANSPORT_MODULES or r in FORBIDDEN_PACKAGES for r in roots)
+
+
+def test_nothing_in_the_repository_imports_the_fake_provider():
+    """A-4 unexercised in practice: no suite drives a fault through it."""
+    this_file = Path(__file__).resolve()
+    # Build and environment trees hold no first-party source and are large.
+    pruned = {"__pycache__", "node_modules", "venv", ".venv", "dist", "build", ".git"}
+    searched = [p for p in (REPO_ROOT / "services").rglob("*.py")
+                if pruned.isdisjoint(p.parts)]
+    searched += [p for p in (REPO_ROOT / "infra").rglob("*.py")
+                 if pruned.isdisjoint(p.parts)
+                 and not _within(p.resolve(), FAKE_PROVIDER.resolve())]
+    # This module names the needles in its own literals, so it is excluded; the
+    # scaffold's own files are excluded above because its package imports itself.
+    searched = [p for p in searched if p.resolve() != this_file]
+    assert searched
+    for path in searched:
+        text = path.read_text(encoding="utf-8")
+        for needle in ("import fake_provider", "from fake_provider", "testing.fake_provider"):
+            assert needle not in text, f"{path} imports the scaffold: {needle}"
 
 
 def test_the_tests_directory_is_inside_the_context_but_excluded_by_the_allow_list():
