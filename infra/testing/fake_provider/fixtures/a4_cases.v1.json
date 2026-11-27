@@ -89,7 +89,7 @@
   },
   {
    "case_id": "A4-TRUNC-01",
-   "expect": "transient_network",
+   "expect": "provider_unavailable",
    "status": 200,
    "content_type": "application/json",
    "body": "{\"items\": [",
