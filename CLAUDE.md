@@ -35,6 +35,22 @@ python -m pytest tests/
 
 Last recorded passing result: **193 passed, 9 warnings** (17 Stage 1A + 26 Stage 1B + 13 Stage 1C + 35 Stage 1D + 20 capacity projection + 18 Stage 1E + 33 Stage 1E Cognee adapter + 15 Stage 1E audit + 16 Stage 1F). The Stage 1E Cognee tests are mocked; they need no network, LLM or provider. The 9 warnings are the known pandas `pct_change` FutureWarnings from `macro_risk.py`. Re-run to establish current status; do not assume this remains true after changes.
 
+`python -m pytest tests/` collects the Phase 1 suite only. The Phase 3 ingestion suite and the A-4
+demonstrations live outside the root `tests/` folder and are run separately, from the repository root:
+
+```powershell
+cd services\ingestion ; python -m pytest -q ; cd ..\..
+python infra\testing\a4_demo\run_demo.py
+python infra\testing\a4_demo\run_fixture_demo.py
+```
+
+Last recorded result at merge `549907b`, on Python 3.10.11: **1487 passed in 17.0s** for the ingestion suite,
+30/30 checks across 6 scenarios for `run_demo.py`, and 12 fixture cases plus the breaker sequence
+(`RESULT: OK (0 failing)`) for `run_fixture_demo.py`. Both demonstrations exit non-zero on any failed
+expectation. They need no dataset, Docker image, env file, token or network; see
+`infra/testing/a4_demo/README.md`. The ingestion component itself runs on host loopback with
+`cd services\ingestion ; python -m cbdc_ingestion` and is **not** a Compose service.
+
 ## Main Stage 1D data splits (verify files exist)
 - `data/processed/stage1d_transactions_train.csv` — 500 rows
 - `data/processed/stage1d_transactions_validation.csv` — 100 rows
@@ -123,10 +139,10 @@ The three major phases are:
 2. Major Phase 2 — Full-Stack Web Orchestration.
 3. Major Phase 3 — Real-Time Streaming & Production.
 
-Current phase status (24 November 2026):
+Current phase status (27 November 2026):
 
 - **Phase 2** is integrated and merged into `main` (PR #14, merge commit `28da68f`). All 11 CI check runs passed on that commit, and integration sign-off is recorded. This is not production readiness. The OpenAPI files remain DRAFT (`docs/PHASE2_API_CONTRACT.md` v0.4 is normative), `ppoProjected` stays disabled, and the open items in `docs/PHASE2_STATUS.md` remain open.
-- **Phase 3** is in milestone **3.1** (architecture), with **D-24** implemented and the **3.3-A** scope authorized on paper (`docs/PHASE3_SCOPE.md` §2.2.4, `docs/PHASE3_33A_AUTHORIZATION.md` v1.2, `docs/PHASE3_MILESTONE_3_1_PLAN.md`). On **26 November 2026** the owner confirmed the **AD-1 §4 placement** (AD-1 Part 2 v0.7, satisfying **D-22**), extended **AD-4 v0.2** to milestone 3.3, approved **AD-5 v0.8** and **AD-12 v0.4** (Part A; Part B and the load modes deferred), partially approved **AD-8** (synthetic rows only), and approved the bounded **3.3-A** scope, exclusions and acceptance criteria. On **27 November 2026** the owner **granted AD4P2-Q2 for Phase 3.3-A only**, which authorizes criterion 8's "one active generator configuration per `source_id`" clause on the registry-selected synthetic adapter path; **AD-4 Part 2 is still not approved as a document** and the **C-1 derivation is unchanged**. **No implementation has been authorized to begin on that record.** Still unapproved: AD-2, AD-3, AD-4 Part 2, AD-6 Part 2, AD-7, AD-9, AD-10, AD-11, AD-13 and AD-8 as a whole, so **F-5 stays provisional and exit criterion 9 is unmet**. **No code milestone (3.2–3.7) may begin before the AD-1 component view and that milestone's own required deliverables are approved. No gate has passed, and all four capability gates remain closed.**
+- **Phase 3** is in milestone **3.1** (architecture), with **D-24**, the bounded **3.3-A** synthetic adapter layer and the bounded **3.3-S** A-4 fault-injection work ("Target A") **implemented, merged and feature-complete on `feature/phase3-platform`** (PR #42, merge commit `549907b`, all reported CI check runs passed) — **not on `main`**, which is still at the Phase 2 state. Target A is **synthetic-only and local-only**: no provider, credential, transport, egress or network, `usage: display_only` on every envelope, the D-24 generator still the service default, and no registry record selecting the A-4 adapter. The scope and authorization records are `docs/PHASE3_SCOPE.md` §2.2.4, `docs/PHASE3_33A_AUTHORIZATION.md` v1.3, `docs/PHASE3_MILESTONE_3_1_PLAN.md` and, for A-4, `docs/PHASE3_A4_INTERFACE.md`. On **26 November 2026** the owner confirmed the **AD-1 §4 placement** (AD-1 Part 2 v0.7, satisfying **D-22**), extended **AD-4 v0.2** to milestone 3.3, approved **AD-5 v0.8** and **AD-12 v0.4** (Part A; Part B and the load modes deferred), partially approved **AD-8** (synthetic rows only), and approved the bounded **3.3-A** scope, exclusions and acceptance criteria. On **27 November 2026** the owner **granted AD4P2-Q2 for Phase 3.3-A only**, which authorizes criterion 8's "one active generator configuration per `source_id`" clause on the registry-selected synthetic adapter path; **AD-4 Part 2 is still not approved as a document** and the **C-1 derivation is unchanged**. **That record authorizes no further implementation**: it covers criterion 8's clause on the registry-selected synthetic adapter path only, and the implemented Target A work stays within the bounded 3.3-A and 3.3-S authorizations already granted. Still unapproved: AD-2, AD-3, AD-4 Part 2, AD-6 Part 2, AD-7, AD-9, AD-10, AD-11, AD-13 and AD-8 as a whole, so **F-5 stays provisional and exit criterion 9 is unmet**. **No code milestone (3.2–3.7) may begin before the AD-1 component view and that milestone's own required deliverables are approved. No gate has passed, and all four capability gates remain closed.**
 
 Important distinctions:
 

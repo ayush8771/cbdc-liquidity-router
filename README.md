@@ -35,13 +35,13 @@ A research prototype for routing cross-border CBDC-style transactions across sev
 
 ## Project status
 
-Status as of 24 November 2026.
+Status as of 27 November 2026.
 
 | Major phase | What it covers | Status |
 |---|---|---|
 | **Phase 1 — Offline AI/RL foundation** | Data pipeline, simulation, Gymnasium environment, 1D CNN, PPO, baselines, semantic memory and backtesting (Stages 1A–1F) | **Complete** as the Phase 2 baseline (tag `phase1-complete`, commit `bc9905e`). Six research items remain open. |
 | **Phase 2 — Full-stack web orchestration** | FastAPI inference service, Express backend, PostgreSQL, React frontend, Docker Compose, CI | **Integrated and merged into `main`** ([PR #14](https://github.com/ayush8771/cbdc-liquidity-router/pull/14), merge commit `28da68f`). Integration sign-off is recorded, and all 11 CI checks passed on the merge commit. Not production-ready. The OpenAPI files are still DRAFT, and `ppoProjected` is disabled. |
-| **Phase 3 — Real-time streaming and production pilot** | Approved live data, event streaming, live dashboard updates and production hardening | **Planning only.** The scope is accepted, milestone 3.0 is complete and milestone 3.1 (architecture) has begun. **No Phase 3 code exists.** No gate has passed and no data provider is approved. |
+| **Phase 3 — Real-time streaming and production pilot** | Approved live data, event streaming, live dashboard updates and production hardening | **Architecture (milestone 3.1), with a bounded synthetic prototype on a feature branch.** The scope is accepted and milestone 3.0 is complete. The authorized D-24 slice, the 3.3-A synthetic adapter layer and the 3.3-S A-4 fault-injection work are implemented on `feature/phase3-platform` ([PR #42](https://github.com/ayush8771/cbdc-liquidity-router/pull/42), merge commit `549907b`), **not on `main`**. Every bit of it is **synthetic-only and local-only**: no live data, no provider, no credential and no network. **No gate has passed**, no data provider is approved, and no code milestone 3.2–3.7 is authorized. |
 
 **Terminology.** The project has three **Major Phases**. Major Phase 1 contains internal milestones called **Stages 1A–1F**; Phase 3 has **milestones 3.0–3.7**. These are separate numbering schemes. "Phase 2" always means the web application, never a stage.
 
@@ -365,7 +365,11 @@ Manual evidence recorded in [`docs/PHASE2_STATUS.md`](docs/PHASE2_STATUS.md) §8
 
 ## Major Phase 3: real-time streaming and production pilot
 
-> **Planned work. Nothing in this section is implemented.** No live data feeds, streaming, real-time updates or external-data integration exist in the repository.
+> **Mostly planned work, and what exists is synthetic.** No live data feed, provider, credential, egress or
+> external-data integration exists anywhere in the repository. What *is* implemented, on
+> `feature/phase3-platform` and **not on `main`**, is the authorized D-24 ingestion slice, the 3.3-A
+> synthetic adapter layer and the 3.3-S A-4 fault-injection seam — all seeded, local-only and
+> `usage: display_only`, with no network of any kind. Everything else below is planned.
 
 Phase 3 is scoped as a **production-oriented research pilot, not a real-money CBDC deployment**. The pilot has these boundaries:
 
@@ -383,7 +387,7 @@ The scope and decision record is [`docs/PHASE3_SCOPE.md`](docs/PHASE3_SCOPE.md) 
 
 ### Planning status
 
-The scope was accepted on 24 November 2026, which completed milestone 3.0. Milestone 3.1 has begun, and its first decisions are recorded:
+The scope was accepted on 24 November 2026, which completed milestone 3.0. Milestone 3.1 is under way, and these decisions are recorded:
 
 - ingestion runs in a separate Python component;
 - Express terminates the authenticated browser update channel;
@@ -391,7 +395,12 @@ The scope was accepted on 24 November 2026, which completed milestone 3.0. Miles
 - provisional targets are event-to-display p95 ≤ 1 s and reconnect p95 ≤ 5 s;
 - development is local Docker first, aiming at a controlled single-host pilot.
 
-None of the 13 architecture deliverables (AD-1 to AD-13) is written yet.
+The 13 architecture deliverables (AD-1 to AD-13) are now drafted in `docs/`, and several are approved for a
+bounded scope only. As of 27 November 2026 the owner has confirmed the AD-1 §4 placement (AD-1 Part 2 v0.7),
+extended AD-4 v0.2 to milestone 3.3, approved AD-5 v0.8 and AD-12 v0.4 (Part A), partially approved AD-8
+(synthetic rows only), approved the bounded 3.3-A scope, and granted AD4P2-Q2 for Phase 3.3-A only. **Still
+unapproved:** AD-2, AD-3, AD-4 Part 2, AD-6 Part 2, AD-7, AD-9, AD-10, AD-11, AD-13 and AD-8 as a whole, so
+**F-5 stays provisional and exit criterion 9 is unmet**.
 
 ### Milestones
 
@@ -400,13 +409,41 @@ None of the 13 architecture deliverables (AD-1 to AD-13) is written yet.
 | 3.0 — Scope approval and gate register | Approve scope, gates, restrictions and exposure boundary | **Complete** |
 | 3.1 — Architecture and requirements | Thirteen architecture deliverables: streaming requirements and mechanism, event schema, adapter contract, real-time channel contract, budgets, threat model, audit trail, test strategy and others | **Begun** (decisions only) |
 | 3.2 — Security baseline | Real identity provider, removal of dev mode, httpOnly cookies, strict CSP, secrets management | Not started |
-| 3.3 — First live adapter | Synthetic adapter first, then one approved provider end to end | Not started |
+| 3.3 — First live adapter | Synthetic adapter first, then one approved provider end to end | **Synthetic prototype only**, on `feature/phase3-platform`: 3.3-A's adapter layer and 3.3-S's A-4 fault-injection seam, both authorized and synthetic-only. The live adapter of AD-1 §4 is **not authorized** and needs Gate 3, which does not exist. |
 | 3.4 — Event distribution | Validation, normalization, duplicates, late events, idempotency, replay | Not started |
 | 3.5 — Real-time inference and dashboard | Live updates to the dashboard with provenance labels; routing stays simulation-based | Not started |
 | 3.6 — Knowledge updates | Quarantine store and human review queue for announcements and holidays | Not started |
 | 3.7 — Production operations | Monitoring, alerting, degradation, deployment, backup, recovery, load testing | Not started |
 
-A code milestone may begin only after the AD-1 component view and the 3.1 deliverables it depends on are approved.
+A code milestone may begin only after the AD-1 component view and the 3.1 deliverables it depends on are approved. The D-24 slice and the bounded 3.3-A and 3.3-S work were authorized individually on that basis; **milestones 3.2 and 3.4–3.7 remain unauthorized**, and no gate has passed.
+
+### The implemented synthetic slice
+
+Three pieces exist, all on `feature/phase3-platform` at merge `549907b`:
+
+- **`services/ingestion/`** — the D-24 component. It generates seeded synthetic FX observations for four
+  currency pairs and serves the latest validated one per pair over a private `GET /v1/latest`. Standard library
+  only, no third-party dependency, no provider and no outbound connection. See
+  [`services/ingestion/README.md`](services/ingestion/README.md).
+- **The 3.3-A adapter layer** (`services/ingestion/cbdc_ingestion/adapters/`) — synthetic-only and local-only.
+  Its one adapter wraps the local generator; `AUTHORIZED_TRANSPORT_KINDS` is `("in_process_simulation",)`. The
+  D-24 generator remains the service default and no registry record selects the A-4 adapter.
+- **The 3.3-S A-4 seam and demonstrations** (`infra/testing/a4_demo/`, `infra/testing/fake_provider/`) —
+  test-only, outside every build context. See
+  [`infra/testing/a4_demo/README.md`](infra/testing/a4_demo/README.md) for the commands, verified results and
+  limitations, and [`docs/PHASE3_A4_INTERFACE.md`](docs/PHASE3_A4_INTERFACE.md) for the contract.
+
+**The ingestion component is not part of Docker Compose.** `infra/compose.yaml` defines `postgres`, `migrate`,
+`seed`, `inference`, `backend` and `web` only, so starting the Phase 2 stack does not start ingestion and
+adding it would be a Compose change that is not authorized. Run it separately, on host loopback:
+
+```powershell
+cd services\ingestion
+python -m cbdc_ingestion          # then GET http://127.0.0.1:<port>/v1/latest and /healthz
+```
+
+It needs no dataset, env file, token or image — unlike the Phase 1 research environment and the Phase 2 stack,
+whose prerequisites are in [Getting started](#getting-started).
 
 ### Capability-specific gates
 
@@ -463,11 +500,16 @@ cbdc-liquidity-router/
 ├── services/
 │   ├── inference/                     # FastAPI inference service (cbdc_inference/, tests/, requirements/, config/)
 │   ├── backend/                       # Express + Prisma backend (src/, test/, prisma/, scripts/)
-│   └── web/                           # React + Vite frontend (src/, test/, nginx.conf.template)
-├── contracts/                         # OpenAPI drafts (openapi/), 86 fixtures, test vectors
-├── infra/                             # compose.yaml, env/*.env.example, scripts/ (contract checker, lock compiler, tests)
+│   ├── web/                           # React + Vite frontend (src/, test/, nginx.conf.template)
+│   └── ingestion/                     # Phase 3 ingestion: D-24 synthetic FX generator and the 3.3-A
+│                                      # synthetic adapter layer (cbdc_ingestion/, tests/). Not a Compose service
+├── contracts/                         # OpenAPI drafts (openapi/), fixtures, test vectors,
+│                                      # events/ (DRAFT event-envelope, ingestion-latest and stream-message schemas)
+├── infra/                             # compose.yaml, env/*.env.example, scripts/ (contract checker, lock compiler, tests),
+│   └── testing/                       # test-only, outside every build context: fake_provider/ (A-4 step
+│                                      # vocabulary, no network) and a4_demo/ (the A-4 demonstrations)
 ├── e2e/                               # api-smoke.py, stack-security.py, Playwright browser tests
-├── .github/workflows/                 # tests.yml, phase2-integration.yml, phase2-docker.yml, phase2-stack.yml
+├── .github/workflows/                 # tests.yml, phase2-*.yml, phase3-acceptance-gate.yml, phase3-observations.yml
 └── docs/                              # results, architecture, contract, status, roadmap, Phase 3 scope
 ```
 
@@ -488,12 +530,18 @@ python -m pip install -r requirements-lock.txt
 
 `requirements-lock.txt` is a Windows freeze: it pins `pywin32`. This sequence is what the `tests` workflow runs. `requirements.txt` lists only the direct pins.
 
-**Raw datasets.** Two raw files are too large for Git and must be placed in `data/raw/` by hand:
+**Phase 1 dataset prerequisites.** Two raw files are too large for Git and must be placed in `data/raw/` by hand:
 
-- `WDIData.csv`
-- `rpw_dataset_2011_2025_q3.xlsx`
+| File | In Git | Needed for |
+|---|---|---|
+| `data/raw/WDIData.csv` | **No — place by hand** | Stage 1B preprocessing of World Bank WDI indicators |
+| `data/raw/rpw_dataset_2011_2025_q3.xlsx` | **No — place by hand** | the lagged real RPW cost baseline |
+| `data/raw/CPI*.xlsx` (three workbooks), `data/raw/WDICountry.csv`, `data/raw/fred/*.csv` | Yes | Stage 1B inflation and macro-risk signals |
+| `data/processed/*.csv`, `data/structured/bridge_network.csv`, `data/knowledge/regulatory_facts.json` | Yes | the environment, the Stage 1D splits and Stage 1E feasibility |
 
-Without them, 10 Stage 1B/1D tests cannot run. The processed outputs they produce are already committed in `data/processed/`. The CPI workbooks and FRED CSVs are committed.
+Without the two by-hand files, 10 Stage 1B/1D tests cannot run. The processed outputs they produce are already committed in `data/processed/`, so training, evaluation and the Phase 2 stack work without them; only regeneration and those 10 tests need them.
+
+These prerequisites apply to **Phase 1 only**. The Phase 2 stack needs the env files and development tokens below instead, and the Phase 3 ingestion component and the A-4 demonstrations need **no dataset at all**.
 
 ```powershell
 python -m pytest tests/                               # Phase 1 test suite
@@ -549,6 +597,32 @@ On Windows, a Compose build can fail with "additional privileges requested". `in
 
 **Service-level development** (running a service outside Docker) is described in each service's README.
 
+### Phase 3 ingestion component and the A-4 demonstrations
+
+**The ingestion component is deliberately not a Compose service.** `infra/compose.yaml` defines `postgres`,
+`migrate`, `seed`, `inference`, `backend` and `web` only. Starting the Phase 2 stack therefore does **not**
+start ingestion, and adding it would be a Compose change that is not authorized. Run it on its own, on host
+loopback, from the repository root:
+
+```powershell
+cd services\ingestion
+python -m cbdc_ingestion          # then GET http://127.0.0.1:<port>/v1/latest and /healthz
+python -m pytest -q               # the component's own suite
+```
+
+It is **standard library only** — no third-party dependency, no dataset, no env file, no token, no image and no
+network. Environment variables and defaults are in [`services/ingestion/README.md`](services/ingestion/README.md).
+
+The A-4 fault-handling demonstrations run in-process, with no service and no Docker:
+
+```powershell
+python infra\testing\a4_demo\run_demo.py           # six scenarios, 30 checks
+python infra\testing\a4_demo\run_fixture_demo.py   # twelve fixture cases plus the breaker
+```
+
+Both exit non-zero if any expectation fails. Commands, verified results, prerequisites and limitations are in
+[`infra/testing/a4_demo/README.md`](infra/testing/a4_demo/README.md).
+
 ## Testing and CI
 
 ### Phase 1 test suite
@@ -587,6 +661,19 @@ These are the commands from [`infra/README.md`](infra/README.md), "Run the test 
 - **The backend's PostgreSQL suites** run only when `CBDC_TEST_DATABASE_URL` points at a disposable database whose name ends in `_test`. They **empty every table**, so never point them at the stack's database.
 - **The infrastructure tests** fail while any real `infra/env/*.env` file exists in the checkout.
 
+### Phase 3 ingestion and A-4 suites
+
+Run separately from the Phase 1 suite: these tests live outside the repository-root `tests/` folder, so
+`python -m pytest tests/` never collects them.
+
+| Suite | Command | Last verified |
+|---|---|---|
+| Ingestion component, the 3.3-A adapter layer and the A-4 seam | `cd services/ingestion` then `python -m pytest -q` | **1487 passed in 17.0s** at merge `549907b`, Python 3.10.11, Windows 11 |
+| A-4 demonstrations (also checks, exit non-zero on failure) | `python infra/testing/a4_demo/run_demo.py` and `python infra/testing/a4_demo/run_fixture_demo.py` | 30/30 checks across 6 scenarios; 12 fixture cases plus the breaker, `RESULT: OK (0 failing)` |
+
+Standard library only: no dataset, Docker image, env file or token is needed, and nothing touches the network.
+`services/ingestion/tests/test_a4_demo.py` runs the demonstration inside the suite so it cannot rot.
+
 ### CI workflows
 
 | Workflow | Runs on | Check runs |
@@ -595,9 +682,11 @@ These are the commands from [`infra/README.md`](infra/README.md), "Run the test 
 | [`phase2-integration`](.github/workflows/phase2-integration.yml) | Pushes and pull requests that touch `contracts/`, `infra/`, `e2e/`, `services/backend/` or `.nvmrc` | `contract conformance` (ubuntu-24.04 and windows-latest); `backend PostgreSQL integration` |
 | [`phase2-docker`](.github/workflows/phase2-docker.yml) | Every push to those branches and every pull request; manual | `changed areas`, `tracked secret files`, `compose configuration`, `backend images`, `web image`, `inference image` |
 | [`phase2-stack`](.github/workflows/phase2-stack.yml) | Pushes and pull requests that touch the stack's paths; manual | `full stack (compose, seed, API smoke, runtime security)`, which includes the Playwright browser tests |
+| [`phase3-observations`](.github/workflows/phase3-observations.yml) | Pushes to `main` and `feature/phase3-platform`; pull requests touching the Phase 3 paths; manual | `contracts, hash vectors and import rules`, `ingestion unit tests`, `merged Compose invariants`, `backend observation module`, `web observation panel`, `Nginx streaming through the published port (P-7)`, `ingestion runtime isolation (T-5, ingestion side)`, the AD-6 T-7/T-8 guard and regression jobs, and the stack and browser acceptance jobs |
+| [`phase3-acceptance-gate`](.github/workflows/phase3-acceptance-gate.yml) | Pushes and pull requests on `feature/phase3-platform` | `phase3-acceptance`, the milestone acceptance checks |
 
 - **No GitHub secrets are used.** Passwords and tokens are generated per run.
-- **Other branches.** Push triggers name only `main`, `feature/phase2-platform` and `feature/phase3-platform`, so other branches are checked through pull requests.
+- **Other branches.** Push triggers name only `main`, `feature/phase2-platform` and `feature/phase3-platform` (and `feature/phase3-platform` alone for `phase3-acceptance-gate`), so other branches are checked through pull requests.
 
 ## API documentation
 
@@ -663,7 +752,25 @@ These are the commands from [`infra/README.md`](infra/README.md), "Run the test 
   - the inference response-size limit, the F1 cost-baseline unit and the `AuditLog` values are open.
 - **Desktop first.** The data screens are designed for windows at least 1024 px wide; below that, the comparison and new-transaction screens show a placeholder.
 
-**Phase 3:** none of it is implemented. There are no live feeds, no streaming, no real-time updates and no external-data integration.
+**Phase 3 constraints:**
+
+- **No live data of any kind.** No provider, credential, egress, outbound connection or external-data
+  integration exists. Every observation is seeded and generated locally, and the rates are deliberately
+  unrealistic.
+- **Display only.** Every envelope is `usage: display_only`; no observation reaches a routing request or
+  result, and writing to the knowledge layer needs Gate 2.
+- **All four capability gates are CLOSED,** and no provider has been evaluated.
+- **Only the bounded slices exist,** and only on `feature/phase3-platform`, not on `main`: the D-24 generator,
+  the 3.3-A synthetic adapter layer and the 3.3-S A-4 seam. Milestones 3.2 and 3.4–3.7 are unauthorized and
+  unimplemented.
+- **A-4's transport-level half is simulated, not exercised.** The seam is in-process, so TLS handshakes, DNS
+  failures, socket resets, real read timeouts, redirect following, chunked encoding and a genuine mid-flight
+  close are **not** covered. They need AD-10, T-5 and Gate 3.
+- **The A-4 timings are `SIMULATION_ONLY`,** not AD-8 defaults: AD-8 §3.5's `poll` column is unapproved.
+- **Not a store.** Ingestion state is the four current events in memory; a restart loses it. No broker,
+  durability or replay.
+- **The architecture record is incomplete.** AD-2, AD-3, AD-4 Part 2, AD-6 Part 2, AD-7, AD-9, AD-10, AD-11,
+  AD-13 and AD-8 as a whole are unapproved, so F-5 stays provisional and exit criterion 9 is unmet.
 
 ## Roadmap
 
