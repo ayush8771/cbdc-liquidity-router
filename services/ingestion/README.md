@@ -9,14 +9,22 @@ passed**, and **no milestone 3.2–3.7 is authorized.**
 
 This component generates **seeded synthetic FX observations** and serves the
 latest validated one per currency pair over a private HTTP endpoint. It is a
-local demonstration producer: there is no provider, no adapter, no outbound
-connection and no credential anywhere in it.
+local demonstration producer: there is **no provider, no outbound connection and
+no credential** anywhere in it.
+
+Since Phase 3.3-A it also holds a **synthetic adapter layer** (`adapters/`,
+below), authorized by `docs/PHASE3_33A_AUTHORIZATION.md` v1.3 §7. That layer is
+**synthetic-only and local-only**, and it is **not** the live-adapter placement
+of AD-1 §4, which stays unauthorized. The D-24 generator remains the default
+path and is unchanged.
 
 ## What it is not
 
-- **Not a live data feed.** Every value is generated locally from a seed. Live
-  adapters are placed inside this component by AD-1 §4, which is **not
-  authorized**, and each provider needs Gate 3 first.
+- **Not a live data feed.** Every value is generated locally from a seed. The
+  3.3-A adapter layer is **synthetic-only**: its one adapter wraps that local
+  generator and has **no transport**. The **live**-adapter placement of AD-1 §4
+  remains **not authorized**, and each real provider needs **Gate 3** first,
+  which does not exist — all four capability gates are **CLOSED**.
 - **Not an input to routing.** Every envelope is `usage: display_only`, and no
   observation may influence an engine request or result (AD-6 §1). The rates are
   deliberately unrealistic so that no reader can mistake one for a market quote.
@@ -142,7 +150,7 @@ Every timing test drives a manual clock, so the suite needs no real waiting.
 
 ## The Phase 3.3-A adapter contract, as implemented
 
-Authorized by `docs/PHASE3_33A_AUTHORIZATION.md` v1.2 §7, with the exclusions of
+Authorized by `docs/PHASE3_33A_AUTHORIZATION.md` v1.3 §7, with the exclusions of
 §8 and the acceptance criteria of §9. **Synthetic sources only**, local-only, and
 **additive**: the D-24 generator above is unchanged and remains the default.
 
@@ -189,20 +197,46 @@ seed-allocation checks, and must be: an unscoped refusal would refuse to start
 the approved slice. `tests/test_seed_allocation.py` asserts both halves — that it
 still starts, and that the default path never loads the registry.
 
-### What is NOT implemented yet
+### The three modules the earlier draft listed as missing are implemented
 
-The adapter path runs, but it is **not the complete AD-5 §3.4 path**: three
-authorized modules are still missing, so no suite here stands in for theirs.
+An earlier revision of this file said `dedup.py`, `status.py` and the
+plausibility bounds were "not implemented yet". **They are implemented**, and
+each has its §9 suite passing. The stale list is corrected here rather than left
+to mislead a reviewer.
 
-| Missing | Criteria |
-|---|---|
-| `dedup.py` — AD5-Q1's two keys and AD5-Q8's outcomes in the order C-b, D, C-a | 5, 5a |
-| `status.py` — AD-5 §9.2's internal status machine, in process only | 6 |
-| Plausibility bounds — quarantine, never reject and never clamp | 16 |
+| Module | Criteria | Suite |
+|---|---|---|
+| `dedup.py` — AD5-Q1's two keys and AD5-Q8's outcomes in the order C-b, D, C-a | 5, 5a | `tests/test_idempotency.py`, `tests/test_envelope_validation.py` |
+| `status.py` — AD-5 §9.2's internal status machine, in process only | 6 | `tests/test_status_machine.py` |
+| `plausibility.py` — quarantine, never reject and never clamp | 16 | `tests/test_plausibility.py` |
 
-Until `dedup.py` exists, a redelivery on the adapter path is handled only by the
-existing store's AD-1 §3.4 ordering and duplicate rules, **not** by AD-5 §8.2's
-classifier. That difference is stated, not hidden.
+A redelivery on the adapter path is therefore classified by AD-5 §8.2's
+classifier, not merely by the store's AD-1 §3.4 ordering and duplicate rules.
+
+### Nine criterion 5 cases reach the classifier directly, by design
+
+`pipeline.py` validates with the **unchanged** D-24 strict validator
+(`validation.py`), which refuses envelopes that are schema-valid but foreign to
+this slice. Nine of criterion 5's cases are exactly that, so they **cannot reach
+the classifier through `run_cycle`** and are fed to `dedup.py` directly:
+
+`g2`, `h`, `i`, `j`, `k`, `k2`, `l`, `m`, `r` — listed as
+`DIRECT_CLASSIFIER_ONLY` in `tests/idempotency_cases.py`.
+
+**This is accepted, not a gap.** Criterion 5 defines its inputs as *schema-valid
+envelopes*, which these are, so they remain required cases. Strict validation is
+**deliberately preserved**: weakening it to route these through `run_cycle` would
+change D-24 production behaviour, which §7.3 forbids. Two tests hold the pair of
+claims together, and neither may be dropped:
+
+- `tests/test_idempotency_cases.py::test_direct_classifier_only_list_matches_the_unchanged_strict_validator`
+  — the list cannot drift from what the validator actually refuses;
+- `tests/test_idempotency_conformance.py::test_direct_classifier_only_cases_are_refused_by_the_strict_validator`
+  — each one really is refused before the classifier, which is the rejection
+  evidence.
+
+Recorded in the authorization as the owner's acceptance of 27 November 2026
+(§9 criterion 5, closing note).
 
 A record naming a `source_id` other than `synthetic.fx` is still a permanent
 `contract_violation` from `pipeline.build_envelope`: Option B settled the shared
@@ -213,6 +247,13 @@ any outbound network access, any credential, restart-safe deduplication,
 acknowledgement or replay, the distribution mechanism, and any capability
 activation. **All four capability gates remain closed**, and **A-4 fault
 injection is not exercised**, so the 3.3-S exit is not reached.
+
+`infra/testing/fake_provider/` is the **test-only home created for A-4** (§7.1).
+It is a scaffold: a deterministic script of outcomes with **no transport, no
+network and no real provider**, outside the ingestion build context, and
+**nothing imports it**. Criterion 11 asserts that it exists, that it is outside
+that context and that it has acquired no transport — the three together are what
+keep "A-4 unexercised" an assertion rather than an assumption.
 
 ## Not in this component
 
