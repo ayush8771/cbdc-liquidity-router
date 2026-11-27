@@ -69,6 +69,7 @@ from .envelope import build_fx_event, fx_payload
 from .plausibility import PlausibilityGuard
 from .sink import ServiceSink
 from .status import SourceStatus
+from .validation import EnvelopeInvalid, validate_fx_envelope
 
 # The reason code the `source_id` refusal carries. Named so that a log line and
 # a metric label say which unresolved item stopped the path, not merely that
@@ -87,6 +88,20 @@ SOURCE_ID_UNRESOLVED = "adapter_source_id_not_representable_in_envelope"
 # and lose every later item in the batch **with no counter moved at all** —
 # exactly the silent loss AD-5 §3.7 and acceptance criterion 14 forbid.
 SINK_UNAVAILABLE = "sink_unavailable"
+
+# The reason code a **schema-invalid envelope** carries. AD-5 §3.4 puts
+# validation at step 3 and deduplication at step 4, and acceptance criterion 5a
+# requires an invalid envelope to be "rejected at **validation, before** the
+# classifier sees it".
+#
+# `LatestStore.apply` validates with this same function, but it is the **sink**,
+# which AD-5 §3.4 reaches only at step 5 — so relying on it alone put validation
+# after classification. A normalized value can be a decimal string the
+# plausibility guard parses and the builder accepts while AD-4 §4 forbids its
+# spelling (`02.200000`, a leading zero), so the envelope reaching the index
+# invalid is a real path and not a hypothetical one. It is **item-level**: one
+# badly spelled value does not discard the response or fail the adapter.
+ENVELOPE_SCHEMA_INVALID = "envelope_schema_invalid"
 
 
 def admit(record: SourceRecord, observation: NormalizedObservation) -> None:
@@ -170,9 +185,14 @@ class SourcePipeline:
         2. **plausibility**, on the normalized value, so a quarantined value
            never becomes an envelope that must then be withheld;
         3. **build**, by the unchanged `envelope.py`;
-        4. **classify** (C-b, D, C-a), which needs the built envelope because
+        4. **validate** strictly, by the unchanged `validation.py` — AD-5 §3.4
+           step 3, and **before** the classifier (criterion 5a). The store
+           validates again at step 5 and neither side trusts the other's
+           verdict (AD-4 §6), but the sink is reached too late to keep an
+           invalid envelope out of the `event_id` index;
+        5. **classify** (C-b, D, C-a), which needs the built envelope because
            `event_id` and `payload_sha256` are its fields;
-        5. **publish** only what came out `accepted`.
+        6. **publish** only what came out `accepted`.
         """
         record, result = self.record, AdapterRunResult()
         observations: Sequence[NormalizedObservation] = adapter.produce()
@@ -201,6 +221,18 @@ class SourcePipeline:
                                        retrieved_at_ms=retrieved_at_ms)
             except AdapterFault as fault:
                 self._fault(adapter, sink, result, fault, now_ms=retrieved_at_ms)
+                continue
+
+            # --- strict validation, before the classifier (AD-5 §3.4 step 3)
+            try:
+                validate_fx_envelope(event)
+            except EnvelopeInvalid:
+                # The reason names the breach class, not the payload: AD-1 §3.4
+                # permits counters by reason and nothing more.
+                self._fault(adapter, sink, result,
+                            AdapterFault(FaultClass.ITEM_INVALID, ENVELOPE_SCHEMA_INVALID,
+                                         source_id=record.source_id),
+                            now_ms=retrieved_at_ms)
                 continue
 
             # The builder's own AD-4 §6 verdict, e.g. FUTURE_SOURCE_TIMESTAMP.
@@ -244,9 +276,25 @@ class SourcePipeline:
                 result.published += 1
                 self.status.record_success(retrieved_at_ms)
             else:
-                # The store withheld it by its own AD-1 §3.4 rules (late, or a
-                # duplicate of the current value). Counted, never silent.
-                result.duplicates += 1
+                # The store withheld it by its own AD-1 §3.4 ordering rule.
+                # Counted as **late**, which is what AD-5 §8.3 calls it: "not
+                # current; counted as late, not as an error". It is **not** a
+                # `D`: `result.duplicates` is the classifier's duplicate outcome
+                # (criterion 5), and borrowing it here reported a deduplication
+                # verdict for an event the classifier had accepted.
+                #
+                # Lateness is the only refusal still reachable here. The three
+                # other `apply` refusals are now unreachable from this path: the
+                # invalid case is rejected above by the same validator, the
+                # quarantined case is diverted above, and the store's duplicate
+                # case needs an identical envelope already current, which
+                # `classify` would have returned as `D`. A store whose current
+                # value came from another writer could still refuse as a
+                # duplicate; `apply` returns a bool and D-24's store is
+                # unchanged by rule, so this path cannot distinguish that case,
+                # and it is counted as withheld-and-not-current either way.
+                result.late += 1
+                result.reasons.append("late")
 
         # The silence criterion, which no failure reports (AD-5 §9.2).
         self.status.tick(retrieved_at_ms)

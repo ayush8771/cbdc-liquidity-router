@@ -378,6 +378,9 @@ class AdapterRunResult:
     quarantined: int = 0
     rejected: int = 0
     duplicates: int = 0
+    # A store refusal on ordering grounds (AD-5 §8.3), kept apart from
+    # `duplicates`, which is the classifier's `D` outcome (criterion 5).
+    late: int = 0
     collisions: int = 0
     conflicts: int = 0
     reasons: list = field(default_factory=list)

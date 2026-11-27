@@ -60,7 +60,7 @@ EURUSD = ("EUR", "USD", "mid")
 # stated over this tuple, so an outcome added without a counter fails the test
 # rather than disappearing (AD-5 §3.7).
 OUTCOME_COUNTERS = ("published", "quarantined", "rejected", "duplicates",
-                    "collisions", "conflicts")
+                    "collisions", "conflicts", "late")
 
 
 def accounted(result: AdapterRunResult) -> int:

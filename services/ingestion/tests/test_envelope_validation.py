@@ -123,11 +123,16 @@ def test_a_null_source_timestamp_with_a_non_none_basis_is_invalid(envelope_valid
 
 
 def test_invalid_envelopes_never_reach_the_classifier(event):
-    """The ordering claim, asserted through the pipeline rather than assumed.
+    """The **store half** of the ordering claim: `LatestStore.apply` validates
+    before it stores, so an invalid envelope is counted `rejected` and never
+    becomes current.
 
-    `LatestStore.apply` validates **before** anything else, so an invalid
-    envelope is counted `rejected` and never becomes current — and the
-    classifier in `dedup.py` is never consulted for it.
+    This asserts the store, not the service path: the `DedupIndex` below is a
+    fresh one that nothing consults, so it cannot show what the pipeline's own
+    index did. The service-path ordering — validation before
+    `DedupIndex.classify` — is asserted in
+    `test_pipeline_accounting.py::test_a_schema_invalid_envelope_never_enters_the_dedup_index`,
+    which runs a real `SourcePipeline` and inspects *its* index.
     """
     from cbdc_ingestion.dedup import DedupIndex
     from cbdc_ingestion.store import LatestStore

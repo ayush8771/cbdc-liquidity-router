@@ -33,7 +33,7 @@ from .conftest import SEED, START_MS
 
 EURUSD = ("EUR", "USD", "mid")
 OUTCOME_COUNTERS = ("published", "quarantined", "rejected", "duplicates",
-                    "collisions", "conflicts")
+                    "collisions", "conflicts", "late")
 
 
 def accounted(result: AdapterRunResult) -> int:
@@ -226,7 +226,8 @@ def test_a_store_refusal_is_counted_not_silent(record):
         sink, retrieved_at_ms=START_MS + 2000)
     assert_conserved(late)
     assert late.published == 0
-    assert late.duplicates == 1, "a store refusal must move a counter"
+    assert late.late == 1, "a store refusal must move a counter"
+    assert late.duplicates == 0, "and not the classifier's duplicate counter (AD-5 §8.3)"
     assert sink.store.counters()["late"] == 1
 
 
@@ -395,3 +396,61 @@ def test_forget_does_not_withdraw_a_kept_first_arrival(record):
     assert pipeline.dedup.forget({"event_id": "11111111-1111-1111-1111-111111111111"}) is False
     assert len(pipeline.dedup) == 1
     assert pipeline.dedup.classify(first, START_MS)[0] != "accepted"
+
+
+# --------------------------------------- ordering: validation before the index
+def test_a_schema_invalid_envelope_never_enters_the_dedup_index(record):
+    """**AD-5 §3.4 steps 3 and 4, and criterion 5a's "before the classifier".**
+
+    `02.200000` is 2.2 as a `Decimal`, so it is inside the record's plausibility
+    range and the builder emits `validation.status == "validated"` for it. But
+    AD-4 §4 forbids a leading zero, so `validate_fx_envelope` rejects it.
+
+    If strict validation runs only inside `LatestStore.apply` — i.e. **after**
+    `DedupIndex.classify` — the invalid envelope is recorded as a first arrival
+    in the `event_id` index before anything validates it, and the index then
+    asserts that an event was seen which no consumer can ever receive. The
+    assertion is on the index, not on a counter, because the index is the state
+    that outlives the cycle.
+    """
+    pipeline = SourcePipeline(record, seed=SEED, now_ms=START_MS)
+    sink = ServiceSink()
+    result = pipeline.run_cycle(_ScriptedAdapter(["02.200000"]), sink,
+                                retrieved_at_ms=START_MS)
+    assert_conserved(result)
+    assert result.published == 0
+    assert len(pipeline.dedup) == 0, "an invalid envelope was recorded as a first arrival"
+    assert len(sink.store.events()) == 0
+
+
+def test_a_schema_invalid_envelope_is_rejected_not_counted_a_duplicate(record):
+    """The same item's accounting: a **rejection** with a reason, never a `D`.
+
+    Counting it on `duplicates` would report a deduplication outcome for an
+    envelope the classifier must never have seen.
+    """
+    result = SourcePipeline(record, seed=SEED, now_ms=START_MS).run_cycle(
+        _ScriptedAdapter(["02.200000"]), ServiceSink(), retrieved_at_ms=START_MS)
+    assert result.duplicates == 0
+    assert result.rejected == 1
+    assert [n for n in OUTCOME_COUNTERS if getattr(result, n)] == ["rejected"]
+
+
+def test_a_late_event_is_counted_late_and_not_as_a_duplicate(record):
+    """**AD-5 §8.3:** an older `source_timestamp` is "**not current**; counted as
+    **late**, not as an error" — and a late arrival is not a duplicate. `D` is
+    the classifier's duplicate outcome (criterion 5); a store refusal on
+    ordering grounds is a different outcome and must not borrow its counter.
+    """
+    pipeline = SourcePipeline(record, seed=SEED, now_ms=START_MS)
+    sink = ServiceSink()
+    pipeline.run_cycle(_ScriptedAdapter([{"source_timestamp_ms": START_MS}]), sink,
+                       retrieved_at_ms=START_MS)
+    late = pipeline.run_cycle(
+        _ScriptedAdapter([{"source_timestamp_ms": START_MS - 2000, "sequence": 7}]),
+        sink, retrieved_at_ms=START_MS + 2000)
+    assert_conserved(late)
+    assert late.published == 0
+    assert late.duplicates == 0, "a late event is not a deduplication duplicate"
+    assert late.late == 1
+    assert sink.store.counters()["late"] == 1
