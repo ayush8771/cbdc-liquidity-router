@@ -1,0 +1,107 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "case_id": "A4-OK-01",
+   "expect": "accepted",
+   "status": 200,
+   "content_type": "application/json",
+   "body": "{\"protocol_version\": 1, \"items\": [{\"subject\": \"EURUSD\", \"value\": \"1.0800\"}]}",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-RL-01",
+   "expect": "rate_limited",
+   "status": 429,
+   "content_type": "text/plain",
+   "body": "",
+   "retry_after": "7",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-RL-02",
+   "expect": "rate_limited",
+   "status": 429,
+   "content_type": "text/plain",
+   "body": "",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-RL-03",
+   "expect": "rate_limited",
+   "status": 429,
+   "content_type": "text/plain",
+   "body": "",
+   "retry_after": "soon",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-5XX-01",
+   "expect": "provider_unavailable",
+   "status": 503,
+   "content_type": "text/plain",
+   "body": "",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-AUTH-01",
+   "expect": "auth_failure",
+   "status": 401,
+   "content_type": "text/plain",
+   "body": "",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-REDIR-01",
+   "expect": "contract_violation",
+   "status": 302,
+   "content_type": "text/plain",
+   "body": "",
+   "location": "/elsewhere",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-CT-01",
+   "expect": "contract_violation",
+   "status": 200,
+   "content_type": "text/html",
+   "body": "<p>not json</p>",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-MAL-01",
+   "expect": "contract_violation",
+   "status": 200,
+   "content_type": "application/json",
+   "body": "{\"items\": [ oops",
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-BIG-01",
+   "expect": "contract_violation",
+   "status": 200,
+   "content_type": "application/json",
+   "body_repeat": {
+    "unit": "x",
+    "count": 100000
+   },
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-TRUNC-01",
+   "expect": "provider_unavailable",
+   "status": 200,
+   "content_type": "application/json",
+   "body": "{\"items\": [",
+   "truncated": true,
+   "chunk_bytes": 256
+  },
+  {
+   "case_id": "A4-CLOSE-01",
+   "expect": "transient_network",
+   "network_error": "closed_on_connect",
+   "chunk_bytes": 256
+  }
+ ],
+ "note": "Wire-level descriptions only; classification is owned by cbdc_ingestion.adapters (response.py, retry.py)."
+}

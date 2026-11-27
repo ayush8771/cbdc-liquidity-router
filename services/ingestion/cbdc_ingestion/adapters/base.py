@@ -167,6 +167,15 @@ class Adapter(ABC):
         # the claim, and the event is how the loser learns the winner finished.
         self._cleanup_claimed = False
         self._cleanup_done = threading.Event()
+        # Faults recorded since the last drain, for the service to account
+        # (AD-5 §7.5: "every fault increments a counter and is visible").
+        # Without this, a fault raised inside `_produce` was classified by
+        # `_record_fault` and then **lost to the accounting**: `produce()`
+        # swallows it to keep one bad poll from ending the service tick, so the
+        # internal status machine never saw it and no outage criterion could
+        # fire from a transport fault. The queue is the hand-off, and it holds
+        # reason codes and classes only — never a payload (AD-1 §3.4).
+        self._fault_log: list = []
 
     # ------------------------------------------------------------------- state
     @property
@@ -345,6 +354,7 @@ class Adapter(ABC):
         """
         with self._state_lock:
             self._last_fault = fault
+            self._fault_log.append(fault)
             context = self._context
         if context is not None:
             context.metrics.increment("adapter_faults", 1, source_id=self.source_id,
@@ -356,6 +366,21 @@ class Adapter(ABC):
         if self.state in ("starting", "running"):
             return self._transition("degraded")
         return self.state
+
+    def drain_faults(self) -> tuple:
+        """The faults recorded since the last drain, and clears the queue.
+
+        The service calls this immediately after `produce()`, so a fault the
+        adapter classified but could not raise — `produce()` swallows faults
+        deliberately, to keep one bad poll from ending the whole tick — still
+        reaches a counter and the internal status machine. Draining rather than
+        reading keeps it exactly-once: two callers cannot both account the same
+        fault, and a fault cannot be accounted twice across cycles.
+        """
+        with self._state_lock:
+            drained = tuple(self._fault_log)
+            self._fault_log = []
+        return drained
 
     # ----------------------------------------------------- subclass hook points
     def _start(self, context: AdapterContext) -> None:
@@ -383,4 +408,11 @@ class AdapterRunResult:
     late: int = 0
     collisions: int = 0
     conflicts: int = 0
+    # Faults the adapter classified during `produce()` and could not raise,
+    # drained and accounted by the service (A-4). Kept apart from `rejected`,
+    # which counts **items** the service itself refused: a transport fault
+    # rejects no item, so adding it to `rejected` would report an item loss that
+    # did not happen.
+    faults: int = 0
+    item_faults: int = 0
     reasons: list = field(default_factory=list)

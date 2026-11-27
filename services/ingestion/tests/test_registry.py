@@ -253,6 +253,7 @@ def test_a_timestamp_basis_mismatch_is_a_startup_failure():
 # --------------------------------------------------- the contract suite is complete
 def test_every_adapter_subclass_is_in_the_shared_contract_suite():
     """A-1: an adapter cannot be added without joining the one shared suite."""
+    import cbdc_ingestion.adapters.simulated_fx  # noqa: F401 - registers the subclass
     import cbdc_ingestion.adapters.synthetic_fx  # noqa: F401 - registers the subclass
 
     # Compared by class, not by factory: the suite's entries are callables, and
