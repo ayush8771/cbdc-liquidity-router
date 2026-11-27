@@ -1,0 +1,19 @@
+{
+  "allocations_version": "1.0",
+  "note": "AD-12 §3.1 mitigation 1, coordinated seed allocation (authorization §6.1). READ-ONLY at runtime and NEVER written by the process: the container has a read-only root filesystem, no volume and no published port (infra/compose.observations.yaml), so a runtime-written ledger is impossible and a reviewed file in source control is the only form the record can take. Changing an allocation is a reviewed commit, which is the audit trail. The env-configured D-24 generator (CBDC_INGESTION_SEED, default 20261125) is EXEMPT and deliberately absent: it is not registry-selected, and an unscoped check would refuse to start the approved D-24 slice.",
+  "allocations": [
+    {
+      "seed": 20261127,
+      "source_id": "synthetic.fx",
+      "subjects": [
+        ["AED", "MXN", "mid"],
+        ["EUR", "USD", "mid"],
+        ["GBP", "PHP", "mid"],
+        ["USD", "INR", "mid"]
+      ],
+      "period": "2026-11-27/open",
+      "active": true,
+      "intent": "The Phase 3.3-A synthetic FX adapter path. It shares the D-24 generator's source_id under the owner's Option B decision and is mutually exclusive with it, so only one configuration is ever active for synthetic.fx. The seed is deliberately NOT the generator's default 20261125, which holds no allocation and needs none: a distinct seed keeps the two configurations' event_ids distinct, since the seed is a C-1 derivation input and the source_id is not."
+    }
+  ]
+}

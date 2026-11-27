@@ -1,0 +1,91 @@
+{
+  "description": "Pinned adapter-path outputs for acceptance criterion 4. Change only by a reviewed commit.",
+  "seed": 20261127,
+  "start_ms": 1764028800000,
+  "events": [
+    {
+      "pair": "AED/MXN",
+      "source_timestamp": "2025-11-25T00:00:00.000Z",
+      "rate": "1.105398",
+      "event_id": "ea1b0a88-3104-5a5f-a0b1-c3ae25949967",
+      "payload_sha256": "1412a55a5ad69ef7c55a21c1c7fa3d5c2203ee7ef1c47cc78c2eb70a8361bebf"
+    },
+    {
+      "pair": "EUR/USD",
+      "source_timestamp": "2025-11-25T00:00:00.500Z",
+      "rate": "2.207286",
+      "event_id": "3666d7e2-dab0-5dd1-9fc7-d9a504a5b9b1",
+      "payload_sha256": "a2f8e553023c942eeafc2063610d7d011fa34d9f8d8c19ad6d8c407844861050"
+    },
+    {
+      "pair": "GBP/PHP",
+      "source_timestamp": "2025-11-25T00:00:01.000Z",
+      "rate": "3.295387",
+      "event_id": "74b8314d-9548-5536-bf5a-55ad0a554480",
+      "payload_sha256": "4f4e757ccb8e6af24bb06a4268be928c073e97dd3803b4e47da44cf5dad7c4fe"
+    },
+    {
+      "pair": "USD/INR",
+      "source_timestamp": "2025-11-25T00:00:01.500Z",
+      "rate": "1.230261",
+      "event_id": "f2007d0a-a669-598e-a364-ba38dcf5d49b",
+      "payload_sha256": "26c8d3bde508e43b7df6232a8852c6c5fb91109c26a2e27734b1b51cdef3e5f6"
+    },
+    {
+      "pair": "AED/MXN",
+      "source_timestamp": "2025-11-25T00:00:02.000Z",
+      "rate": "1.096065",
+      "event_id": "3da76e12-b690-5e07-aab8-6cb6083f8c21",
+      "payload_sha256": "237685ac96e2117ca560a1b1475305fbd5a17d0355187bd02aa17919c8257757"
+    },
+    {
+      "pair": "EUR/USD",
+      "source_timestamp": "2025-11-25T00:00:02.500Z",
+      "rate": "2.202821",
+      "event_id": "0ed6c871-640c-5d81-b935-bbbfc6cbb7e8",
+      "payload_sha256": "0385eedde9c1f285e883cfdddd96a97e3b72d4ff84fe78e67d67ce6396caee9b"
+    },
+    {
+      "pair": "GBP/PHP",
+      "source_timestamp": "2025-11-25T00:00:03.000Z",
+      "rate": "3.294114",
+      "event_id": "1558e8c2-819c-5fc4-b50f-669d9d638809",
+      "payload_sha256": "151e74caf4378d483b258eb353770b7e5cc756259031e49672f9f9255c121c16"
+    },
+    {
+      "pair": "USD/INR",
+      "source_timestamp": "2025-11-25T00:00:03.500Z",
+      "rate": "1.226589",
+      "event_id": "a3d2f025-9cdf-5142-a2e9-b3ff40dbf66e",
+      "payload_sha256": "2a3ffc2e9a4031efd037d720344e4042b4182b9f5e385e6e3a0b32651d330644"
+    },
+    {
+      "pair": "AED/MXN",
+      "source_timestamp": "2025-11-25T00:00:04.000Z",
+      "rate": "1.099048",
+      "event_id": "4cea7d53-b26f-5743-b2c7-8f3b14fc85c5",
+      "payload_sha256": "d3d890608cb2d2852632312d5ec0304caf5d038477b1e92f903ebc77964bd1fb"
+    },
+    {
+      "pair": "EUR/USD",
+      "source_timestamp": "2025-11-25T00:00:04.500Z",
+      "rate": "2.199764",
+      "event_id": "c5584bad-f08b-5fc9-b0c1-052e742641f9",
+      "payload_sha256": "552be2f594990fc648237525515c767971d844f0943f86799485012c88b530fc"
+    },
+    {
+      "pair": "GBP/PHP",
+      "source_timestamp": "2025-11-25T00:00:05.000Z",
+      "rate": "3.302168",
+      "event_id": "39d09f6b-a426-513f-93a5-bab9622c0e8d",
+      "payload_sha256": "44507c14ffcb82386bb068260ee2419c7a2d58e1ac3d601b1d7caf8190866b87"
+    },
+    {
+      "pair": "USD/INR",
+      "source_timestamp": "2025-11-25T00:00:05.500Z",
+      "rate": "1.237060",
+      "event_id": "0686be7b-5c26-5e79-a523-4fc69a2eeb7f",
+      "payload_sha256": "c29b4dd9ecebd9d9f1317a75ec301f145c0ee1aeab86e471f2510cf24f17ba9e"
+    }
+  ]
+}

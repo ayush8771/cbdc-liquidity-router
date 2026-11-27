@@ -11,10 +11,25 @@ provider URL setting, because the component contacts nothing (AD-1 §1, D-24).
 | `CBDC_INGESTION_HOST` | `127.0.0.1` | Bind address. The container form sets `0.0.0.0` on its internal network only |
 | `CBDC_INGESTION_PORT` | `8300` | Bind port. Never published to the host (AD-1 §3.6) |
 | `CBDC_INGESTION_LOG_LEVEL` | `INFO` | Root log level for the process |
+| `CBDC_INGESTION_SOURCES` | *(empty)* | Phase 3.3-A: registry `source_id`s to run on the **adapter** path. **Empty by default, which selects nothing** |
+| `CBDC_INGESTION_REGISTRY_PATH` | *(packaged)* | Override for `cbdc_ingestion/registry/sources.json`, for tests |
+| `CBDC_INGESTION_ALLOCATIONS_PATH` | *(packaged)* | Override for `cbdc_ingestion/registry/seed_allocations.json`, for tests |
 
 The prefix matches the Phase 2 services' `CBDC_` convention. An unparsable value
 is a startup failure, not a silent default: a component that quietly ran on a
 different seed would make its own events irreproducible.
+
+**`CBDC_INGESTION_SOURCES` is empty by default, and that is the D-24
+preservation** (authorization §7.2, §6.1). With it empty, no registry record
+selects the adapter path, the service runs the env-configured generator exactly
+as it does today, and the registry and allocation files are **not read at all**.
+The D-24 generator takes its seed from `CBDC_INGESTION_SEED` and is exempt from
+the registry and seed-allocation checks; an unscoped refusal would refuse to
+start the approved slice.
+
+The two path settings exist so tests can point at a fixture registry without
+writing to the packaged one, which is **read-only at runtime** and never written
+by the process (AD-12 §3.1).
 """
 from __future__ import annotations
 
@@ -34,6 +49,16 @@ class Settings:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     log_level: str = "INFO"
+    # Phase 3.3-A. Empty selects nothing, which keeps the D-24 generator the
+    # service default (authorization §7.2).
+    sources: tuple = ()
+    registry_path: str = ""
+    allocations_path: str = ""
+
+    @property
+    def uses_adapter_path(self) -> bool:
+        """Whether any registry record was selected. False by default."""
+        return bool(self.sources)
 
 
 def _int_env(env, name: str, default: int) -> int:
@@ -58,10 +83,17 @@ def from_environment(env=None) -> Settings:
     case_id = (env.get("CBDC_INGESTION_CASE_ID") or "normal").strip() or "normal"
     if len(case_id) > 200:
         raise ValueError("CBDC_INGESTION_CASE_ID must be at most 200 characters (AD-4 §3.2)")
+    raw_sources = (env.get("CBDC_INGESTION_SOURCES") or "").strip()
+    sources = tuple(s.strip() for s in raw_sources.split(",") if s.strip())
+    if len(set(sources)) != len(sources):
+        raise ValueError("CBDC_INGESTION_SOURCES must not name a source_id twice")
     return Settings(
         seed=seed,
         case_id=case_id,
         host=(env.get("CBDC_INGESTION_HOST") or DEFAULT_HOST).strip() or DEFAULT_HOST,
         port=port,
         log_level=(env.get("CBDC_INGESTION_LOG_LEVEL") or "INFO").strip().upper() or "INFO",
+        sources=sources,
+        registry_path=(env.get("CBDC_INGESTION_REGISTRY_PATH") or "").strip(),
+        allocations_path=(env.get("CBDC_INGESTION_ALLOCATIONS_PATH") or "").strip(),
     )

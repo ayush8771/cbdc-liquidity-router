@@ -9,14 +9,22 @@ passed**, and **no milestone 3.2–3.7 is authorized.**
 
 This component generates **seeded synthetic FX observations** and serves the
 latest validated one per currency pair over a private HTTP endpoint. It is a
-local demonstration producer: there is no provider, no adapter, no outbound
-connection and no credential anywhere in it.
+local demonstration producer: there is **no provider, no outbound connection and
+no credential** anywhere in it.
+
+Since Phase 3.3-A it also holds a **synthetic adapter layer** (`adapters/`,
+below), authorized by `docs/PHASE3_33A_AUTHORIZATION.md` v1.3 §7. That layer is
+**synthetic-only and local-only**, and it is **not** the live-adapter placement
+of AD-1 §4, which stays unauthorized. The D-24 generator remains the default
+path and is unchanged.
 
 ## What it is not
 
-- **Not a live data feed.** Every value is generated locally from a seed. Live
-  adapters are placed inside this component by AD-1 §4, which is **not
-  authorized**, and each provider needs Gate 3 first.
+- **Not a live data feed.** Every value is generated locally from a seed. The
+  3.3-A adapter layer is **synthetic-only**: its one adapter wraps that local
+  generator and has **no transport**. The **live**-adapter placement of AD-1 §4
+  remains **not authorized**, and each real provider needs **Gate 3** first,
+  which does not exist — all four capability gates are **CLOSED**.
 - **Not an input to routing.** Every envelope is `usage: display_only`, and no
   observation may influence an engine request or result (AD-6 §1). The rates are
   deliberately unrealistic so that no reader can mistake one for a market quote.
@@ -139,6 +147,113 @@ The backend's TypeScript implementation must reproduce the same strings and
 digests.
 
 Every timing test drives a manual clock, so the suite needs no real waiting.
+
+## The Phase 3.3-A adapter contract, as implemented
+
+Authorized by `docs/PHASE3_33A_AUTHORIZATION.md` v1.3 §7, with the exclusions of
+§8 and the acceptance criteria of §9. **Synthetic sources only**, local-only, and
+**additive**: the D-24 generator above is unchanged and remains the default.
+
+| Module | What it is |
+|---|---|
+| `adapters/base.py` | AD-5 §3.2's operations and §3.3's state machine. `failed_permanent` is reached only by a permanent fault and left by nothing |
+| `adapters/context.py` | The **closed** field set an adapter is given: injected clock, sink, cancellation, metrics, credential resolver. Never a database handle, an inference client or a filesystem writer |
+| `adapters/faults.py` | AD-5 §7.1's taxonomy, partitioned into permanent, recoverable and item-level |
+| `adapters/registry.py` | AD-5 §2.2's record as version-controlled configuration, A-2's startup validation and AD-12 §3.1's collision safeguards |
+| `adapters/synthetic_fx.py` | The first adapter. Wraps the generator's **pure functions**, so values cannot drift between the two paths |
+| `sink.py` | AD-5 §3.6's three channels. `observations` is the existing `LatestStore`; `quarantine` and `faults` are **bounded counters, not queues** |
+| `pipeline.py` | The service-side steps around an adapter (AD-5 §3.4) |
+| `registry/sources.json`, `registry/seed_allocations.json` | The one synthetic record and the seed allocations. **Read-only at runtime**, never written by the process, inside the package where the existing `COPY` already carries them — no Dockerfile, `.dockerignore` or Compose change |
+
+### The D-24 generator path is the default, and is exempt
+
+`CBDC_INGESTION_SOURCES` is **empty by default**, which selects nothing. With it
+empty the registry and allocation files are **not read at all**, the adapters
+package is not imported by the default path, and the events are byte-identical.
+
+### One `source_id`, two mutually exclusive configurations
+
+By the owner's decision of **27 November 2026 (Option B, Phase 3.3-A only)**, the
+D-24 generator and the registry-selected adapter **both** use
+`source_id = synthetic.fx`, **provided they are mutually exclusive**: only one
+generator configuration may be active for that `source_id` at any time.
+Selecting a record **replaces** the generator rather than running beside it, and
+two selected records sharing a `source_id` is a startup failure.
+
+The record **does not register the D-24 generator**, which stays
+env-configured (`CBDC_INGESTION_SEED`), unregistered, without an allocation entry
+and exempt. The two are told apart by their **seed** — a C-1 derivation input —
+and not by their `source_id`, which is not one.
+
+This is why **no contract moved**. `/v1/latest` pins `source_id` to
+`{"const": "synthetic.fx"}`, so the adapter's body and envelopes validate against
+the **unchanged** schemas and the unchanged `validation.py`;
+`test_adapter_integration.py` asserts exactly that. The decision authorizes **no**
+envelope, schema, backend, frontend or `event_id` derivation change.
+
+The generator takes its seed from `CBDC_INGESTION_SEED` and has **no registry
+record and no allocation entry**. It is exempt from the registry and
+seed-allocation checks, and must be: an unscoped refusal would refuse to start
+the approved slice. `tests/test_seed_allocation.py` asserts both halves — that it
+still starts, and that the default path never loads the registry.
+
+### The three modules the earlier draft listed as missing are implemented
+
+An earlier revision of this file said `dedup.py`, `status.py` and the
+plausibility bounds were "not implemented yet". **They are implemented**, and
+each has its §9 suite passing. The stale list is corrected here rather than left
+to mislead a reviewer.
+
+| Module | Criteria | Suite |
+|---|---|---|
+| `dedup.py` — AD5-Q1's two keys and AD5-Q8's outcomes in the order C-b, D, C-a | 5, 5a | `tests/test_idempotency.py`, `tests/test_envelope_validation.py` |
+| `status.py` — AD-5 §9.2's internal status machine, in process only | 6 | `tests/test_status_machine.py` |
+| `plausibility.py` — quarantine, never reject and never clamp | 16 | `tests/test_plausibility.py` |
+
+A redelivery on the adapter path is therefore classified by AD-5 §8.2's
+classifier, not merely by the store's AD-1 §3.4 ordering and duplicate rules.
+
+### Nine criterion 5 cases reach the classifier directly, by design
+
+`pipeline.py` validates with the **unchanged** D-24 strict validator
+(`validation.py`), which refuses envelopes that are schema-valid but foreign to
+this slice. Nine of criterion 5's cases are exactly that, so they **cannot reach
+the classifier through `run_cycle`** and are fed to `dedup.py` directly:
+
+`g2`, `h`, `i`, `j`, `k`, `k2`, `l`, `m`, `r` — listed as
+`DIRECT_CLASSIFIER_ONLY` in `tests/idempotency_cases.py`.
+
+**This is accepted, not a gap.** Criterion 5 defines its inputs as *schema-valid
+envelopes*, which these are, so they remain required cases. Strict validation is
+**deliberately preserved**: weakening it to route these through `run_cycle` would
+change D-24 production behaviour, which §7.3 forbids. Two tests hold the pair of
+claims together, and neither may be dropped:
+
+- `tests/test_idempotency_cases.py::test_direct_classifier_only_list_matches_the_unchanged_strict_validator`
+  — the list cannot drift from what the validator actually refuses;
+- `tests/test_idempotency_conformance.py::test_direct_classifier_only_cases_are_refused_by_the_strict_validator`
+  — each one really is refused before the classifier, which is the rejection
+  evidence.
+
+Recorded in the authorization as the owner's acceptance of 27 November 2026
+(§9 criterion 5, closing note).
+
+A record naming a `source_id` other than `synthetic.fx` is still a permanent
+`contract_violation` from `pipeline.build_envelope`: Option B settled the shared
+identity, and it authorized no `envelope.py` change.
+
+**Also out of scope, and not claimed:** any real provider or contact with one,
+any outbound network access, any credential, restart-safe deduplication,
+acknowledgement or replay, the distribution mechanism, and any capability
+activation. **All four capability gates remain closed**, and **A-4 fault
+injection is not exercised**, so the 3.3-S exit is not reached.
+
+`infra/testing/fake_provider/` is the **test-only home created for A-4** (§7.1).
+It is a scaffold: a deterministic script of outcomes with **no transport, no
+network and no real provider**, outside the ingestion build context, and
+**nothing imports it**. Criterion 11 asserts that it exists, that it is outside
+that context and that it has acquired no transport — the three together are what
+keep "A-4 unexercised" an assertion rather than an assumption.
 
 ## Not in this component
 
