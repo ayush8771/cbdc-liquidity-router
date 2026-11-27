@@ -240,24 +240,114 @@ def test_the_transport_check_actually_catches_a_transport():
     assert not any(r in TRANSPORT_MODULES or r in FORBIDDEN_PACKAGES for r in roots)
 
 
-def test_nothing_in_the_repository_imports_the_fake_provider():
-    """A-4 unexercised in practice: no suite drives a fault through it."""
-    this_file = Path(__file__).resolve()
-    # Build and environment trees hold no first-party source and are large.
+# The only roots that may import the scaffold. Both are test-only and both are
+# proven excluded from the image: `services/ingestion/tests/` by the
+# `.dockerignore` allow-list asserted below, and `infra/` by lying outside the
+# build context entirely.
+IMPORT_ROOTS = (
+    SERVICE_ROOT / "tests",
+    REPO_ROOT / "infra" / "testing",
+)
+NEEDLES = ("import fake_provider", "from fake_provider", "testing.fake_provider")
+
+
+def _first_party_python():
+    """Every first-party Python file, excluding build and environment trees."""
     pruned = {"__pycache__", "node_modules", "venv", ".venv", "dist", "build", ".git"}
-    searched = [p for p in (REPO_ROOT / "services").rglob("*.py")
-                if pruned.isdisjoint(p.parts)]
-    searched += [p for p in (REPO_ROOT / "infra").rglob("*.py")
-                 if pruned.isdisjoint(p.parts)
-                 and not _within(p.resolve(), FAKE_PROVIDER.resolve())]
-    # This module names the needles in its own literals, so it is excluded; the
-    # scaffold's own files are excluded above because its package imports itself.
-    searched = [p for p in searched if p.resolve() != this_file]
-    assert searched
-    for path in searched:
+    found = []
+    for root in ("services", "infra", "src", "tests"):
+        base = REPO_ROOT / root
+        if base.is_dir():
+            found += [p for p in base.rglob("*.py") if pruned.isdisjoint(p.parts)]
+    return found
+
+
+def test_the_fake_provider_is_imported_only_from_declared_test_only_roots():
+    """**A-4 is now exercised, so the claim changes shape — it does not weaken.**
+
+    Through Phase 3.3-A this test asserted that *nothing* imported the scaffold,
+    which was the practical meaning of "A-4 unexercised". A-4 is exercised now,
+    so the suite necessarily imports it, and an assertion that nothing does
+    would have to be deleted. Deleting it would lose the property it was
+    protecting: that a test-only fault injector cannot become reachable from
+    shipped code.
+
+    So the property is restated **tighter** rather than dropped. The scaffold may
+    be imported from two declared test-only roots and from nowhere else — in
+    particular from no file under `services/ingestion/cbdc_ingestion/`, which is
+    the only tree the image copies. An import from anywhere else fails here, and
+    `test_the_production_package_imports_neither_the_scaffold_nor_the_bridge`
+    asserts the shipped tree directly as well, so the guarantee does not rest on
+    this list staying correct.
+    """
+    this_file = Path(__file__).resolve()
+    roots = tuple(r.resolve() for r in IMPORT_ROOTS)
+    offenders = []
+    for path in _first_party_python():
+        resolved = path.resolve()
+        if resolved == this_file or _within(resolved, FAKE_PROVIDER.resolve()):
+            continue  # this module names the needles; the package imports itself
+        if any(_within(resolved, root) for root in roots):
+            continue
         text = path.read_text(encoding="utf-8")
-        for needle in ("import fake_provider", "from fake_provider", "testing.fake_provider"):
-            assert needle not in text, f"{path} imports the scaffold: {needle}"
+        for needle in NEEDLES:
+            if needle in text:
+                offenders.append(f"{path}: {needle}")
+    assert offenders == [], (
+        "the test-only fake provider is imported outside the declared test-only "
+        f"roots {[str(r) for r in roots]}: {offenders}")
+
+
+def test_the_production_package_imports_neither_the_scaffold_nor_the_bridge():
+    """Asserted against the **shipped tree itself**, not against a root list.
+
+    `cbdc_ingestion/` is the one directory the Dockerfile copies, so this is the
+    assertion that matters for packaging: whatever the roots above say, no file
+    that enters the image may name the scaffold or the A-4 bridge. Checked
+    against `ast` import nodes as well as text, so a dynamic `importlib` string
+    is caught by the text pass and a real import by the node pass.
+    """
+    package = SERVICE_ROOT / "cbdc_ingestion"
+    modules = [p for p in package.rglob("*.py") if "__pycache__" not in p.parts]
+    assert modules, "no shipped module to check"
+    for path in modules:
+        text = path.read_text(encoding="utf-8")
+        for needle in NEEDLES + ("a4_demo", "import tests", "from tests"):
+            assert needle not in text, f"{path} names test-only code: {needle}"
+        for node in ast.walk(ast.parse(text)):
+            if isinstance(node, ast.Import):
+                roots = [alias.name.split(".")[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                roots = [(node.module or "").split(".")[0]] if node.level == 0 else []
+            else:
+                continue
+            for root in roots:
+                assert root not in ("fake_provider", "a4_demo", "tests"), \
+                    f"{path} imports {root}"
+
+
+def test_a_4_is_actually_exercised_by_the_suite():
+    """The other half of the change: the scaffold is no longer inert.
+
+    A-4's catalogue drives real faults through the real pipeline, so at least one
+    module under the test root must import the scaffold. Without this, the two
+    tests above would also pass if the A-4 exercise were quietly removed — which
+    is exactly the regression that would return the 3.3-S exit to unmet while
+    the suite stayed green.
+    """
+    tests_root = (SERVICE_ROOT / "tests").resolve()
+    importers = [p for p in tests_root.rglob("*.py")
+                 if p.resolve() != Path(__file__).resolve()
+                 and any(n in p.read_text(encoding="utf-8") for n in NEEDLES)]
+    assert importers, "no suite drives a fault through the fake provider"
+
+
+def test_the_bridge_is_outside_the_build_context_too():
+    """The A-4 bridge is test-only by **location**, like the scaffold."""
+    bridge = REPO_ROOT / "infra" / "testing" / "a4_demo"
+    assert bridge.is_dir() and (bridge / "bridge.py").is_file()
+    assert not _within(bridge.resolve(), CONTEXT.resolve())
+    assert violations(DOCKERFILE, DOCKERIGNORE, fake_provider=bridge) == []
 
 
 def test_the_tests_directory_is_inside_the_context_but_excluded_by_the_allow_list():

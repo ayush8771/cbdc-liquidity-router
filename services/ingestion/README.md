@@ -245,15 +245,110 @@ identity, and it authorized no `envelope.py` change.
 **Also out of scope, and not claimed:** any real provider or contact with one,
 any outbound network access, any credential, restart-safe deduplication,
 acknowledgement or replay, the distribution mechanism, and any capability
-activation. **All four capability gates remain closed**, and **A-4 fault
-injection is not exercised**, so the 3.3-S exit is not reached.
+activation. **All four capability gates remain closed.**
+
+## Phase 3.3-S: A-4 synthetic fault handling
+
+AD-5 §13's **A-4** asks for fault injection against a controllable fake
+provider. Phase 3.3-A could not do it: with no transport, four of the eight
+§7.1 fault classes were unreachable. A-4 is **now exercised**, through an
+**in-process fake-provider seam** — and with no network of any kind.
+
+| Module | What it adds |
+|---|---|
+| `adapters/simulation.py` | `SimulatedTimingProfile`, labelled **`SIMULATION_ONLY`** |
+| `adapters/transport.py` | The pull-only seam. One admitted kind, `in_process_simulation` |
+| `adapters/response.py` | §7.1's status classification and §7.3's whole-response rejection |
+| `adapters/retry.py` | §7.2's backoff with injected full jitter, `Retry-After`, §7.4's breaker |
+| `adapters/simulated_fx.py` | The adapter that drives a transport |
+| `infra/testing/fake_provider/` | The scaffold, now with the A-4 step vocabulary. Still no network |
+| `infra/testing/a4_demo/` | The bridge and the reproducible CLI demonstration |
+
+### The timings are simulation parameters, not AD-8 defaults
+
+**AD-8 §3.5's `poll` and `websocket` columns are unapproved** — the owner's
+approval of 26 November 2026 is bounded to the `synthetic` column. Every A-4
+timing therefore comes from a profile whose own label is `SIMULATION_ONLY`, and
+`tests/test_a4_simulation_params.py` asserts field by field that **no value
+coincides with the unapproved AD-8 number it would be mistaken for**, and that
+no such number appears as a literal in the module. The two approved synthetic
+values A-4 does use — 3 consecutive failures or 3 x the interval to outage, and
+the 2000 ms shutdown budget — are the existing ones in `status.py` and
+`base.py`, restated nowhere.
+
+### What the seam deliberately cannot become
+
+- **No network.** No module imports a socket, HTTP, TLS or subprocess module,
+  and none names a host, port or URL. Asserted against `ast` import nodes, not
+  prose (`tests/test_a4_faults.py`).
+- **One transport kind.** `AUTHORIZED_TRANSPORT_KINDS` is
+  `("in_process_simulation",)`, and a transport of any other kind — or one that
+  forgot to declare a kind — is **refused at attachment**. Extending that tuple
+  needs **AD-10**, A-9's **T-5 from inside the container including the egress
+  allowlist**, and, for anything resembling a real provider, **Gate 3**, which
+  does not exist.
+- **No implementation of a transport in the package.** The scripted provider is
+  in `infra/`, outside every build context. The production package never imports
+  it and it never imports the production package; they meet in a bridge that is
+  itself outside the context.
+- **No registry record selects the A-4 adapter.** `registry/sources.json` names
+  `adapter_id: synthetic_fx`, and `check_description` makes a mismatch a startup
+  failure, so the **service path cannot reach it**. The D-24 generator remains
+  the default, and `CBDC_INGESTION_SOURCES` is still empty.
+
+### The accounting gap A-4 closed
+
+`produce()` swallows faults on purpose, so that one bad poll cannot end the
+service tick. Before A-4 that also meant a fault reached **no counter and no
+status criterion**: a source could fail every poll and stay `ok`. Adapters now
+queue classified faults, `pipeline.run_cycle` drains the queue exactly once per
+cycle, and both AD-5 §9.2 outage criteria are reachable from a transport fault —
+independently, which `tests/test_a4_integration.py` asserts.
+
+`AdapterRunResult` gained `faults` and `item_faults`. They are **outside**
+criterion 14's conservation law, because the law is stated over what a cycle
+*produced* and neither of these corresponds to a produced observation;
+`tests/test_pipeline_accounting.py` asserts that exclusion on the live path
+rather than by comment.
+
+### Running the demonstration
+
+```bash
+python infra/testing/a4_demo/run_demo.py          # six scenarios, 30 checks
+python infra/testing/a4_demo/run_demo.py --json    # machine-readable, for a diff
+```
+
+Deterministic: every clock is a `ManualClock`, the jitter source is seeded, and
+the delivered values come from the unchanged generator's `rate_for`, so a fault
+scenario differs from a clean one in its **faults only**. It exits non-zero if
+any check fails, and `tests/test_a4_demo.py` runs it in the suite so it cannot
+rot.
+
+### What A-4 still does not cover
+
+The seam is in-process, so the **transport-level** half of A-4's catalogue is
+simulated rather than exercised against a real connection: TLS handshakes, DNS
+failures, socket resets, real read timeouts, HTTP redirect following, chunked
+transfer encoding and a genuine mid-flight connection close. Those need a
+transport, which needs AD-10, T-5 and Gate 3. `docs/PHASE3_A4_INTERFACE.md` §6
+lists them as the outstanding set, and the 3.3-S exit record must carry that
+list rather than claim A-4 complete.
 
 `infra/testing/fake_provider/` is the **test-only home created for A-4** (§7.1).
-It is a scaffold: a deterministic script of outcomes with **no transport, no
-network and no real provider**, outside the ingestion build context, and
-**nothing imports it**. Criterion 11 asserts that it exists, that it is outside
-that context and that it has acquired no transport — the three together are what
-keep "A-4 unexercised" an assertion rather than an assumption.
+It is a deterministic script of outcomes with **no transport, no network and no
+real provider**, outside the ingestion build context. Criterion 11 asserts that
+it exists, that it is outside that context and that it has acquired no
+transport.
+
+**Changed for Phase 3.3-S:** the scaffold is no longer inert, so the assertion
+that *nothing* imports it has been replaced by a **tighter** one rather than
+deleted. It may now be imported from exactly two declared test-only roots,
+`services/ingestion/tests/` and `infra/testing/`, and from nowhere else; a
+separate test asserts directly that **no file under `cbdc_ingestion/`** — the
+one tree the image copies — names it or the A-4 bridge, by text and by `ast`
+import node; and a third asserts that some suite really does drive a fault
+through it, so the exercise cannot be quietly removed while the suite stays
+green.
 
 ## Not in this component
 

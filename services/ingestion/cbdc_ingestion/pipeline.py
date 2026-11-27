@@ -199,6 +199,16 @@ class SourcePipeline:
         if retrieved_at_ms is None:
             retrieved_at_ms = adapter._context.now_ms() if adapter._context else 0
 
+        # --- the faults `produce()` classified but could not raise (A-4) -----
+        # `produce()` swallows faults on purpose, so that one bad poll does not
+        # end the service tick. Before A-4 that also meant a transport fault
+        # reached **no** counter and **no** status criterion, so a source could
+        # fail every poll and stay `ok`. Draining here closes that: the fault is
+        # counted by reason, reported on the `faults` channel, and fed to the
+        # internal status machine, where the consecutive-failure criterion can
+        # finally fire from a transport fault (AD-5 §7.5, §9.2).
+        self._account_drained(adapter, sink, result, now_ms=retrieved_at_ms)
+
         for observation in observations:
             result.produced += 1
             try:
@@ -296,9 +306,41 @@ class SourcePipeline:
                 result.late += 1
                 result.reasons.append("late")
 
+        # The item faults `_fault` recorded during the loop above are already
+        # accounted — it counts, reports and feeds the status machine inline —
+        # so they are drained and discarded here rather than being left for the
+        # next cycle's drain to count a second time. Exactly-once, in both
+        # directions. Guarded the same way as the drain above, because a test
+        # double may be a duck-typed adapter without the method.
+        if getattr(adapter, "drain_faults", None) is not None:
+            adapter.drain_faults()
+
         # The silence criterion, which no failure reports (AD-5 §9.2).
         self.status.tick(retrieved_at_ms)
         return result
+
+    def _account_drained(self, adapter: Adapter, sink: ServiceSink,
+                         result: AdapterRunResult, *, now_ms: int) -> None:
+        """Counts, reports and statuses the faults drained from the adapter.
+
+        **An item fault changes no adapter state and no source status**: one bad
+        item does not discard a good response (AD-5 §7.1), so it is counted and
+        reported and nothing else. A non-item fault is a failed poll, and it
+        reaches `SourceStatus` — permanently for `auth_failure` and
+        `contract_violation`, which send it to `down`, and towards the
+        consecutive-failure criterion otherwise.
+        """
+        drained = getattr(adapter, "drain_faults", None)
+        if drained is None:  # an adapter predating the drain; nothing to do
+            return
+        for fault in drained():
+            self._report(sink, "faults", fault.reason)
+            result.reasons.append(fault.reason)
+            if fault.item_level:
+                result.item_faults += 1
+                continue
+            result.faults += 1
+            self.status.record_failure(now_ms, permanent=fault.permanent)
 
     def _report(self, sink: ServiceSink, channel: str, reason: str) -> bool:
         """Publishes a **reason code** to the quarantine or faults channel.
